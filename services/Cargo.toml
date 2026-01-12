@@ -105,7 +105,7 @@ aya = "0.13"
 aya-log = "0.2"
 
 # ClickHouse
-clickhouse = { version = "0.13", features = ["inserter", "watch", "uuid"] }
+clickhouse = { version = "0.13", features = ["inserter", "watch", "uuid", "chrono"] }
 
 # Testing
 tokio-test = "0.4"

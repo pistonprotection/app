@@ -210,12 +210,13 @@ impl DunningService {
         info!(count = records.len(), "Processing pending dunning records");
 
         for row in records {
+            let state_str: String = row.get("state");
             let record = DunningRecord {
                 id: row.get("id"),
                 subscription_id: row.get("subscription_id"),
                 organization_id: row.get("organization_id"),
                 invoice_id: row.get("invoice_id"),
-                state: parse_dunning_state(row.get("state")),
+                state: parse_dunning_state(&state_str),
                 attempt_count: row.get("attempt_count"),
                 first_failed_at: row.get("first_failed_at"),
                 last_attempt_at: row.get("last_attempt_at"),
@@ -522,21 +523,24 @@ impl DunningService {
 
         let records = rows
             .into_iter()
-            .map(|row| DunningRecord {
-                id: row.get("id"),
-                subscription_id: row.get("subscription_id"),
-                organization_id: row.get("organization_id"),
-                invoice_id: row.get("invoice_id"),
-                state: parse_dunning_state(row.get("state")),
-                attempt_count: row.get("attempt_count"),
-                first_failed_at: row.get("first_failed_at"),
-                last_attempt_at: row.get("last_attempt_at"),
-                next_attempt_at: row.get("next_attempt_at"),
-                last_email_sent_at: row.get("last_email_sent_at"),
-                amount_due: row.get("amount_due"),
-                currency: row.get("currency"),
-                resolved_at: row.get("resolved_at"),
-                downgraded_at: row.get("downgraded_at"),
+            .map(|row| {
+                let state_str: String = row.get("state");
+                DunningRecord {
+                    id: row.get("id"),
+                    subscription_id: row.get("subscription_id"),
+                    organization_id: row.get("organization_id"),
+                    invoice_id: row.get("invoice_id"),
+                    state: parse_dunning_state(&state_str),
+                    attempt_count: row.get("attempt_count"),
+                    first_failed_at: row.get("first_failed_at"),
+                    last_attempt_at: row.get("last_attempt_at"),
+                    next_attempt_at: row.get("next_attempt_at"),
+                    last_email_sent_at: row.get("last_email_sent_at"),
+                    amount_due: row.get("amount_due"),
+                    currency: row.get("currency"),
+                    resolved_at: row.get("resolved_at"),
+                    downgraded_at: row.get("downgraded_at"),
+                }
             })
             .collect();
 

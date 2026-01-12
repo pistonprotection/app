@@ -1,7 +1,7 @@
 [package]
 name = "pistonprotection-worker"
 version.workspace = true
-edition = "2024"
+edition = "2021"
 license.workspace = true
 description = "PistonProtection Worker - Edge node for eBPF/XDP packet filtering"
 
@@ -57,7 +57,7 @@ aya-log = { workspace = true }
 
 # System info
 sysinfo = "0.32"
-nix = { version = "0.29", features = ["net", "ioctl"] }
+nix = { version = "0.29", features = ["net", "ioctl", "user"] }
 
 # HTTP server (for health/metrics endpoints)
 axum = { version = "0.8", features = ["http2"] }

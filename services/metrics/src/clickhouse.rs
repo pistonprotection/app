@@ -12,13 +12,11 @@
 use chrono::{DateTime, Utc};
 use clickhouse::{Client, Row};
 use serde::{Deserialize, Serialize};
-use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
-use uuid::Uuid;
+use tracing::{debug, error, info};
 
 /// ClickHouse errors
 #[derive(Debug, Error)]
@@ -76,7 +74,7 @@ impl Default for ClickHouseConfig {
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct RequestEvent {
     /// Event timestamp
-    #[serde(with = "clickhouse::serde::time::datetime64::millis")]
+    #[serde(with = "clickhouse::serde::chrono::datetime64::millis")]
     pub timestamp: DateTime<Utc>,
     /// Backend ID
     pub backend_id: String,
@@ -128,10 +126,10 @@ pub struct AttackEventRecord {
     /// Event ID
     pub event_id: String,
     /// Start timestamp
-    #[serde(with = "clickhouse::serde::time::datetime64::millis")]
+    #[serde(with = "clickhouse::serde::chrono::datetime64::millis")]
     pub started_at: DateTime<Utc>,
     /// End timestamp (nullable)
-    #[serde(with = "clickhouse::serde::time::datetime64::millis::option")]
+    #[serde(with = "clickhouse::serde::chrono::datetime64::millis::option")]
     pub ended_at: Option<DateTime<Utc>>,
     /// Backend ID
     pub backend_id: String,
@@ -163,7 +161,7 @@ pub struct AttackEventRecord {
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct ConnectionEvent {
     /// Event timestamp
-    #[serde(with = "clickhouse::serde::time::datetime64::millis")]
+    #[serde(with = "clickhouse::serde::chrono::datetime64::millis")]
     pub timestamp: DateTime<Utc>,
     /// Connection ID
     pub connection_id: String,
@@ -197,7 +195,7 @@ pub struct ConnectionEvent {
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct FilterMatchEvent {
     /// Event timestamp
-    #[serde(with = "clickhouse::serde::time::datetime64::millis")]
+    #[serde(with = "clickhouse::serde::chrono::datetime64::millis")]
     pub timestamp: DateTime<Utc>,
     /// Filter ID
     pub filter_id: String,
@@ -905,7 +903,7 @@ impl ClickHouseAnalytics {
 }
 
 /// Traffic statistics result
-#[derive(Debug, Clone, Row, Deserialize)]
+#[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct TrafficStats {
     pub total_requests: u64,
     pub total_request_bytes: u64,
@@ -923,7 +921,7 @@ pub struct TrafficStats {
 }
 
 /// Source IP statistics
-#[derive(Debug, Clone, Row, Deserialize)]
+#[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct SourceStats {
     pub source_ip: String,
     pub country_code: String,
@@ -936,7 +934,7 @@ pub struct SourceStats {
 }
 
 /// Country traffic statistics
-#[derive(Debug, Clone, Row, Deserialize)]
+#[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct CountryStats {
     pub country_code: String,
     pub request_count: u64,
@@ -946,9 +944,9 @@ pub struct CountryStats {
 }
 
 /// Time series data point
-#[derive(Debug, Clone, Row, Deserialize)]
+#[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct TimeSeriesPoint {
-    #[serde(with = "clickhouse::serde::time::datetime64::millis")]
+    #[serde(with = "clickhouse::serde::chrono::datetime64::millis")]
     pub interval_start: DateTime<Utc>,
     pub request_count: u64,
     pub bytes_in: u64,
@@ -958,7 +956,7 @@ pub struct TimeSeriesPoint {
 }
 
 /// Filter effectiveness statistics
-#[derive(Debug, Clone, Row, Deserialize)]
+#[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct FilterStats {
     pub filter_id: String,
     pub filter_name: String,

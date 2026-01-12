@@ -479,25 +479,25 @@ struct AnalyticsQuery {
 
 impl AnalyticsQuery {
     fn parse_times(&self) -> (DateTime<Utc>, DateTime<Utc>) {
-        use chrono::Duration;
+        use chrono::{Duration, FixedOffset};
         let end = self
             .end
             .as_ref()
             .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-            .map(|dt| dt.with_timezone(&Utc))
+            .map(|dt: DateTime<FixedOffset>| dt.with_timezone(&Utc))
             .unwrap_or_else(Utc::now);
         let start = self
             .start
             .as_ref()
             .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-            .map(|dt| dt.with_timezone(&Utc))
+            .map(|dt: DateTime<FixedOffset>| dt.with_timezone(&Utc))
             .unwrap_or_else(|| end - Duration::hours(24));
         (start, end)
     }
 }
 
 use axum::extract::Path;
-use chrono::{DateTime as ChronoDateTime, Utc as ChronoUtc};
+use chrono::{DateTime, Utc};
 
 async fn get_traffic_analytics(
     State(state): State<AppState>,

@@ -79,7 +79,7 @@ impl MetricsService for MetricsGrpcService {
     }
 
     type StreamTrafficMetricsStream =
-        Pin<Box<dyn Stream<Item = Result<TrafficMetrics, Status>> + Send>>;
+        Pin<Box<dyn Stream<Item = Result<TrafficMetrics, Status>> + Send + 'static>>;
 
     #[instrument(skip(self, request), fields(backend_id))]
     async fn stream_traffic_metrics(
@@ -153,7 +153,7 @@ impl MetricsService for MetricsGrpcService {
     }
 
     type StreamAttackMetricsStream =
-        Pin<Box<dyn Stream<Item = Result<AttackMetrics, Status>> + Send>>;
+        Pin<Box<dyn Stream<Item = Result<AttackMetrics, Status>> + Send + 'static>>;
 
     #[instrument(skip(self, request), fields(backend_id))]
     async fn stream_attack_metrics(

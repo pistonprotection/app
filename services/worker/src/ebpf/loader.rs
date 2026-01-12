@@ -9,7 +9,7 @@ use pistonprotection_common::error::{Error, Result};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 /// XDP attachment mode
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -114,12 +114,13 @@ impl EbpfLoader {
             .map_err(|e| Error::Internal(format!("Failed to load XDP program: {}", e)))?;
 
         // Try to attach with preferred mode, falling back to generic
-        let (mode, flags) = match preferred_mode {
+        // Note: try_attach_program is a standalone function to avoid borrow issues
+        let (mode, _flags) = match preferred_mode {
             XdpMode::Offload => {
                 // Try offload, fall back to driver, then generic
-                if self.try_attach(program, interface.index, XdpFlags::HW_MODE) {
+                if try_attach_program(program, &interface.name, XdpFlags::HW_MODE) {
                     (XdpMode::Offload, XdpFlags::HW_MODE)
-                } else if self.try_attach(program, interface.index, XdpFlags::DRV_MODE) {
+                } else if try_attach_program(program, &interface.name, XdpFlags::DRV_MODE) {
                     warn!("Offload mode not supported, using driver mode");
                     (XdpMode::Driver, XdpFlags::DRV_MODE)
                 } else {
@@ -131,7 +132,7 @@ impl EbpfLoader {
                 }
             }
             XdpMode::Driver => {
-                if self.try_attach(program, interface.index, XdpFlags::DRV_MODE) {
+                if try_attach_program(program, &interface.name, XdpFlags::DRV_MODE) {
                     (XdpMode::Driver, XdpFlags::DRV_MODE)
                 } else {
                     warn!("Driver mode not supported, using generic mode");
@@ -164,12 +165,6 @@ impl EbpfLoader {
         );
 
         Ok(())
-    }
-
-    fn try_attach(&self, program: &mut Xdp, ifindex: u32, flags: XdpFlags) -> bool {
-        // Note: We can't easily get interface name from index here, so we use a workaround
-        // In a real implementation, we'd need to track this better
-        false // For now, always fall back
     }
 
     /// Detach XDP program from an interface
@@ -223,6 +218,18 @@ impl EbpfLoader {
     /// Check if a program is attached to an interface
     pub fn is_attached(&self, interface_name: &str) -> bool {
         self.attached.contains_key(interface_name)
+    }
+}
+
+/// Try to attach XDP program with specified flags
+/// Returns true if attachment succeeded, false otherwise
+fn try_attach_program(program: &mut Xdp, interface_name: &str, flags: XdpFlags) -> bool {
+    // Try to attach with the specified flags
+    // Returns false to fall back to next mode (this is a placeholder implementation)
+    // In a real implementation, we would try to attach and check for errors
+    match program.attach(interface_name, flags) {
+        Ok(_) => true,
+        Err(_) => false,
     }
 }
 

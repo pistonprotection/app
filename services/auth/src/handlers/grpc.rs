@@ -267,14 +267,14 @@ impl ProtoAuthService for AuthServiceImpl {
         &self,
         request: Request<ValidateApiKeyRequest>,
     ) -> Result<Response<ValidateApiKeyResponse>, Status> {
-        let req = request.into_inner();
-
-        // Extract client IP from request metadata if available
+        // Extract client IP from request metadata if available (before into_inner consumes request)
         let client_ip = request
             .metadata()
             .get("x-forwarded-for")
             .and_then(|v| v.to_str().ok())
             .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
+
+        let req = request.into_inner();
 
         match self
             .state
@@ -316,15 +316,16 @@ impl ProtoAuthService for AuthServiceImpl {
         &self,
         request: Request<CreateApiKeyRequest>,
     ) -> Result<Response<CreateApiKeyResponse>, Status> {
-        let req = request.into_inner();
-
         // Get user from context (in real implementation, extract from auth header)
-        // For now, we'll use a placeholder
+        // Extract metadata before into_inner consumes request
         let user_id = request
             .metadata()
             .get("x-user-id")
             .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| Status::unauthenticated("User ID required"))?;
+            .ok_or_else(|| Status::unauthenticated("User ID required"))?
+            .to_string();
+
+        let req = request.into_inner();
 
         let model_request = ModelCreateApiKeyRequest {
             name: req.name,
@@ -352,7 +353,7 @@ impl ProtoAuthService for AuthServiceImpl {
         let result = self
             .state
             .api_key_service()
-            .create_key(&req.organization_id, user_id, model_request)
+            .create_key(&req.organization_id, &user_id, model_request)
             .await
             .map_err(|e| Status::from(e))?;
 
@@ -362,7 +363,7 @@ impl ProtoAuthService for AuthServiceImpl {
             .audit_service()
             .log_api_key_action(
                 &req.organization_id,
-                user_id,
+                &user_id,
                 None,
                 "created",
                 &result.key.id,
@@ -579,14 +580,15 @@ impl ProtoAuthService for AuthServiceImpl {
         &self,
         request: Request<CreateInvitationRequest>,
     ) -> Result<Response<CreateInvitationResponse>, Status> {
-        let req = request.into_inner();
-
-        // Get user from context
+        // Get user from context (extract metadata before into_inner consumes request)
         let user_id = request
             .metadata()
             .get("x-user-id")
             .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| Status::unauthenticated("User ID required"))?;
+            .ok_or_else(|| Status::unauthenticated("User ID required"))?
+            .to_string();
+
+        let req = request.into_inner();
 
         let role = OrganizationRole::try_from(req.role).unwrap_or(OrganizationRole::Member);
 
@@ -605,7 +607,7 @@ impl ProtoAuthService for AuthServiceImpl {
             &req.organization_id,
             &req.email,
             role,
-            user_id,
+            &user_id,
             &token_hash,
             expires_at,
         )
@@ -669,12 +671,125 @@ impl ProtoAuthService for AuthServiceImpl {
 
         Ok(Response::new(RevokeInvitationResponse { success }))
     }
+
+    // =========================================================================
+    // Billing Operations
+    // =========================================================================
+
+    async fn list_plans(
+        &self,
+        _request: Request<ListPlansRequest>,
+    ) -> Result<Response<ListPlansResponse>, Status> {
+        // TODO: Implement list_plans
+        Ok(Response::new(ListPlansResponse { plans: vec![] }))
+    }
+
+    async fn get_plan(
+        &self,
+        _request: Request<GetPlanRequest>,
+    ) -> Result<Response<GetPlanResponse>, Status> {
+        // TODO: Implement get_plan
+        Err(Status::unimplemented("get_plan not yet implemented"))
+    }
+
+    async fn get_subscription(
+        &self,
+        _request: Request<GetSubscriptionRequest>,
+    ) -> Result<Response<GetSubscriptionResponse>, Status> {
+        // TODO: Implement get_subscription
+        Err(Status::unimplemented("get_subscription not yet implemented"))
+    }
+
+    async fn update_subscription(
+        &self,
+        _request: Request<pistonprotection_proto::auth::UpdateSubscriptionRequest>,
+    ) -> Result<Response<UpdateSubscriptionResponse>, Status> {
+        // TODO: Implement update_subscription
+        Err(Status::unimplemented("update_subscription not yet implemented"))
+    }
+
+    async fn cancel_subscription(
+        &self,
+        _request: Request<pistonprotection_proto::auth::CancelSubscriptionRequest>,
+    ) -> Result<Response<CancelSubscriptionResponse>, Status> {
+        // TODO: Implement cancel_subscription
+        Err(Status::unimplemented("cancel_subscription not yet implemented"))
+    }
+
+    async fn resume_subscription(
+        &self,
+        _request: Request<ResumeSubscriptionRequest>,
+    ) -> Result<Response<ResumeSubscriptionResponse>, Status> {
+        // TODO: Implement resume_subscription
+        Err(Status::unimplemented("resume_subscription not yet implemented"))
+    }
+
+    async fn create_checkout_session(
+        &self,
+        _request: Request<pistonprotection_proto::auth::CreateCheckoutSessionRequest>,
+    ) -> Result<Response<CreateCheckoutSessionResponse>, Status> {
+        // TODO: Implement create_checkout_session
+        Err(Status::unimplemented("create_checkout_session not yet implemented"))
+    }
+
+    async fn create_billing_portal_session(
+        &self,
+        _request: Request<pistonprotection_proto::auth::CreateBillingPortalSessionRequest>,
+    ) -> Result<Response<CreateBillingPortalSessionResponse>, Status> {
+        // TODO: Implement create_billing_portal_session
+        Err(Status::unimplemented("create_billing_portal_session not yet implemented"))
+    }
+
+    async fn list_invoices(
+        &self,
+        _request: Request<ListInvoicesRequest>,
+    ) -> Result<Response<ListInvoicesResponse>, Status> {
+        // TODO: Implement list_invoices
+        Ok(Response::new(ListInvoicesResponse {
+            invoices: vec![],
+            pagination: None,
+        }))
+    }
+
+    async fn get_invoice(
+        &self,
+        _request: Request<GetInvoiceRequest>,
+    ) -> Result<Response<GetInvoiceResponse>, Status> {
+        // TODO: Implement get_invoice
+        Err(Status::unimplemented("get_invoice not yet implemented"))
+    }
+
+    async fn get_usage_summary(
+        &self,
+        _request: Request<GetUsageSummaryRequest>,
+    ) -> Result<Response<GetUsageSummaryResponse>, Status> {
+        // TODO: Implement get_usage_summary
+        Err(Status::unimplemented("get_usage_summary not yet implemented"))
+    }
+
+    async fn report_usage(
+        &self,
+        _request: Request<ReportUsageRequest>,
+    ) -> Result<Response<ReportUsageResponse>, Status> {
+        // TODO: Implement report_usage
+        Err(Status::unimplemented("report_usage not yet implemented"))
+    }
+
+    async fn list_payment_methods(
+        &self,
+        _request: Request<ListPaymentMethodsRequest>,
+    ) -> Result<Response<ListPaymentMethodsResponse>, Status> {
+        // TODO: Implement list_payment_methods
+        Ok(Response::new(ListPaymentMethodsResponse {
+            payment_methods: vec![],
+        }))
+    }
 }
 
 /// Create the gRPC server
 pub async fn create_server(
     state: AppState,
-) -> Result<tonic::transport::Server, Box<dyn std::error::Error>> {
+) -> Result<tonic::transport::server::Router, Box<dyn std::error::Error>> {
     let auth_service = AuthServiceImpl::new(state.clone());
 
     let reflection_service = tonic_reflection::server::Builder::configure()
@@ -686,10 +801,10 @@ pub async fn create_server(
         .set_serving::<AuthServiceServer<AuthServiceImpl>>()
         .await;
 
-    let server = tonic::transport::Server::builder()
+    let router = tonic::transport::Server::builder()
         .add_service(health_service)
         .add_service(reflection_service)
         .add_service(AuthServiceServer::new(auth_service));
 
-    Ok(server)
+    Ok(router)
 }

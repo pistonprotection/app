@@ -10,7 +10,7 @@ use pistonprotection_proto::{
     common::{Pagination, PaginationInfo, Timestamp},
     metrics::*,
 };
-use redis::AsyncCommands;
+use deadpool_redis::redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use sqlx::postgres::PgPool;
@@ -28,7 +28,7 @@ pub enum StorageError {
     Database(#[from] sqlx::Error),
 
     #[error("Redis error: {0}")]
-    Redis(#[from] redis::RedisError),
+    Redis(#[from] deadpool_redis::redis::RedisError),
 
     #[error("Redis pool error: {0}")]
     RedisPool(String),
@@ -870,7 +870,7 @@ impl TimeSeriesStorage {
             None
         };
 
-        if let (Some(ref pool), Some(ref event_id)) = (&self.db_pool, &event_id) {
+        if let (Some(pool), Some(event_id)) = (&self.db_pool, &event_id) {
             sqlx::query(
                 r#"
                 UPDATE attack_events
@@ -1108,24 +1108,34 @@ impl TimeSeriesStorage {
 
             // Clean up traffic metrics
             let pattern = self.redis_key(&["traffic", "*", "*"]);
-            let keys: Vec<String> = redis::cmd("KEYS")
+            let keys: Vec<String> = deadpool_redis::redis::cmd("KEYS")
                 .arg(&pattern)
                 .query_async(&mut *conn)
                 .await?;
 
             for key in keys {
-                let _: () = conn.zremrangebyscore(&key, "-inf", cutoff).await?;
+                let _: () = deadpool_redis::redis::cmd("ZREMRANGEBYSCORE")
+                    .arg(&key)
+                    .arg("-inf")
+                    .arg(cutoff)
+                    .query_async(&mut *conn)
+                    .await?;
             }
 
             // Clean up attack metrics
             let pattern = self.redis_key(&["attack", "*", "*"]);
-            let keys: Vec<String> = redis::cmd("KEYS")
+            let keys: Vec<String> = deadpool_redis::redis::cmd("KEYS")
                 .arg(&pattern)
                 .query_async(&mut *conn)
                 .await?;
 
             for key in keys {
-                let _: () = conn.zremrangebyscore(&key, "-inf", cutoff).await?;
+                let _: () = deadpool_redis::redis::cmd("ZREMRANGEBYSCORE")
+                    .arg(&key)
+                    .arg("-inf")
+                    .arg(cutoff)
+                    .query_async(&mut *conn)
+                    .await?;
             }
         }
 

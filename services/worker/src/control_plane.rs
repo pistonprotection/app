@@ -670,11 +670,19 @@ impl ControlPlaneClient {
                     }
                     _ = async {
                         // Wait until connected
-                        while *state.read() != ConnectionState::Connected {
+                        loop {
+                            let current_state = *state.read();
+                            if current_state == ConnectionState::Connected {
+                                break;
+                            }
                             sleep(Duration::from_secs(1)).await;
                         }
 
-                        let wid = match worker_id.read().clone() {
+                        let wid = {
+                            let guard = worker_id.read();
+                            guard.clone()
+                        };
+                        let wid = match wid {
                             Some(id) => id,
                             None => {
                                 sleep(Duration::from_secs(1)).await;

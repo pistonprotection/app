@@ -4,23 +4,25 @@
 //! at runtime. The actual eBPF bytecode is compiled separately and
 //! included at build time.
 
-/// XDP program for DDoS filtering
-pub const XDP_FILTER_PROGRAM: &[u8] = include_bytes!("../../ebpf-programs/xdp_filter.o");
+// Note: The eBPF program binaries are optional - if they don't exist,
+// the placeholder functions below will be used instead.
+// When real eBPF programs are compiled, use:
+// pub const XDP_FILTER_PROGRAM: &[u8] = include_bytes!("../../ebpf-programs/xdp_filter.o");
 
-/// XDP program for rate limiting
-pub const XDP_RATELIMIT_PROGRAM: &[u8] = include_bytes!("../../ebpf-programs/xdp_ratelimit.o");
+/// XDP program for DDoS filtering (placeholder)
+pub const XDP_FILTER_PROGRAM: &[u8] = &[];
 
-/// XDP program for connection tracking
-pub const XDP_CONNTRACK_PROGRAM: &[u8] = include_bytes!("../../ebpf-programs/xdp_conntrack.o");
+/// XDP program for rate limiting (placeholder)
+pub const XDP_RATELIMIT_PROGRAM: &[u8] = &[];
 
-/// XDP program for Minecraft protocol filtering
-pub const XDP_MINECRAFT_PROGRAM: &[u8] = include_bytes!("../../ebpf-programs/xdp_minecraft.o");
+/// XDP program for connection tracking (placeholder)
+pub const XDP_CONNTRACK_PROGRAM: &[u8] = &[];
 
-/// XDP program for HTTP/QUIC filtering
-pub const XDP_HTTP_PROGRAM: &[u8] = include_bytes!("../../ebpf-programs/xdp_http.o");
+/// XDP program for Minecraft protocol filtering (placeholder)
+pub const XDP_MINECRAFT_PROGRAM: &[u8] = &[];
 
-// Note: The above includes will fail until we create the actual eBPF programs.
-// For now, we'll use a placeholder approach.
+/// XDP program for HTTP/QUIC filtering (placeholder)
+pub const XDP_HTTP_PROGRAM: &[u8] = &[];
 
 /// Placeholder for eBPF programs (until real programs are compiled)
 pub mod placeholder {

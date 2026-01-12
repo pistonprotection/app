@@ -12,7 +12,7 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::broadcast;
-use tokio::time::{Interval, interval};
+use tokio::time::Interval;
 use tokio_stream::wrappers::BroadcastStream;
 use tonic::Status;
 use tracing::{debug, info, warn};
@@ -57,7 +57,7 @@ impl MetricsStreamer {
         &self,
         backend_id: String,
         interval_seconds: u32,
-    ) -> Result<impl Stream<Item = Result<TrafficMetrics, Status>>, StreamError> {
+    ) -> Result<TrafficMetricsStream, StreamError> {
         let interval = Duration::from_secs(interval_seconds.max(1) as u64);
 
         info!(
@@ -80,7 +80,7 @@ impl MetricsStreamer {
         &self,
         backend_id: String,
         interval_seconds: u32,
-    ) -> Result<impl Stream<Item = Result<AttackMetrics, Status>>, StreamError> {
+    ) -> Result<AttackMetricsStream, StreamError> {
         let interval = Duration::from_secs(interval_seconds.max(1) as u64);
 
         info!(
@@ -117,18 +117,20 @@ pub struct TrafficMetricsStream {
     sent_initial: bool,
 }
 
+impl Unpin for TrafficMetricsStream {}
+
 impl TrafficMetricsStream {
     fn new(
         backend_id: String,
         rx: broadcast::Receiver<TrafficMetrics>,
         aggregator: Arc<MetricsAggregator>,
-        interval: Duration,
+        interval_duration: Duration,
     ) -> Self {
         Self {
             backend_id,
             rx,
             aggregator,
-            interval: interval(interval),
+            interval: tokio::time::interval(interval_duration),
             sent_initial: false,
         }
     }
@@ -213,18 +215,20 @@ pub struct AttackMetricsStream {
     sent_initial: bool,
 }
 
+impl Unpin for AttackMetricsStream {}
+
 impl AttackMetricsStream {
     fn new(
         backend_id: String,
         rx: broadcast::Receiver<AttackMetrics>,
         aggregator: Arc<MetricsAggregator>,
-        interval: Duration,
+        interval_duration: Duration,
     ) -> Self {
         Self {
             backend_id,
             rx,
             aggregator,
-            interval: interval(interval),
+            interval: tokio::time::interval(interval_duration),
             sent_initial: false,
         }
     }
@@ -288,14 +292,16 @@ where
     _marker: std::marker::PhantomData<T>,
 }
 
+impl<T, F> Unpin for PollingMetricsStream<T, F> where F: Fn() -> T + Send {}
+
 impl<T, F> PollingMetricsStream<T, F>
 where
     F: Fn() -> T + Send,
 {
-    pub fn new(backend_id: String, interval: Duration, factory: F) -> Self {
+    pub fn new(backend_id: String, interval_duration: Duration, factory: F) -> Self {
         Self {
             backend_id,
-            interval: interval(interval),
+            interval: tokio::time::interval(interval_duration),
             factory,
             _marker: std::marker::PhantomData,
         }
@@ -331,6 +337,8 @@ where
     filter: Box<dyn Fn(&T) -> bool + Send>,
 }
 
+impl<T> Unpin for HybridMetricsStream<T> where T: Clone + Send + 'static {}
+
 impl<T> HybridMetricsStream<T>
 where
     T: Clone + Send + 'static,
@@ -338,13 +346,13 @@ where
     pub fn new(
         backend_id: String,
         rx: broadcast::Receiver<T>,
-        interval: Duration,
+        interval_duration: Duration,
         filter: Box<dyn Fn(&T) -> bool + Send>,
     ) -> Self {
         Self {
             backend_id,
             rx,
-            interval: interval(interval),
+            interval: tokio::time::interval(interval_duration),
             filter,
         }
     }

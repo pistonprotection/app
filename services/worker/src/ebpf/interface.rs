@@ -1,8 +1,9 @@
 //! Network interface discovery and management
 
+use nix::sys::socket::SockaddrLike;
 use pistonprotection_common::error::{Error, Result};
 use std::net::IpAddr;
-use tracing::{debug, info};
+use tracing::debug;
 
 /// Network interface information
 #[derive(Debug, Clone)]

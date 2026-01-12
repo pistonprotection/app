@@ -353,36 +353,35 @@ impl MetricsAggregator {
             });
 
         // Aggregate metrics from this worker
-        let metrics = &mut entry.metrics;
-        metrics.requests_total = metrics.requests_total.saturating_add(raw.requests_total);
-        metrics.requests_per_second = metrics
+        entry.metrics.requests_total = entry.metrics.requests_total.saturating_add(raw.requests_total);
+        entry.metrics.requests_per_second = entry.metrics
             .requests_per_second
             .saturating_add(raw.requests_per_second);
-        metrics.bytes_in = metrics.bytes_in.saturating_add(raw.bytes_in);
-        metrics.bytes_out = metrics.bytes_out.saturating_add(raw.bytes_out);
-        metrics.bytes_per_second_in = metrics
+        entry.metrics.bytes_in = entry.metrics.bytes_in.saturating_add(raw.bytes_in);
+        entry.metrics.bytes_out = entry.metrics.bytes_out.saturating_add(raw.bytes_out);
+        entry.metrics.bytes_per_second_in = entry.metrics
             .bytes_per_second_in
             .saturating_add(raw.bytes_per_second_in);
-        metrics.bytes_per_second_out = metrics
+        entry.metrics.bytes_per_second_out = entry.metrics
             .bytes_per_second_out
             .saturating_add(raw.bytes_per_second_out);
-        metrics.packets_in = metrics.packets_in.saturating_add(raw.packets_in);
-        metrics.packets_out = metrics.packets_out.saturating_add(raw.packets_out);
-        metrics.packets_per_second = metrics
+        entry.metrics.packets_in = entry.metrics.packets_in.saturating_add(raw.packets_in);
+        entry.metrics.packets_out = entry.metrics.packets_out.saturating_add(raw.packets_out);
+        entry.metrics.packets_per_second = entry.metrics
             .packets_per_second
             .saturating_add(raw.packets_per_second);
-        metrics.active_connections = metrics
+        entry.metrics.active_connections = entry.metrics
             .active_connections
             .saturating_add(raw.active_connections);
-        metrics.new_connections = metrics.new_connections.saturating_add(raw.new_connections);
-        metrics.closed_connections = metrics
+        entry.metrics.new_connections = entry.metrics.new_connections.saturating_add(raw.new_connections);
+        entry.metrics.closed_connections = entry.metrics
             .closed_connections
             .saturating_add(raw.closed_connections);
-        metrics.timestamp = Some(Timestamp::from(raw.timestamp));
+        entry.metrics.timestamp = Some(Timestamp::from(raw.timestamp));
 
         // Merge protocol breakdown
         for (protocol, count) in &raw.requests_by_protocol {
-            *metrics
+            *entry.metrics
                 .requests_by_protocol
                 .entry(protocol.clone())
                 .or_insert(0) += count;
@@ -390,7 +389,7 @@ impl MetricsAggregator {
 
         entry.timestamp = Utc::now();
 
-        let updated_metrics = metrics.clone();
+        let updated_metrics = entry.metrics.clone();
         drop(entry);
 
         // Broadcast update

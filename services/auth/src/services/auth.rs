@@ -191,7 +191,7 @@ impl AuthService {
             .map_err(|e| AuthError::SessionError(e.to_string()))?;
 
         // Get user's organizations
-        let orgs = db::list_user_organizations(&self.db, &user.id)
+        let orgs: Vec<String> = db::list_user_organizations(&self.db, &user.id)
             .await
             .map_err(|e| AuthError::DatabaseError(e.to_string()))?
             .into_iter()
@@ -295,7 +295,7 @@ impl AuthService {
         }
 
         // Get user's organizations
-        let orgs = db::list_user_organizations(&self.db, &user.id)
+        let orgs: Vec<String> = db::list_user_organizations(&self.db, &user.id)
             .await
             .map_err(|e| AuthError::DatabaseError(e.to_string()))?
             .into_iter()

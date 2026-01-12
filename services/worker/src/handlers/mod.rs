@@ -111,7 +111,8 @@ impl WorkerState {
     pub fn map_stats(&self) -> crate::ebpf::maps::MapStats {
         let loader = self.loader.read();
         let maps = loader.maps();
-        maps.read().stats()
+        let map_manager = maps.read();
+        map_manager.stats()
     }
 
     /// Get configuration sync statistics
