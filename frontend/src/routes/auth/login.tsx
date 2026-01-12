@@ -19,7 +19,7 @@ function LoginPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-2"><Label htmlFor="email">Email</Label><Input id="email" type="email" placeholder="you@example.com" /></div>
-          <div className="grid gap-2"><Label htmlFor="password">Password</Label><Input id="password" type="password" placeholder="••••••••" /></div>
+          <div className="grid gap-2"><Label htmlFor="password">Password</Label><Input id="password" type="password" placeholder="********" /></div>
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2"><Checkbox id="remember" /><Label htmlFor="remember" className="text-sm font-normal">Remember me</Label></div>
             <Link to="/auth/forgot-password" className="text-sm text-primary hover:underline">Forgot password?</Link>

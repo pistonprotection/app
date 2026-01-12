@@ -19,7 +19,7 @@ function BillingPage() {
   ]
   const plans = [
     { name: "Starter", price: 49, features: ["1 TB Bandwidth", "10M Requests", "5 Backends", "Email Support"] },
-    { name: "Professional", price: 199, features: ["5 TB Bandwidth", "100M Requests", "15 Backends", "Priority Support", "Custom Filters"] },
+    { name: "Professional", price: 199, features: ["5 TB Bandwidth", "100M Requests", "15 Backends", "Priority Support", "Custom Filters"], popular: false },
     { name: "Enterprise", price: 499, features: ["10 TB Bandwidth", "200M Requests", "25 Backends", "24/7 Support", "Custom Filters", "Dedicated IP", "SLA 99.99%"], current: true },
   ]
   return (
@@ -28,7 +28,7 @@ function BillingPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Current Plan</CardTitle><Shield className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{currentPlan.name}</div><p className="text-xs text-muted-foreground">${currentPlan.price}/{currentPlan.billingCycle}</p></CardContent></Card>
         <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Next Billing</CardTitle><CreditCard className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">${currentPlan.price}</div><p className="text-xs text-muted-foreground">{currentPlan.renewalDate}</p></CardContent></Card>
-        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Payment Method</CardTitle><CreditCard className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">•••• 4242</div><p className="text-xs text-muted-foreground">Visa - Expires 12/26</p></CardContent></Card>
+        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Payment Method</CardTitle><CreditCard className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">**** 4242</div><p className="text-xs text-muted-foreground">Visa - Expires 12/26</p></CardContent></Card>
       </div>
       <Card>
         <CardHeader><CardTitle>Usage This Period</CardTitle><CardDescription>Your resource consumption for the current billing cycle.</CardDescription></CardHeader>

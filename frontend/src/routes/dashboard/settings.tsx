@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
-import { Settings, Shield, Bell, Key, Globe, Zap } from "lucide-react"
+import { Settings, Shield, Bell, Key, Globe } from "lucide-react"
 
 export const Route = createFileRoute("/dashboard/settings")({ component: SettingsPage })
 
@@ -33,13 +33,6 @@ function SettingsPage() {
               <Button>Save Changes</Button>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader><CardTitle>Dashboard Preferences</CardTitle><CardDescription>Customize your dashboard experience.</CardDescription></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4"><div className="grid gap-2"><Label>Default Time Range</Label><Select defaultValue="24h"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1h">Last Hour</SelectItem><SelectItem value="24h">Last 24 Hours</SelectItem><SelectItem value="7d">Last 7 Days</SelectItem></SelectContent></Select></div><div className="grid gap-2"><Label>Refresh Interval</Label><Select defaultValue="30"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="10">10 seconds</SelectItem><SelectItem value="30">30 seconds</SelectItem><SelectItem value="60">1 minute</SelectItem></SelectContent></Select></div></div>
-              <div className="flex items-center justify-between"><div><Label>Compact View</Label><p className="text-sm text-muted-foreground">Use compact layout for tables and lists.</p></div><Switch /></div>
-            </CardContent>
-          </Card>
         </TabsContent>
         <TabsContent value="security" className="space-y-4">
           <Card>
@@ -49,8 +42,7 @@ function SettingsPage() {
               <Separator />
               <div className="flex items-center justify-between"><div className="space-y-0.5"><Label className="text-base">Challenge Mode</Label><p className="text-sm text-muted-foreground">Present challenges to suspicious traffic before blocking.</p></div><Switch checked={challengeMode} onCheckedChange={setChallengeMode} /></div>
               <Separator />
-              <div className="grid gap-2"><Label>Sensitivity Level</Label><Select defaultValue="medium"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Low - Fewer false positives</SelectItem><SelectItem value="medium">Medium - Balanced</SelectItem><SelectItem value="high">High - Maximum protection</SelectItem></SelectContent></Select><p className="text-sm text-muted-foreground">Higher sensitivity may result in more false positives.</p></div>
-              <div className="grid gap-2"><Label>Rate Limit Threshold</Label><div className="flex gap-2"><Input type="number" defaultValue="10000" /><span className="flex items-center text-sm text-muted-foreground">req/s per IP</span></div></div>
+              <div className="grid gap-2"><Label>Sensitivity Level</Label><Select defaultValue="medium"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Low - Fewer false positives</SelectItem><SelectItem value="medium">Medium - Balanced</SelectItem><SelectItem value="high">High - Maximum protection</SelectItem></SelectContent></Select></div>
               <Button>Update Security Settings</Button>
             </CardContent>
           </Card>
@@ -71,8 +63,6 @@ function SettingsPage() {
               <Separator />
               <div className="flex items-center justify-between"><div className="flex items-center gap-3"><Globe className="h-5 w-5 text-muted-foreground" /><div><Label className="text-base">Slack Notifications</Label><p className="text-sm text-muted-foreground">Send alerts to Slack channel.</p></div></div><Switch checked={slackNotifications} onCheckedChange={setSlackNotifications} /></div>
               {slackNotifications && (<div className="ml-8 grid gap-2"><Label>Webhook URL</Label><Input placeholder="https://hooks.slack.com/services/..." /></div>)}
-              <Separator />
-              <div className="grid gap-2"><Label>Alert Threshold</Label><Select defaultValue="medium"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Events</SelectItem><SelectItem value="medium">Medium & High Severity</SelectItem><SelectItem value="high">High Severity Only</SelectItem></SelectContent></Select></div>
               <Button>Save Notification Settings</Button>
             </CardContent>
           </Card>
@@ -84,13 +74,6 @@ function SettingsPage() {
               <div className="flex items-center justify-between p-4 rounded border"><div className="space-y-1"><div className="flex items-center gap-2"><span className="font-medium">Production Key</span><Badge>Active</Badge></div><code className="text-sm text-muted-foreground">pp_live_****************************a1b2</code></div><div className="flex gap-2"><Button variant="outline" size="sm">Reveal</Button><Button variant="outline" size="sm">Regenerate</Button></div></div>
               <div className="flex items-center justify-between p-4 rounded border"><div className="space-y-1"><div className="flex items-center gap-2"><span className="font-medium">Test Key</span><Badge variant="secondary">Test</Badge></div><code className="text-sm text-muted-foreground">pp_test_****************************c3d4</code></div><div className="flex gap-2"><Button variant="outline" size="sm">Reveal</Button><Button variant="outline" size="sm">Regenerate</Button></div></div>
               <Button><Key className="mr-2 h-4 w-4" />Create New API Key</Button>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle>Webhooks</CardTitle><CardDescription>Configure webhooks for real-time event notifications.</CardDescription></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2"><Input placeholder="https://your-server.com/webhook" /><Button>Add Webhook</Button></div>
-              <div className="p-4 rounded border"><div className="flex items-center justify-between"><div className="space-y-1"><span className="font-medium">https://api.acme.com/ddos-events</span><div className="flex gap-1 mt-1"><Badge variant="outline" className="text-xs">attack.detected</Badge><Badge variant="outline" className="text-xs">mitigation.started</Badge></div></div><div className="flex gap-2"><Button variant="outline" size="sm">Edit</Button><Button variant="ghost" size="sm" className="text-destructive">Delete</Button></div></div></div>
             </CardContent>
           </Card>
         </TabsContent>
