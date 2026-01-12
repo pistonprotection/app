@@ -1,11 +1,16 @@
-import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
-import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
+import { AuthUIProvider } from "@daveyplate/better-auth-ui";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import {
+  createRootRoute,
+  HeadContent,
+  Outlet,
+  Scripts,
+} from "@tanstack/react-router";
+import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { Toaster } from "sonner";
-import { TRPCReactProvider } from "@/lib/trpc/client";
-import { AuthUIProvider } from "@daveyplate/better-auth-ui";
 import { authClient } from "@/lib/auth-client";
+import { TRPCReactProvider } from "@/lib/trpc/client";
 
 import appCss from "../styles.css?url";
 import "@fontsource-variable/inter";

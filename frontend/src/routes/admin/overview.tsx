@@ -1,4 +1,15 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import {
+  Activity,
+  AlertTriangle,
+  Globe,
+  Server,
+  TrendingUp,
+  Users,
+  Zap,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -6,19 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Users,
-  Server,
-  Shield,
-  Activity,
-  TrendingUp,
-  AlertTriangle,
-  Globe,
-  Zap,
-} from "lucide-react";
 import { useTRPC } from "@/lib/trpc/client";
-import { useQuery } from "@tanstack/react-query";
-import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/admin/overview")({
   component: AdminOverview,
@@ -29,17 +28,17 @@ function AdminOverview() {
 
   // Get platform stats
   const { data: platformStats } = useQuery(
-    trpc.admin.getPlatformStats.queryOptions()
+    trpc.admin.getPlatformStats.queryOptions(),
   );
 
   // Get recent attacks
   const { data: recentAttacks } = useQuery(
-    trpc.admin.getRecentAttacks.queryOptions({ limit: 5 })
+    trpc.admin.getRecentAttacks.queryOptions({ limit: 5 }),
   );
 
   // Get system health
   const { data: systemHealth } = useQuery(
-    trpc.admin.getSystemHealth.queryOptions()
+    trpc.admin.getSystemHealth.queryOptions(),
   );
 
   return (
@@ -87,7 +86,9 @@ function AdminOverview() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Backends</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Backends
+            </CardTitle>
             <Server className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -169,7 +170,9 @@ function AdminOverview() {
         <Card>
           <CardHeader>
             <CardTitle>System Health</CardTitle>
-            <CardDescription>Service status across the platform</CardDescription>
+            <CardDescription>
+              Service status across the platform
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -207,7 +210,9 @@ function AdminOverview() {
                   />
                 </>
               ) : (
-                <p className="text-muted-foreground">Loading system health...</p>
+                <p className="text-muted-foreground">
+                  Loading system health...
+                </p>
               )}
             </div>
           </CardContent>

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.8/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.11/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -23,18 +23,20 @@
     "indentWidth": 2
   },
   "linter": {
-    "includes": [
-      "**",
-      "!src/components/ui/**"
-    ],
+    "includes": ["**", "!src/components/ui/**", "!src/routeTree.gen.ts"],
     "enabled": true,
     "rules": {
       "recommended": true,
-      "correctness": {
-        "useImportExtensions": "off"
-      },
       "style": {
         "useComponentExportOnlyModules": "off"
+      },
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noArrayIndexKey": "off"
+      },
+      "correctness": {
+        "useImportExtensions": "off",
+        "useUniqueElementIds": "off"
       }
     },
     "domains": {

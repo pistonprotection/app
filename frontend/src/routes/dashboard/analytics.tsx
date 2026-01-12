@@ -1,5 +1,30 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowUpRight,
+  Globe,
+  Loader2,
+  RefreshCw,
+  Search,
+  Server,
+  Shield,
+  TrendingUp,
+  Zap,
+} from "lucide-react";
 import { useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -7,7 +32,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -16,22 +41,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Activity,
-  Globe,
-  Shield,
-  TrendingUp,
-  ArrowUpRight,
-  ArrowDownRight,
-  Zap,
-  Server,
-  Loader2,
-  RefreshCw,
-  AlertTriangle,
-  Search,
-} from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import {
   Table,
   TableBody,
   TableCell,
@@ -39,22 +48,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-} from "recharts";
-import { useTRPC } from "@/lib/trpc/client";
 import { authClient } from "@/lib/auth-client";
-import { useQuery } from "@tanstack/react-query";
+import { useTRPC } from "@/lib/trpc/client";
 
 export const Route = createFileRoute("/dashboard/analytics")({
   component: AnalyticsPage,
@@ -108,14 +103,14 @@ function AnalyticsPage() {
     trpc.analytics.getTrafficStats.queryOptions({
       organizationId,
       hours: timeRangeToHours[timeRange],
-    })
+    }),
   );
 
   // Get realtime stats
   const { data: realtimeStats } = useQuery(
     trpc.analytics.getRealtimeStats.queryOptions({
       organizationId,
-    })
+    }),
   );
 
   // Get attack stats
@@ -123,7 +118,7 @@ function AnalyticsPage() {
     trpc.analytics.getAttackStats.queryOptions({
       organizationId,
       hours: timeRangeToHours[timeRange],
-    })
+    }),
   );
 
   // Get attack types
@@ -132,7 +127,7 @@ function AnalyticsPage() {
       organizationId,
       hours: timeRangeToHours[timeRange],
       limit: 10,
-    })
+    }),
   );
 
   // Get top source IPs
@@ -142,7 +137,7 @@ function AnalyticsPage() {
       hours: timeRangeToHours[timeRange],
       limit: 10,
       filter: "blocked",
-    })
+    }),
   );
 
   // Get geo distribution
@@ -150,14 +145,14 @@ function AnalyticsPage() {
     trpc.analytics.getGeoDistribution.queryOptions({
       organizationId,
       hours: timeRangeToHours[timeRange],
-    })
+    }),
   );
 
   // Get dashboard stats
   const { data: dashboardStats } = useQuery(
     trpc.analytics.getDashboardStats.queryOptions({
       organizationId,
-    })
+    }),
   );
 
   // IP lookup query
@@ -210,7 +205,9 @@ function AnalyticsPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Requests
+            </CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -227,15 +224,17 @@ function AnalyticsPage() {
                   <ArrowUpRight className="h-3 w-3" />
                   {Math.round(realtimeStats.requestsPerSecond)}/s
                 </span>
-              )}
-              {" "}current rate
+              )}{" "}
+              current rate
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Blocked Attacks</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Blocked Attacks
+            </CardTitle>
             <Shield className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
@@ -270,15 +269,13 @@ function AnalyticsPage() {
                 <Loader2 className="h-6 w-6 animate-spin" />
               ) : (
                 formatBytes(
-                  (trafficStats?.bytesIn ?? 0) + (trafficStats?.bytesOut ?? 0)
+                  (trafficStats?.bytesIn ?? 0) + (trafficStats?.bytesOut ?? 0),
                 )
               )}
             </div>
             <p className="text-xs text-muted-foreground">
               {realtimeStats && (
-                <>
-                  {formatBytes(realtimeStats.bytesPerSecond)}/s current
-                </>
+                <>{formatBytes(realtimeStats.bytesPerSecond)}/s current</>
               )}
             </p>
           </CardContent>
@@ -328,7 +325,10 @@ function AnalyticsPage() {
             {attackTypes && attackTypes.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={attackTypes}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    className="stroke-muted"
+                  />
                   <XAxis
                     dataKey="type"
                     tick={{ fontSize: 12 }}
@@ -342,7 +342,11 @@ function AnalyticsPage() {
                       borderRadius: "8px",
                     }}
                   />
-                  <Bar dataKey="count" fill="hsl(var(--destructive))" radius={4} />
+                  <Bar
+                    dataKey="count"
+                    fill="hsl(var(--destructive))"
+                    radius={4}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -357,7 +361,9 @@ function AnalyticsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Top Attack Sources</CardTitle>
-            <CardDescription>Geographic distribution of blocked traffic</CardDescription>
+            <CardDescription>
+              Geographic distribution of blocked traffic
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -366,7 +372,9 @@ function AnalyticsPage() {
                   <div key={i} className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Globe className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">{item.country ?? "Unknown"}</span>
+                      <span className="font-medium">
+                        {item.country ?? "Unknown"}
+                      </span>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="w-32 h-2 bg-muted rounded overflow-hidden">
@@ -426,11 +434,15 @@ function AnalyticsPage() {
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Country</p>
-                <p className="text-lg font-medium">{ipScoreData.country ?? "Unknown"}</p>
+                <p className="text-lg font-medium">
+                  {ipScoreData.country ?? "Unknown"}
+                </p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">ASN</p>
-                <p className="text-lg font-medium">{ipScoreData.asn ?? "Unknown"}</p>
+                <p className="text-lg font-medium">
+                  {ipScoreData.asn ?? "Unknown"}
+                </p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Flags</p>
@@ -438,8 +450,12 @@ function AnalyticsPage() {
                   {ipScoreData.isProxy && (
                     <Badge variant="destructive">Proxy</Badge>
                   )}
-                  {ipScoreData.isVpn && <Badge variant="destructive">VPN</Badge>}
-                  {ipScoreData.isTor && <Badge variant="destructive">Tor</Badge>}
+                  {ipScoreData.isVpn && (
+                    <Badge variant="destructive">VPN</Badge>
+                  )}
+                  {ipScoreData.isTor && (
+                    <Badge variant="destructive">Tor</Badge>
+                  )}
                   {ipScoreData.isDatacenter && (
                     <Badge variant="secondary">Datacenter</Badge>
                   )}
@@ -540,7 +556,9 @@ function AnalyticsPage() {
                     <AlertTriangle className="h-4 w-4 text-red-500" />
                     <Badge variant="destructive">{attackStats.critical}</Badge>
                   </div>
-                  <div className="text-2xl font-bold">{attackStats.critical}</div>
+                  <div className="text-2xl font-bold">
+                    {attackStats.critical}
+                  </div>
                   <p className="text-xs text-muted-foreground">Critical</p>
                 </CardContent>
               </Card>
@@ -560,7 +578,9 @@ function AnalyticsPage() {
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between mb-2">
                     <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                    <Badge className="bg-yellow-500">{attackStats.medium}</Badge>
+                    <Badge className="bg-yellow-500">
+                      {attackStats.medium}
+                    </Badge>
                   </div>
                   <div className="text-2xl font-bold">{attackStats.medium}</div>
                   <p className="text-xs text-muted-foreground">Medium</p>
@@ -571,9 +591,13 @@ function AnalyticsPage() {
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between mb-2">
                     <Shield className="h-4 w-4 text-green-500" />
-                    <Badge className="bg-green-500">{attackStats.mitigated}</Badge>
+                    <Badge className="bg-green-500">
+                      {attackStats.mitigated}
+                    </Badge>
                   </div>
-                  <div className="text-2xl font-bold">{attackStats.mitigated}</div>
+                  <div className="text-2xl font-bold">
+                    {attackStats.mitigated}
+                  </div>
                   <p className="text-xs text-muted-foreground">Mitigated</p>
                 </CardContent>
               </Card>

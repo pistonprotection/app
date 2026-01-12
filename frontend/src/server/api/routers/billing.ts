@@ -1,24 +1,24 @@
-import { z } from "zod";
-import { eq, and, sql, gte } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { and, eq, gte, sql } from "drizzle-orm";
+import { z } from "zod";
 import {
   createTRPCRouter,
-  organizationProcedure,
   organizationOwnerProcedure,
+  organizationProcedure,
   protectedProcedure,
 } from "@/server/api/trpc";
 import { subscription } from "@/server/db/auth-schema";
 import {
-  protectionOrganization,
   backend,
   filter,
+  protectionOrganization,
   trafficMetric,
 } from "@/server/db/schema";
 import {
-  getOrganizationLimits,
-  protectionPlans,
   formatBytes,
   formatNumber,
+  getOrganizationLimits,
+  protectionPlans,
 } from "@/server/server-utils";
 import { stripeClient } from "@/server/stripe";
 
@@ -47,7 +47,12 @@ export const billingRouter = createTRPCRouter({
 
     return {
       plan: sub.plan,
-      status: sub.status as "active" | "trialing" | "past_due" | "canceled" | "incomplete",
+      status: sub.status as
+        | "active"
+        | "trialing"
+        | "past_due"
+        | "canceled"
+        | "incomplete",
       currentPeriodEnd: sub.periodEnd?.toISOString() ?? null,
       cancelAtPeriodEnd: sub.cancelAtPeriodEnd ?? false,
       stripeSubscriptionId: sub.stripeSubscriptionId,
@@ -58,37 +63,39 @@ export const billingRouter = createTRPCRouter({
   }),
 
   // Get subscription with full plan details
-  getSubscriptionDetails: organizationProcedure.query(async ({ ctx, input }) => {
-    const sub = await ctx.db.query.subscription.findFirst({
-      where: eq(subscription.referenceId, input.organizationId),
-    });
+  getSubscriptionDetails: organizationProcedure.query(
+    async ({ ctx, input }) => {
+      const sub = await ctx.db.query.subscription.findFirst({
+        where: eq(subscription.referenceId, input.organizationId),
+      });
 
-    const planName = sub?.plan ?? "free";
-    const plan = protectionPlans.find((p) => p.name === planName);
+      const planName = sub?.plan ?? "free";
+      const plan = protectionPlans.find((p) => p.name === planName);
 
-    return {
-      subscription: sub
-        ? {
-            plan: sub.plan,
-            status: sub.status,
-            periodStart: sub.periodStart?.toISOString(),
-            periodEnd: sub.periodEnd?.toISOString(),
-            cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
-            trialStart: sub.trialStart?.toISOString(),
-            trialEnd: sub.trialEnd?.toISOString(),
-          }
-        : null,
-      plan: plan
-        ? {
-            name: plan.name,
-            limits: plan.limits,
-          }
-        : {
-            name: "free",
-            limits: { backends: 1, filters: 5, bandwidth: 1_000_000_000 },
-          },
-    };
-  }),
+      return {
+        subscription: sub
+          ? {
+              plan: sub.plan,
+              status: sub.status,
+              periodStart: sub.periodStart?.toISOString(),
+              periodEnd: sub.periodEnd?.toISOString(),
+              cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+              trialStart: sub.trialStart?.toISOString(),
+              trialEnd: sub.trialEnd?.toISOString(),
+            }
+          : null,
+        plan: plan
+          ? {
+              name: plan.name,
+              limits: plan.limits,
+            }
+          : {
+              name: "free",
+              limits: { backends: 1, filters: 5, bandwidth: 1_000_000_000 },
+            },
+      };
+    },
+  ),
 
   // ==================== USAGE INFO ====================
 
@@ -148,12 +155,10 @@ export const billingRouter = createTRPCRouter({
     .input(
       z.object({
         days: z.number().int().min(1).max(90).default(30),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
-      const startDate = new Date(
-        Date.now() - input.days * 24 * 60 * 60 * 1000
-      );
+      const startDate = new Date(Date.now() - input.days * 24 * 60 * 60 * 1000);
 
       const usage = await ctx.db
         .select({
@@ -166,8 +171,8 @@ export const billingRouter = createTRPCRouter({
         .where(
           and(
             eq(trafficMetric.organizationId, input.organizationId),
-            gte(trafficMetric.timestamp, startDate)
-          )
+            gte(trafficMetric.timestamp, startDate),
+          ),
         )
         .groupBy(sql`date_trunc('day', ${trafficMetric.timestamp})`)
         .orderBy(sql`date_trunc('day', ${trafficMetric.timestamp})`);
@@ -214,7 +219,9 @@ export const billingRouter = createTRPCRouter({
         filters: plan.limits?.filters ?? 5,
         filtersFormatted: formatNumber(plan.limits?.filters ?? 5),
         bandwidth: plan.limits?.bandwidth ?? 1_000_000_000,
-        bandwidthFormatted: formatBytes(plan.limits?.bandwidth ?? 1_000_000_000),
+        bandwidthFormatted: formatBytes(
+          plan.limits?.bandwidth ?? 1_000_000_000,
+        ),
       },
       hasFreeTrial: !!plan.freeTrial,
       freeTrialDays: plan.freeTrial?.days ?? 0,
@@ -229,7 +236,7 @@ export const billingRouter = createTRPCRouter({
       z.object({
         priceId: z.string(),
         annual: z.boolean().default(false),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -239,7 +246,7 @@ export const billingRouter = createTRPCRouter({
       const existingSub = await ctx.db.query.subscription.findFirst({
         where: and(
           eq(subscription.referenceId, input.organizationId),
-          sql`${subscription.status} in ('active', 'trialing')`
+          sql`${subscription.status} in ('active', 'trialing')`,
         ),
       });
 
@@ -293,7 +300,7 @@ export const billingRouter = createTRPCRouter({
       });
 
       return { url: session.url };
-    }
+    },
   ),
 
   // Cancel subscription at period end
@@ -321,7 +328,7 @@ export const billingRouter = createTRPCRouter({
         .where(eq(subscription.id, sub.id));
 
       return { success: true };
-    }
+    },
   ),
 
   // Resume canceled subscription
@@ -349,7 +356,7 @@ export const billingRouter = createTRPCRouter({
         .where(eq(subscription.id, sub.id));
 
       return { success: true };
-    }
+    },
   ),
 
   // ==================== INVOICES ====================
@@ -359,7 +366,7 @@ export const billingRouter = createTRPCRouter({
     .input(
       z.object({
         limit: z.number().int().min(1).max(100).default(10),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const sub = await ctx.db.query.subscription.findFirst({
@@ -431,11 +438,11 @@ export const billingRouter = createTRPCRouter({
             quantity: line.quantity,
           })),
         };
-      } catch (error) {
+      } catch (_error) {
         // No upcoming invoice (e.g., canceled subscription)
         return null;
       }
-    }
+    },
   ),
 
   // ==================== PAYMENT METHODS ====================
@@ -469,6 +476,6 @@ export const billingRouter = createTRPCRouter({
         console.error("Failed to fetch payment methods:", error);
         return [];
       }
-    }
+    },
   ),
 });

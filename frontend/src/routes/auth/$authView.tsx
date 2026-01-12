@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
 import { AuthView } from "@daveyplate/better-auth-ui";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Shield } from "lucide-react";
 
 export const Route = createFileRoute("/auth/$authView")({

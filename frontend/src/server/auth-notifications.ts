@@ -70,7 +70,13 @@ export const authNotifications = {
     });
   },
 
-  async sendChangeEmailVerification({ user, url }: { user: User; url: string }) {
+  async sendChangeEmailVerification({
+    user,
+    url,
+  }: {
+    user: User;
+    url: string;
+  }) {
     await resend.emails.send({
       from: `${siteName} <${fromEmail}>`,
       to: user.email,
@@ -93,7 +99,13 @@ export const authNotifications = {
     });
   },
 
-  async sendDeleteAccountVerification({ user, url }: { user: User; url: string }) {
+  async sendDeleteAccountVerification({
+    user,
+    url,
+  }: {
+    user: User;
+    url: string;
+  }) {
     await resend.emails.send({
       from: `${siteName} <${fromEmail}>`,
       to: user.email,
@@ -138,10 +150,19 @@ export const authNotifications = {
     });
   },
 
-  async sendEmailOTP({ email, otp, type }: { email: string; otp: string; type: string }) {
-    const subject = type === "sign-in"
-      ? `Your sign-in code for ${siteName}`
-      : `Your verification code for ${siteName}`;
+  async sendEmailOTP({
+    email,
+    otp,
+    type,
+  }: {
+    email: string;
+    otp: string;
+    type: string;
+  }) {
+    const subject =
+      type === "sign-in"
+        ? `Your sign-in code for ${siteName}`
+        : `Your verification code for ${siteName}`;
 
     await resend.emails.send({
       from: `${siteName} <${fromEmail}>`,

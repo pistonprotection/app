@@ -1,8 +1,25 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
 import { useForm } from "@tanstack/react-form";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-form-adapter";
+import {
+  Copy,
+  Filter,
+  Globe,
+  Loader2,
+  MoreVertical,
+  Pencil,
+  Plus,
+  Server,
+  Shield,
+  Trash2,
+  Zap,
+} from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { z } from "zod";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -10,12 +27,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -26,12 +37,22 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -40,30 +61,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Filter,
-  Plus,
-  MoreVertical,
-  Pencil,
-  Trash2,
-  Shield,
-  Zap,
-  Globe,
-  Server,
-  Loader2,
-  Copy,
-} from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { useTRPC } from "@/lib/trpc/client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 
 export const Route = createFileRoute("/dashboard/filters")({
   component: FiltersPage,
@@ -94,7 +94,7 @@ const filterSchema = z.object({
 
 function FiltersPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [editingFilter, setEditingFilter] = useState<string | null>(null);
+  const [_editingFilter, setEditingFilter] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"all" | FilterType>("all");
 
@@ -105,13 +105,11 @@ function FiltersPage() {
   const { data: filtersData, isLoading } = useQuery(
     trpc.filters.list.queryOptions({
       type: activeTab === "all" ? undefined : activeTab,
-    })
+    }),
   );
 
   // Get filter stats
-  const { data: filterStats } = useQuery(
-    trpc.filters.getStats.queryOptions()
-  );
+  const { data: filterStats } = useQuery(trpc.filters.getStats.queryOptions());
 
   // Create filter mutation
   const createMutation = useMutation(
@@ -125,11 +123,11 @@ function FiltersPage() {
       onError: (error) => {
         toast.error(`Failed to create filter: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Update filter mutation
-  const updateMutation = useMutation(
+  const _updateMutation = useMutation(
     trpc.filters.update.mutationOptions({
       onSuccess: () => {
         toast.success("Filter updated");
@@ -139,7 +137,7 @@ function FiltersPage() {
       onError: (error) => {
         toast.error(`Failed to update filter: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Delete filter mutation
@@ -153,7 +151,7 @@ function FiltersPage() {
       onError: (error) => {
         toast.error(`Failed to delete filter: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Toggle filter enabled
@@ -165,7 +163,7 @@ function FiltersPage() {
       onError: (error) => {
         toast.error(`Failed to toggle filter: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Duplicate filter mutation
@@ -178,7 +176,7 @@ function FiltersPage() {
       onError: (error) => {
         toast.error(`Failed to duplicate filter: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Form for creating filters
@@ -201,8 +199,7 @@ function FiltersPage() {
         priority: value.priority,
         enabled: value.enabled,
         conditions: value.conditions || undefined,
-        rateLimit:
-          value.action === "rate_limit" ? value.rateLimit : undefined,
+        rateLimit: value.action === "rate_limit" ? value.rateLimit : undefined,
         rateLimitWindow:
           value.action === "rate_limit" ? value.rateLimitWindow : undefined,
       });
@@ -366,9 +363,7 @@ function FiltersPage() {
                     </div>
                   )}
                 </form.Field>
-                <form.Subscribe
-                  selector={(state) => state.values.action}
-                >
+                <form.Subscribe selector={(state) => state.values.action}>
                   {(action) =>
                     action === "rate_limit" && (
                       <div className="grid grid-cols-2 gap-4">
@@ -627,7 +622,9 @@ function FiltersPage() {
             </Button>
             <Button
               variant="destructive"
-              onClick={() => deleteId && deleteMutation.mutate({ id: deleteId })}
+              onClick={() =>
+                deleteId && deleteMutation.mutate({ id: deleteId })
+              }
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending && (

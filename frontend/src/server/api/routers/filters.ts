@@ -1,13 +1,13 @@
-import { z } from "zod";
-import { eq, and, gte, isNull, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { and, eq, gte, isNull, or } from "drizzle-orm";
+import { z } from "zod";
 import {
   createTRPCRouter,
-  organizationProcedure,
   organizationAdminProcedure,
+  organizationProcedure,
   organizationWithSubscriptionProcedure,
 } from "@/server/api/trpc";
-import { filter, ipList, backend } from "@/server/db/schema";
+import { backend, filter, ipList } from "@/server/db/schema";
 import { getOrganizationLimits } from "@/server/server-utils";
 
 // Zod schemas for validation
@@ -123,10 +123,12 @@ export const filtersRouter = createTRPCRouter({
   // List all filters for an organization
   list: organizationProcedure
     .input(
-      z.object({
-        backendId: z.string().uuid().optional(),
-        enabled: z.boolean().optional(),
-      }).partial()
+      z
+        .object({
+          backendId: z.string().uuid().optional(),
+          enabled: z.boolean().optional(),
+        })
+        .partial(),
     )
     .query(async ({ ctx, input }) => {
       const conditions = [eq(filter.organizationId, input.organizationId)];
@@ -157,7 +159,7 @@ export const filtersRouter = createTRPCRouter({
       const result = await ctx.db.query.filter.findFirst({
         where: and(
           eq(filter.id, input.id),
-          eq(filter.organizationId, input.organizationId)
+          eq(filter.organizationId, input.organizationId),
         ),
         with: {
           backend: true,
@@ -197,7 +199,7 @@ export const filtersRouter = createTRPCRouter({
         const backendRecord = await ctx.db.query.backend.findFirst({
           where: and(
             eq(backend.id, input.backendId),
-            eq(backend.organizationId, input.organizationId)
+            eq(backend.organizationId, input.organizationId),
           ),
         });
 
@@ -230,7 +232,7 @@ export const filtersRouter = createTRPCRouter({
       const existing = await ctx.db.query.filter.findFirst({
         where: and(
           eq(filter.id, id),
-          eq(filter.organizationId, organizationId)
+          eq(filter.organizationId, organizationId),
         ),
       });
 
@@ -246,7 +248,7 @@ export const filtersRouter = createTRPCRouter({
         const backendRecord = await ctx.db.query.backend.findFirst({
           where: and(
             eq(backend.id, data.backendId),
-            eq(backend.organizationId, organizationId)
+            eq(backend.organizationId, organizationId),
           ),
         });
 
@@ -275,7 +277,7 @@ export const filtersRouter = createTRPCRouter({
       const existing = await ctx.db.query.filter.findFirst({
         where: and(
           eq(filter.id, input.id),
-          eq(filter.organizationId, input.organizationId)
+          eq(filter.organizationId, input.organizationId),
         ),
       });
 
@@ -297,7 +299,7 @@ export const filtersRouter = createTRPCRouter({
       const existing = await ctx.db.query.filter.findFirst({
         where: and(
           eq(filter.id, input.id),
-          eq(filter.organizationId, input.organizationId)
+          eq(filter.organizationId, input.organizationId),
         ),
       });
 
@@ -325,9 +327,9 @@ export const filtersRouter = createTRPCRouter({
           z.object({
             id: z.string().uuid(),
             priority: z.number().int().min(0).max(10000),
-          })
+          }),
         ),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const results = [];
@@ -337,7 +339,7 @@ export const filtersRouter = createTRPCRouter({
         const existing = await ctx.db.query.filter.findFirst({
           where: and(
             eq(filter.id, id),
-            eq(filter.organizationId, input.organizationId)
+            eq(filter.organizationId, input.organizationId),
           ),
         });
 
@@ -375,7 +377,7 @@ export const filtersRouter = createTRPCRouter({
       const existing = await ctx.db.query.filter.findFirst({
         where: and(
           eq(filter.id, input.id),
-          eq(filter.organizationId, input.organizationId)
+          eq(filter.organizationId, input.organizationId),
         ),
       });
 
@@ -407,10 +409,12 @@ export const filtersRouter = createTRPCRouter({
   // List all IP list entries for an organization
   listIpList: organizationProcedure
     .input(
-      z.object({
-        type: z.enum(["allow", "block"]).optional(),
-        includeExpired: z.boolean().default(false),
-      }).partial()
+      z
+        .object({
+          type: z.enum(["allow", "block"]).optional(),
+          includeExpired: z.boolean().default(false),
+        })
+        .partial(),
     )
     .query(async ({ ctx, input }) => {
       const conditions = [eq(ipList.organizationId, input.organizationId)];
@@ -421,7 +425,7 @@ export const filtersRouter = createTRPCRouter({
 
       if (!input.includeExpired) {
         conditions.push(
-          or(isNull(ipList.expiresAt), gte(ipList.expiresAt, new Date()))!
+          or(isNull(ipList.expiresAt), gte(ipList.expiresAt, new Date()))!,
         );
       }
 
@@ -443,7 +447,7 @@ export const filtersRouter = createTRPCRouter({
       const result = await ctx.db.query.ipList.findFirst({
         where: and(
           eq(ipList.id, input.id),
-          eq(ipList.organizationId, input.organizationId)
+          eq(ipList.organizationId, input.organizationId),
         ),
         with: {
           createdByUser: {
@@ -470,7 +474,7 @@ export const filtersRouter = createTRPCRouter({
       const existing = await ctx.db.query.ipList.findFirst({
         where: and(
           eq(ipList.organizationId, input.organizationId),
-          eq(ipList.ip, input.ip)
+          eq(ipList.ip, input.ip),
         ),
       });
 
@@ -503,7 +507,7 @@ export const filtersRouter = createTRPCRouter({
       const existing = await ctx.db.query.ipList.findFirst({
         where: and(
           eq(ipList.id, id),
-          eq(ipList.organizationId, organizationId)
+          eq(ipList.organizationId, organizationId),
         ),
       });
 
@@ -531,7 +535,7 @@ export const filtersRouter = createTRPCRouter({
       const existing = await ctx.db.query.ipList.findFirst({
         where: and(
           eq(ipList.id, input.id),
-          eq(ipList.organizationId, input.organizationId)
+          eq(ipList.organizationId, input.organizationId),
         ),
       });
 
@@ -557,10 +561,10 @@ export const filtersRouter = createTRPCRouter({
             type: z.enum(["allow", "block"]),
             reason: z.string().max(255).optional(),
             expiresAt: z.date().optional(),
-          })
+          }),
         ),
         source: z.enum(["manual", "automatic", "api"]).default("manual"),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const results = {
@@ -575,7 +579,7 @@ export const filtersRouter = createTRPCRouter({
           const existing = await ctx.db.query.ipList.findFirst({
             where: and(
               eq(ipList.organizationId, input.organizationId),
-              eq(ipList.ip, entry.ip)
+              eq(ipList.ip, entry.ip),
             ),
           });
 
@@ -592,7 +596,7 @@ export const filtersRouter = createTRPCRouter({
           });
 
           results.added++;
-        } catch (error) {
+        } catch (_error) {
           results.errors.push(`Failed to add ${entry.ip}`);
         }
       }
@@ -610,13 +614,13 @@ export const filtersRouter = createTRPCRouter({
         .where(
           and(
             eq(ipList.organizationId, input.organizationId),
-            gte(now, ipList.expiresAt!)
-          )
+            gte(now, ipList.expiresAt!),
+          ),
         )
         .returning();
 
       return { deleted: deleted.length };
-    }
+    },
   ),
 
   // Search IP in the list
@@ -628,7 +632,7 @@ export const filtersRouter = createTRPCRouter({
       return ctx.db.query.ipList.findMany({
         where: and(
           eq(ipList.organizationId, input.organizationId),
-          eq(ipList.ip, input.query)
+          eq(ipList.ip, input.query),
         ),
         with: {
           createdByUser: {

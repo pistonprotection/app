@@ -53,7 +53,7 @@ export const session = pgTable(
     impersonatedBy: text("impersonated_by"),
     activeOrganizationId: uuid("active_organization_id"),
   },
-  (table) => [index("session_user_id_idx").on(table.userId)]
+  (table) => [index("session_user_id_idx").on(table.userId)],
 ).enableRLS();
 
 // Account table for OAuth providers
@@ -78,7 +78,7 @@ export const account = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index("account_user_id_idx").on(table.userId)]
+  (table) => [index("account_user_id_idx").on(table.userId)],
 ).enableRLS();
 
 // Verification tokens
@@ -95,7 +95,7 @@ export const verification = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index("verification_identifier_idx").on(table.identifier)]
+  (table) => [index("verification_identifier_idx").on(table.identifier)],
 ).enableRLS();
 
 // Two-factor authentication
@@ -112,7 +112,7 @@ export const twoFactor = pgTable(
   (table) => [
     index("two_factor_secret_idx").on(table.secret),
     index("two_factor_user_id_idx").on(table.userId),
-  ]
+  ],
 ).enableRLS();
 
 // Passkey for WebAuthn
@@ -136,7 +136,7 @@ export const passkey = pgTable(
   (table) => [
     index("passkey_user_id_idx").on(table.userId),
     index("passkey_credential_id_idx").on(table.credentialID),
-  ]
+  ],
 ).enableRLS();
 
 // API keys
@@ -170,7 +170,7 @@ export const apikey = pgTable(
   (table) => [
     index("apikey_key_idx").on(table.key),
     index("apikey_user_id_idx").on(table.userId),
-  ]
+  ],
 ).enableRLS();
 
 // Organization table
@@ -184,7 +184,7 @@ export const organization = pgTable(
     createdAt: timestamp("created_at").notNull(),
     metadata: text("metadata"),
   },
-  (table) => [uniqueIndex("organization_slug_idx").on(table.slug)]
+  (table) => [uniqueIndex("organization_slug_idx").on(table.slug)],
 ).enableRLS();
 
 // Organization member
@@ -204,7 +204,7 @@ export const member = pgTable(
   (table) => [
     index("member_organization_id_idx").on(table.organizationId),
     index("member_user_id_idx").on(table.userId),
-  ]
+  ],
 ).enableRLS();
 
 // Invitation
@@ -227,7 +227,7 @@ export const invitation = pgTable(
   (table) => [
     index("invitation_organization_id_idx").on(table.organizationId),
     index("invitation_email_idx").on(table.email),
-  ]
+  ],
 ).enableRLS();
 
 // JWKS for JWT

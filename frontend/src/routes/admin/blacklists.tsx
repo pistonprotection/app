@@ -1,8 +1,24 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
 import { useForm } from "@tanstack/react-form";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-form-adapter";
+import {
+  Ban,
+  Download,
+  Globe,
+  Loader2,
+  MoreVertical,
+  Network,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { z } from "zod";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -10,19 +26,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +36,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -40,32 +51,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
-  Search,
-  Plus,
-  MoreVertical,
-  Ban,
-  Trash2,
-  Upload,
-  Globe,
-  Network,
-  Loader2,
-  Download,
-} from "lucide-react";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useTRPC } from "@/lib/trpc/client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin/blacklists")({
   component: AdminBlacklists,
@@ -95,12 +90,12 @@ function AdminBlacklists() {
       type: activeTab,
       search: searchQuery || undefined,
       limit: 100,
-    })
+    }),
   );
 
   // Get blacklist stats
   const { data: blacklistStats } = useQuery(
-    trpc.admin.getBlacklistStats.queryOptions()
+    trpc.admin.getBlacklistStats.queryOptions(),
   );
 
   // Add blacklist entry mutation
@@ -114,7 +109,7 @@ function AdminBlacklists() {
       onError: (error) => {
         toast.error(`Failed to add entry: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Remove blacklist entry mutation
@@ -128,7 +123,7 @@ function AdminBlacklists() {
       onError: (error) => {
         toast.error(`Failed to remove entry: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Form for adding entries
@@ -144,9 +139,7 @@ function AdminBlacklists() {
         type: value.type,
         value: value.value,
         reason: value.reason || undefined,
-        expiresAt: value.expiresAt
-          ? new Date(value.expiresAt)
-          : undefined,
+        expiresAt: value.expiresAt ? new Date(value.expiresAt) : undefined,
       });
     },
     validatorAdapter: zodValidator(),

@@ -1,14 +1,18 @@
-import { createFileRoute, Outlet, Link, useLocation } from "@tanstack/react-router";
-import { authClient } from "@/lib/auth-client";
 import {
-  Shield,
-  Users,
-  Server,
-  Settings,
-  AlertTriangle,
+  createFileRoute,
+  Link,
+  Outlet,
+  useLocation,
+} from "@tanstack/react-router";
+import {
   Activity,
+  AlertTriangle,
   Ban,
   LayoutDashboard,
+  Server,
+  Settings,
+  Shield,
+  Users,
 } from "lucide-react";
 import {
   Sidebar,
@@ -22,6 +26,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/admin/")({
   component: AdminLayout,

@@ -1,9 +1,26 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
 import { useForm } from "@tanstack/react-form";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-form-adapter";
-import { z } from "zod";
+import {
+  Activity,
+  Globe,
+  Loader2,
+  MoreVertical,
+  Pencil,
+  Plus,
+  Power,
+  RefreshCw,
+  Server,
+  Settings,
+  Shield,
+  Trash2,
+} from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -11,10 +28,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -25,12 +38,22 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -39,31 +62,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Switch } from "@/components/ui/switch";
-import {
-  Server,
-  Plus,
-  MoreVertical,
-  Pencil,
-  Trash2,
-  Activity,
-  Globe,
-  Shield,
-  Loader2,
-  Power,
-  RefreshCw,
-  Settings,
-} from "lucide-react";
-import { useTRPC } from "@/lib/trpc/client";
 import { authClient } from "@/lib/auth-client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTRPC } from "@/lib/trpc/client";
 
 export const Route = createFileRoute("/dashboard/backends")({
   component: BackendsPage,
@@ -124,7 +124,7 @@ function BackendsPage() {
   } = useQuery(
     trpc.backends.list.queryOptions({
       organizationId,
-    })
+    }),
   );
 
   // Create backend mutation
@@ -138,7 +138,7 @@ function BackendsPage() {
       onError: (error) => {
         toast.error(`Failed to create backend: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Toggle backend mutation
@@ -146,14 +146,14 @@ function BackendsPage() {
     trpc.backends.toggle.mutationOptions({
       onSuccess: (data) => {
         toast.success(
-          `Backend ${data.enabled ? "enabled" : "disabled"} successfully`
+          `Backend ${data.enabled ? "enabled" : "disabled"} successfully`,
         );
         queryClient.invalidateQueries({ queryKey: ["backends"] });
       },
       onError: (error) => {
         toast.error(`Failed to toggle backend: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Delete backend mutation
@@ -167,7 +167,7 @@ function BackendsPage() {
       onError: (error) => {
         toast.error(`Failed to delete backend: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Form for creating backend
@@ -194,9 +194,13 @@ function BackendsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "healthy":
-        return <Badge className="bg-green-500 hover:bg-green-600">Healthy</Badge>;
+        return (
+          <Badge className="bg-green-500 hover:bg-green-600">Healthy</Badge>
+        );
       case "degraded":
-        return <Badge className="bg-yellow-500 hover:bg-yellow-600">Degraded</Badge>;
+        return (
+          <Badge className="bg-yellow-500 hover:bg-yellow-600">Degraded</Badge>
+        );
       case "unhealthy":
         return <Badge variant="destructive">Unhealthy</Badge>;
       default:
@@ -271,7 +275,9 @@ function BackendsPage() {
                 <form.Field name="description">
                   {(field) => (
                     <div className="grid gap-2">
-                      <Label htmlFor="description">Description (optional)</Label>
+                      <Label htmlFor="description">
+                        Description (optional)
+                      </Label>
                       <Input
                         id="description"
                         placeholder="A brief description of this server"
@@ -324,8 +330,8 @@ function BackendsPage() {
                         className="w-full"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Higher values mean stricter filtering (may increase false
-                        positives)
+                        Higher values mean stricter filtering (may increase
+                        false positives)
                       </p>
                     </div>
                   )}
@@ -337,7 +343,9 @@ function BackendsPage() {
                       <Switch
                         id="enabled"
                         checked={field.state.value}
-                        onCheckedChange={(checked) => field.handleChange(checked)}
+                        onCheckedChange={(checked) =>
+                          field.handleChange(checked)
+                        }
                       />
                     </div>
                   )}
@@ -367,7 +375,9 @@ function BackendsPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Backends</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Backends
+            </CardTitle>
             <Server className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -530,8 +540,9 @@ function BackendsPage() {
           <DialogHeader>
             <DialogTitle>Delete Backend</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this backend? This action cannot be
-              undone and will remove all associated origins, domains, and filters.
+              Are you sure you want to delete this backend? This action cannot
+              be undone and will remove all associated origins, domains, and
+              filters.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

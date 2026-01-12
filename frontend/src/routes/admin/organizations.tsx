@@ -1,5 +1,21 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import {
+  Ban,
+  Building,
+  CreditCard,
+  Eye,
+  Loader2,
+  MoreVertical,
+  Search,
+  Server,
+  Shield,
+  Users,
+} from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -7,24 +23,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -34,20 +32,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Search,
-  MoreVertical,
-  Building,
-  Users,
-  Server,
-  Shield,
-  Ban,
-  Eye,
-  Loader2,
-  CreditCard,
-} from "lucide-react";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useTRPC } from "@/lib/trpc/client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin/organizations")({
   component: AdminOrganizations,
@@ -66,7 +66,7 @@ function AdminOrganizations() {
     trpc.admin.listOrganizations.queryOptions({
       search: searchQuery || undefined,
       limit: 50,
-    })
+    }),
   );
 
   // Get org details
@@ -88,7 +88,7 @@ function AdminOrganizations() {
       onError: (error) => {
         toast.error(`Failed to suspend organization: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Unsuspend organization mutation
@@ -101,7 +101,7 @@ function AdminOrganizations() {
       onError: (error) => {
         toast.error(`Failed to unsuspend organization: ${error.message}`);
       },
-    })
+    }),
   );
 
   return (
@@ -263,7 +263,9 @@ function AdminOrganizations() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{selectedOrg?.name}</DialogTitle>
-            <DialogDescription>Organization details and statistics</DialogDescription>
+            <DialogDescription>
+              Organization details and statistics
+            </DialogDescription>
           </DialogHeader>
           {selectedOrg && (
             <div className="space-y-4">

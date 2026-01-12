@@ -1,4 +1,20 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import {
+  AlertTriangle,
+  Check,
+  CreditCard,
+  Download,
+  ExternalLink,
+  Loader2,
+  Server,
+  Shield,
+  Zap,
+} from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -6,8 +22,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import {
   Table,
@@ -17,29 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  CreditCard,
-  Download,
-  Zap,
-  Shield,
-  Server,
-  Check,
-  Loader2,
-  AlertTriangle,
-  ExternalLink,
-} from "lucide-react";
 import { useTRPC } from "@/lib/trpc/client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { useState } from "react";
 
 export const Route = createFileRoute("/dashboard/billing")({
   component: BillingPage,
@@ -54,27 +54,27 @@ function BillingPage() {
 
   // Get current subscription
   const { data: subscription, isLoading: subLoading } = useQuery(
-    trpc.billing.getSubscription.queryOptions()
+    trpc.billing.getSubscription.queryOptions(),
   );
 
   // Get usage
   const { data: usage, isLoading: usageLoading } = useQuery(
-    trpc.billing.getUsage.queryOptions()
+    trpc.billing.getUsage.queryOptions(),
   );
 
   // Get available plans
   const { data: plans, isLoading: plansLoading } = useQuery(
-    trpc.billing.getPlans.queryOptions()
+    trpc.billing.getPlans.queryOptions(),
   );
 
   // Get invoices
   const { data: invoices, isLoading: invoicesLoading } = useQuery(
-    trpc.billing.getInvoices.queryOptions({ limit: 10 })
+    trpc.billing.getInvoices.queryOptions({ limit: 10 }),
   );
 
   // Get payment methods
   const { data: paymentMethods } = useQuery(
-    trpc.billing.getPaymentMethods.queryOptions()
+    trpc.billing.getPaymentMethods.queryOptions(),
   );
 
   // Create checkout session for upgrade
@@ -88,7 +88,7 @@ function BillingPage() {
       onError: (error) => {
         toast.error(`Failed to start upgrade: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Open customer portal
@@ -102,27 +102,31 @@ function BillingPage() {
       onError: (error) => {
         toast.error(`Failed to open billing portal: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Cancel subscription
   const cancelMutation = useMutation(
     trpc.billing.cancelSubscription.mutationOptions({
       onSuccess: () => {
-        toast.success("Subscription cancelled. You will have access until the end of the billing period.");
+        toast.success(
+          "Subscription cancelled. You will have access until the end of the billing period.",
+        );
         setCancelDialogOpen(false);
         queryClient.invalidateQueries({ queryKey: ["billing"] });
       },
       onError: (error) => {
         toast.error(`Failed to cancel subscription: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Download invoice
   const downloadInvoice = async (invoiceId: string) => {
     try {
-      const response = await fetch(`/api/billing/invoices/${invoiceId}/download`);
+      const response = await fetch(
+        `/api/billing/invoices/${invoiceId}/download`,
+      );
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -145,9 +149,7 @@ function BillingPage() {
     );
   }
 
-  const currentPlan = plans?.find(
-    (p) => p.id === subscription?.planId
-  );
+  const currentPlan = plans?.find((p) => p.id === subscription?.planId);
   const defaultPaymentMethod = paymentMethods?.find((pm) => pm.isDefault);
 
   return (
@@ -243,8 +245,7 @@ function BillingPage() {
             <p className="text-xs text-muted-foreground">
               {currentPlan ? (
                 <>
-                  ${(currentPlan.price / 100).toFixed(2)}/
-                  {currentPlan.interval}
+                  ${(currentPlan.price / 100).toFixed(2)}/{currentPlan.interval}
                 </>
               ) : (
                 "No active subscription"
@@ -259,9 +260,7 @@ function BillingPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {currentPlan
-                ? `$${(currentPlan.price / 100).toFixed(2)}`
-                : "$0"}
+              {currentPlan ? `$${(currentPlan.price / 100).toFixed(2)}` : "$0"}
             </div>
             <p className="text-xs text-muted-foreground">
               {subscription?.currentPeriodEnd
@@ -358,8 +357,7 @@ function BillingPage() {
                 <span className="text-sm font-medium">Filter Rules</span>
               </div>
               <span className="text-sm text-muted-foreground">
-                {usage?.filtersUsed ?? 0} /{" "}
-                {usage?.filtersLimit ?? "Unlimited"}
+                {usage?.filtersUsed ?? 0} / {usage?.filtersLimit ?? "Unlimited"}
               </span>
             </div>
             <Progress
@@ -476,9 +474,7 @@ function BillingPage() {
                     <TableCell>
                       {new Date(invoice.createdAt).toLocaleDateString()}
                     </TableCell>
-                    <TableCell>
-                      ${(invoice.amount / 100).toFixed(2)}
-                    </TableCell>
+                    <TableCell>${(invoice.amount / 100).toFixed(2)}</TableCell>
                     <TableCell>
                       <Badge
                         variant="secondary"

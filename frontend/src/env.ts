@@ -4,7 +4,9 @@ import { z } from "zod";
 export const env = createEnv({
   server: {
     DATABASE_URL: z.string().url(),
-    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    NODE_ENV: z
+      .enum(["development", "test", "production"])
+      .default("development"),
     BETTER_AUTH_SECRET: z.string().min(32),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
     GITHUB_CLIENT_SECRET: z.string().optional(),
@@ -16,7 +18,11 @@ export const env = createEnv({
     CLICKHOUSE_URL: z.string().url().optional(),
     CLICKHOUSE_USERNAME: z.string().optional(),
     CLICKHOUSE_PASSWORD: z.string().optional(),
-    GATEWAY_GRPC_URL: z.string().url().optional().default("http://localhost:9090"),
+    GATEWAY_GRPC_URL: z
+      .string()
+      .url()
+      .optional()
+      .default("http://localhost:9090"),
   },
   clientPrefix: "PUBLIC_",
   client: {

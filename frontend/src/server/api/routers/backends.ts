@@ -1,18 +1,18 @@
-import { z } from "zod";
-import { eq, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 import {
   createTRPCRouter,
-  organizationProcedure,
   organizationAdminProcedure,
+  organizationProcedure,
   organizationWithSubscriptionProcedure,
 } from "@/server/api/trpc";
 import {
   backend,
-  backendOrigin,
   backendDomain,
-  minecraftConfig,
+  backendOrigin,
   geoDnsConfig,
+  minecraftConfig,
 } from "@/server/db/schema";
 import { getOrganizationLimits } from "@/server/server-utils";
 
@@ -27,7 +27,7 @@ const protocolSchema = z.enum([
   "minecraft_bedrock",
 ]);
 
-const backendStatusSchema = z.enum([
+const _backendStatusSchema = z.enum([
   "healthy",
   "degraded",
   "unhealthy",
@@ -153,7 +153,7 @@ const geoDnsConfigSchema = z.object({
         region: z.string(),
         originIds: z.array(z.string().uuid()),
         weight: z.number().int().min(0).max(100),
-      })
+      }),
     )
     .optional(),
 });
@@ -180,7 +180,7 @@ export const backendsRouter = createTRPCRouter({
       const result = await ctx.db.query.backend.findFirst({
         where: and(
           eq(backend.id, input.id),
-          eq(backend.organizationId, input.organizationId)
+          eq(backend.organizationId, input.organizationId),
         ),
         with: {
           origins: true,
@@ -240,7 +240,7 @@ export const backendsRouter = createTRPCRouter({
       const existing = await ctx.db.query.backend.findFirst({
         where: and(
           eq(backend.id, id),
-          eq(backend.organizationId, organizationId)
+          eq(backend.organizationId, organizationId),
         ),
       });
 
@@ -268,7 +268,7 @@ export const backendsRouter = createTRPCRouter({
       const existing = await ctx.db.query.backend.findFirst({
         where: and(
           eq(backend.id, input.id),
-          eq(backend.organizationId, input.organizationId)
+          eq(backend.organizationId, input.organizationId),
         ),
       });
 
@@ -290,7 +290,7 @@ export const backendsRouter = createTRPCRouter({
       const existing = await ctx.db.query.backend.findFirst({
         where: and(
           eq(backend.id, input.id),
-          eq(backend.organizationId, input.organizationId)
+          eq(backend.organizationId, input.organizationId),
         ),
       });
 
@@ -320,7 +320,7 @@ export const backendsRouter = createTRPCRouter({
       const backendRecord = await ctx.db.query.backend.findFirst({
         where: and(
           eq(backend.id, input.backendId),
-          eq(backend.organizationId, input.organizationId)
+          eq(backend.organizationId, input.organizationId),
         ),
       });
 
@@ -345,7 +345,7 @@ export const backendsRouter = createTRPCRouter({
       const backendRecord = await ctx.db.query.backend.findFirst({
         where: and(
           eq(backend.id, input.backendId),
-          eq(backend.organizationId, input.organizationId)
+          eq(backend.organizationId, input.organizationId),
         ),
       });
 
@@ -423,7 +423,7 @@ export const backendsRouter = createTRPCRouter({
       const backendRecord = await ctx.db.query.backend.findFirst({
         where: and(
           eq(backend.id, input.backendId),
-          eq(backend.organizationId, input.organizationId)
+          eq(backend.organizationId, input.organizationId),
         ),
       });
 
@@ -448,7 +448,7 @@ export const backendsRouter = createTRPCRouter({
       const backendRecord = await ctx.db.query.backend.findFirst({
         where: and(
           eq(backend.id, input.backendId),
-          eq(backend.organizationId, input.organizationId)
+          eq(backend.organizationId, input.organizationId),
         ),
       });
 
@@ -561,7 +561,7 @@ export const backendsRouter = createTRPCRouter({
       const backendRecord = await ctx.db.query.backend.findFirst({
         where: and(
           eq(backend.id, input.backendId),
-          eq(backend.organizationId, input.organizationId)
+          eq(backend.organizationId, input.organizationId),
         ),
       });
 
@@ -585,7 +585,7 @@ export const backendsRouter = createTRPCRouter({
       const backendRecord = await ctx.db.query.backend.findFirst({
         where: and(
           eq(backend.id, input.backendId),
-          eq(backend.organizationId, input.organizationId)
+          eq(backend.organizationId, input.organizationId),
         ),
       });
 
@@ -625,7 +625,7 @@ export const backendsRouter = createTRPCRouter({
       const backendRecord = await ctx.db.query.backend.findFirst({
         where: and(
           eq(backend.id, input.backendId),
-          eq(backend.organizationId, input.organizationId)
+          eq(backend.organizationId, input.organizationId),
         ),
       });
 
@@ -652,7 +652,7 @@ export const backendsRouter = createTRPCRouter({
       const backendRecord = await ctx.db.query.backend.findFirst({
         where: and(
           eq(backend.id, input.backendId),
-          eq(backend.organizationId, input.organizationId)
+          eq(backend.organizationId, input.organizationId),
         ),
       });
 
@@ -676,7 +676,7 @@ export const backendsRouter = createTRPCRouter({
       const backendRecord = await ctx.db.query.backend.findFirst({
         where: and(
           eq(backend.id, input.backendId),
-          eq(backend.organizationId, input.organizationId)
+          eq(backend.organizationId, input.organizationId),
         ),
       });
 
@@ -716,7 +716,7 @@ export const backendsRouter = createTRPCRouter({
       const backendRecord = await ctx.db.query.backend.findFirst({
         where: and(
           eq(backend.id, input.backendId),
-          eq(backend.organizationId, input.organizationId)
+          eq(backend.organizationId, input.organizationId),
         ),
       });
 

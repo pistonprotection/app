@@ -1,24 +1,23 @@
-import { z } from "zod";
-import { eq, and, gte, lte, sql, desc, asc, between } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { z } from "zod";
 import {
   createTRPCRouter,
   organizationProcedure,
-  organizationAdminProcedure,
   protectedProcedure,
 } from "@/server/api/trpc";
 import {
-  trafficMetric,
   attackEvent,
+  backend,
   connectionAttempt,
   ipScore,
-  backend,
+  trafficMetric,
 } from "@/server/db/schema";
 
 // Zod schemas for validation
 const severitySchema = z.enum(["low", "medium", "high", "critical"]);
 
-const timeRangeSchema = z.object({
+const _timeRangeSchema = z.object({
   startDate: z.date(),
   endDate: z.date(),
 });
@@ -34,7 +33,7 @@ export const analyticsRouter = createTRPCRouter({
         startDate: z.date(),
         endDate: z.date(),
         interval: z.enum(["minute", "hour", "day"]).default("hour"),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const conditions = [
@@ -64,7 +63,7 @@ export const analyticsRouter = createTRPCRouter({
       z.object({
         backendId: z.string().uuid().optional(),
         hours: z.number().int().min(1).max(720).default(24), // Max 30 days
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const startDate = new Date(Date.now() - input.hours * 60 * 60 * 1000);
@@ -95,19 +94,21 @@ export const analyticsRouter = createTRPCRouter({
         .from(trafficMetric)
         .where(and(...conditions));
 
-      return metrics[0] ?? {
-        totalRequests: 0,
-        allowedRequests: 0,
-        blockedRequests: 0,
-        challengedRequests: 0,
-        bytesIn: 0,
-        bytesOut: 0,
-        avgLatency: 0,
-        p95Latency: 0,
-        p99Latency: 0,
-        uniqueIps: 0,
-        errorCount: 0,
-      };
+      return (
+        metrics[0] ?? {
+          totalRequests: 0,
+          allowedRequests: 0,
+          blockedRequests: 0,
+          challengedRequests: 0,
+          bytesIn: 0,
+          bytesOut: 0,
+          avgLatency: 0,
+          p95Latency: 0,
+          p99Latency: 0,
+          uniqueIps: 0,
+          errorCount: 0,
+        }
+      );
     }),
 
   // Get real-time stats (last 5 minutes)
@@ -125,16 +126,18 @@ export const analyticsRouter = createTRPCRouter({
       .where(
         and(
           eq(trafficMetric.organizationId, input.organizationId),
-          gte(trafficMetric.timestamp, fiveMinutesAgo)
-        )
+          gte(trafficMetric.timestamp, fiveMinutesAgo),
+        ),
       );
 
-    return metrics[0] ?? {
-      requestsPerSecond: 0,
-      bytesPerSecond: 0,
-      blockedPerSecond: 0,
-      activeConnections: 0,
-    };
+    return (
+      metrics[0] ?? {
+        requestsPerSecond: 0,
+        bytesPerSecond: 0,
+        blockedPerSecond: 0,
+        activeConnections: 0,
+      }
+    );
   }),
 
   // Get traffic by backend
@@ -142,7 +145,7 @@ export const analyticsRouter = createTRPCRouter({
     .input(
       z.object({
         hours: z.number().int().min(1).max(720).default(24),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const startDate = new Date(Date.now() - input.hours * 60 * 60 * 1000);
@@ -160,8 +163,8 @@ export const analyticsRouter = createTRPCRouter({
         .where(
           and(
             eq(trafficMetric.organizationId, input.organizationId),
-            gte(trafficMetric.timestamp, startDate)
-          )
+            gte(trafficMetric.timestamp, startDate),
+          ),
         )
         .groupBy(trafficMetric.backendId, backend.name)
         .orderBy(sql`sum(${trafficMetric.requestsTotal}) desc`);
@@ -180,7 +183,7 @@ export const analyticsRouter = createTRPCRouter({
         endDate: z.date().optional(),
         limit: z.number().int().min(1).max(100).default(50),
         offset: z.number().int().min(0).default(0),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const conditions = [eq(attackEvent.organizationId, input.organizationId)];
@@ -236,7 +239,7 @@ export const analyticsRouter = createTRPCRouter({
       const result = await ctx.db.query.attackEvent.findFirst({
         where: and(
           eq(attackEvent.id, input.id),
-          eq(attackEvent.organizationId, input.organizationId)
+          eq(attackEvent.organizationId, input.organizationId),
         ),
         with: {
           backend: true,
@@ -258,7 +261,7 @@ export const analyticsRouter = createTRPCRouter({
     .input(
       z.object({
         hours: z.number().int().min(1).max(720).default(24),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const startDate = new Date(Date.now() - input.hours * 60 * 60 * 1000);
@@ -277,19 +280,21 @@ export const analyticsRouter = createTRPCRouter({
         .where(
           and(
             eq(attackEvent.organizationId, input.organizationId),
-            gte(attackEvent.startedAt, startDate)
-          )
+            gte(attackEvent.startedAt, startDate),
+          ),
         );
 
-      return stats[0] ?? {
-        total: 0,
-        critical: 0,
-        high: 0,
-        medium: 0,
-        low: 0,
-        mitigated: 0,
-        ongoing: 0,
-      };
+      return (
+        stats[0] ?? {
+          total: 0,
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          mitigated: 0,
+          ongoing: 0,
+        }
+      );
     }),
 
   // Get attack types distribution
@@ -298,7 +303,7 @@ export const analyticsRouter = createTRPCRouter({
       z.object({
         hours: z.number().int().min(1).max(720).default(24),
         limit: z.number().int().min(1).max(20).default(10),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const startDate = new Date(Date.now() - input.hours * 60 * 60 * 1000);
@@ -314,8 +319,8 @@ export const analyticsRouter = createTRPCRouter({
         .where(
           and(
             eq(attackEvent.organizationId, input.organizationId),
-            gte(attackEvent.startedAt, startDate)
-          )
+            gte(attackEvent.startedAt, startDate),
+          ),
         )
         .groupBy(attackEvent.type)
         .orderBy(sql`count(*) desc`)
@@ -335,7 +340,7 @@ export const analyticsRouter = createTRPCRouter({
         endDate: z.date().optional(),
         limit: z.number().int().min(1).max(100).default(50),
         offset: z.number().int().min(0).default(0),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const conditions = [
@@ -394,7 +399,7 @@ export const analyticsRouter = createTRPCRouter({
       z.object({
         sourceIp: z.string(),
         hours: z.number().int().min(1).max(168).default(24),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const startDate = new Date(Date.now() - input.hours * 60 * 60 * 1000);
@@ -413,15 +418,15 @@ export const analyticsRouter = createTRPCRouter({
           and(
             eq(connectionAttempt.organizationId, input.organizationId),
             eq(connectionAttempt.sourceIp, input.sourceIp),
-            gte(connectionAttempt.timestamp, startDate)
-          )
+            gte(connectionAttempt.timestamp, startDate),
+          ),
         );
 
       const recentAttempts = await ctx.db.query.connectionAttempt.findMany({
         where: and(
           eq(connectionAttempt.organizationId, input.organizationId),
           eq(connectionAttempt.sourceIp, input.sourceIp),
-          gte(connectionAttempt.timestamp, startDate)
+          gte(connectionAttempt.timestamp, startDate),
         ),
         orderBy: [desc(connectionAttempt.timestamp)],
         limit: 20,
@@ -452,7 +457,7 @@ export const analyticsRouter = createTRPCRouter({
         hours: z.number().int().min(1).max(168).default(24),
         limit: z.number().int().min(1).max(50).default(10),
         filter: z.enum(["all", "blocked", "allowed"]).default("all"),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const startDate = new Date(Date.now() - input.hours * 60 * 60 * 1000);
@@ -516,7 +521,7 @@ export const analyticsRouter = createTRPCRouter({
     .input(
       z.object({
         hours: z.number().int().min(1).max(168).default(24),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const startDate = new Date(Date.now() - input.hours * 60 * 60 * 1000);
@@ -528,8 +533,8 @@ export const analyticsRouter = createTRPCRouter({
         .where(
           and(
             eq(connectionAttempt.organizationId, input.organizationId),
-            gte(connectionAttempt.timestamp, startDate)
-          )
+            gte(connectionAttempt.timestamp, startDate),
+          ),
         );
 
       const ipAddresses = uniqueIps.map((r) => r.ip);
@@ -559,15 +564,17 @@ export const analyticsRouter = createTRPCRouter({
         .from(ipScore)
         .where(sql`${ipScore.ip} = any(${ipAddresses})`);
 
-      return stats[0] ?? {
-        totalIps: 0,
-        avgScore: 100,
-        lowScoreCount: 0,
-        proxyCount: 0,
-        vpnCount: 0,
-        torCount: 0,
-        datacenterCount: 0,
-      };
+      return (
+        stats[0] ?? {
+          totalIps: 0,
+          avgScore: 100,
+          lowScoreCount: 0,
+          proxyCount: 0,
+          vpnCount: 0,
+          torCount: 0,
+          datacenterCount: 0,
+        }
+      );
     }),
 
   // ==================== DASHBOARD STATS ====================
@@ -576,7 +583,7 @@ export const analyticsRouter = createTRPCRouter({
   getDashboardStats: organizationProcedure.query(async ({ ctx, input }) => {
     const now = new Date();
     const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
+    const _lastHour = new Date(now.getTime() - 60 * 60 * 1000);
 
     // Get traffic stats
     const trafficStats = await ctx.db
@@ -590,8 +597,8 @@ export const analyticsRouter = createTRPCRouter({
       .where(
         and(
           eq(trafficMetric.organizationId, input.organizationId),
-          gte(trafficMetric.timestamp, last24h)
-        )
+          gte(trafficMetric.timestamp, last24h),
+        ),
       );
 
     // Get attack count
@@ -601,8 +608,8 @@ export const analyticsRouter = createTRPCRouter({
       .where(
         and(
           eq(attackEvent.organizationId, input.organizationId),
-          gte(attackEvent.startedAt, last24h)
-        )
+          gte(attackEvent.startedAt, last24h),
+        ),
       );
 
     // Get ongoing attacks
@@ -612,8 +619,8 @@ export const analyticsRouter = createTRPCRouter({
       .where(
         and(
           eq(attackEvent.organizationId, input.organizationId),
-          sql`${attackEvent.endedAt} is null`
-        )
+          sql`${attackEvent.endedAt} is null`,
+        ),
       );
 
     // Get backend status summary
@@ -652,7 +659,7 @@ export const analyticsRouter = createTRPCRouter({
     .input(
       z.object({
         hours: z.number().int().min(1).max(168).default(24),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const startDate = new Date(Date.now() - input.hours * 60 * 60 * 1000);
@@ -664,8 +671,8 @@ export const analyticsRouter = createTRPCRouter({
         .where(
           and(
             eq(connectionAttempt.organizationId, input.organizationId),
-            gte(connectionAttempt.timestamp, startDate)
-          )
+            gte(connectionAttempt.timestamp, startDate),
+          ),
         )
         .limit(10000);
 
@@ -685,8 +692,8 @@ export const analyticsRouter = createTRPCRouter({
         .where(
           and(
             sql`${ipScore.ip} = any(${ipAddresses})`,
-            sql`${ipScore.country} is not null`
-          )
+            sql`${ipScore.country} is not null`,
+          ),
         )
         .groupBy(ipScore.country)
         .orderBy(sql`count(*) desc`)

@@ -1,16 +1,16 @@
-import { z } from "zod";
-import { eq, and, sql, gte, lte, desc, like, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import { createTRPCRouter, adminProcedure } from "@/server/api/trpc";
-import { user, organization, member, subscription } from "@/server/db/auth-schema";
+import { and, desc, eq, gte, like, lte, or, sql } from "drizzle-orm";
+import { z } from "zod";
+import { adminProcedure, createTRPCRouter } from "@/server/api/trpc";
+import { organization, subscription, user } from "@/server/db/auth-schema";
 import {
-  ipScore,
-  protectionOrganization,
+  attackEvent,
+  auditLog,
   backend,
   filter,
-  attackEvent,
+  ipScore,
+  protectionOrganization,
   trafficMetric,
-  auditLog,
 } from "@/server/db/schema";
 
 export const adminRouter = createTRPCRouter({
@@ -25,7 +25,7 @@ export const adminRouter = createTRPCRouter({
         banned: z.boolean().optional(),
         limit: z.number().int().min(1).max(100).default(50),
         offset: z.number().int().min(0).default(0),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const conditions = [];
@@ -35,8 +35,8 @@ export const adminRouter = createTRPCRouter({
           or(
             like(user.email, `%${input.search}%`),
             like(user.name, `%${input.search}%`),
-            like(user.username, `%${input.search}%`)
-          )
+            like(user.username, `%${input.search}%`),
+          ),
         );
       }
 
@@ -125,7 +125,7 @@ export const adminRouter = createTRPCRouter({
       z.object({
         userId: z.string().uuid(),
         role: z.enum(["user", "admin"]),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       // Prevent admin from changing their own role
@@ -152,7 +152,7 @@ export const adminRouter = createTRPCRouter({
         userId: z.string().uuid(),
         reason: z.string().min(1).max(500),
         expiresAt: z.date().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       // Prevent admin from banning themselves
@@ -224,14 +224,14 @@ export const adminRouter = createTRPCRouter({
           .optional(),
         limit: z.number().int().min(1).max(100).default(50),
         offset: z.number().int().min(0).default(0),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const orgs = await ctx.db.query.organization.findMany({
         where: input.search
           ? or(
               like(organization.name, `%${input.search}%`),
-              like(organization.slug, `%${input.search}%`)
+              like(organization.slug, `%${input.search}%`),
             )
           : undefined,
         orderBy: [desc(organization.createdAt)],
@@ -263,7 +263,7 @@ export const adminRouter = createTRPCRouter({
               ? { plan: sub.plan, status: sub.status }
               : { plan: "free", status: "active" },
           };
-        })
+        }),
       );
 
       const countResult = await ctx.db
@@ -336,7 +336,7 @@ export const adminRouter = createTRPCRouter({
       z.object({
         organizationId: z.string().uuid(),
         status: z.enum(["pre-onboarding", "active", "suspended", "cancelled"]),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       // Ensure protection organization exists
@@ -349,7 +349,7 @@ export const adminRouter = createTRPCRouter({
           .update(protectionOrganization)
           .set({ status: input.status })
           .where(
-            eq(protectionOrganization.organizationId, input.organizationId)
+            eq(protectionOrganization.organizationId, input.organizationId),
           );
       } else {
         await ctx.db.insert(protectionOrganization).values({
@@ -369,7 +369,7 @@ export const adminRouter = createTRPCRouter({
         bandwidthLimit: z.number().int().optional(),
         backendsLimit: z.number().int().optional(),
         filtersLimit: z.number().int().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const { organizationId, ...limits } = input;
@@ -415,7 +415,7 @@ export const adminRouter = createTRPCRouter({
         isDatacenter: z.boolean().optional(),
         limit: z.number().int().min(1).max(100).default(50),
         offset: z.number().int().min(0).default(0),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const conditions = [];
@@ -490,7 +490,7 @@ export const adminRouter = createTRPCRouter({
         isVpn: z.boolean().optional(),
         isTor: z.boolean().optional(),
         isDatacenter: z.boolean().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const { ip, ...data } = input;
@@ -528,7 +528,7 @@ export const adminRouter = createTRPCRouter({
         isVpn: z.boolean().default(false),
         isTor: z.boolean().default(false),
         isDatacenter: z.boolean().default(false),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.db.query.ipScore.findFirst({
@@ -565,7 +565,7 @@ export const adminRouter = createTRPCRouter({
         isVpn: z.boolean().optional(),
         isTor: z.boolean().optional(),
         isDatacenter: z.boolean().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const { ips, ...data } = input;
@@ -678,7 +678,7 @@ export const adminRouter = createTRPCRouter({
         endDate: z.date().optional(),
         limit: z.number().int().min(1).max(100).default(50),
         offset: z.number().int().min(0).default(0),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const conditions = [];

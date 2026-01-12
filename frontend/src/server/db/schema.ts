@@ -1,17 +1,17 @@
-import { relations, sql } from "drizzle-orm";
+import { relations } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   index,
   integer,
   jsonb,
   pgEnum,
   pgTable,
+  real,
   text,
   timestamp,
   uuid,
   varchar,
-  bigint,
-  real,
 } from "drizzle-orm/pg-core";
 import { organization, user } from "./auth-schema";
 
@@ -76,7 +76,9 @@ export const protectionOrganization = pgTable("protection_organization", {
     .primaryKey()
     .references(() => organization.id, { onDelete: "cascade" }),
   status: organizationStatusEnum("status").notNull().default("pre-onboarding"),
-  bandwidthLimit: bigint("bandwidth_limit", { mode: "number" }).default(1_000_000_000), // 1GB default
+  bandwidthLimit: bigint("bandwidth_limit", { mode: "number" }).default(
+    1_000_000_000,
+  ), // 1GB default
   backendsLimit: integer("backends_limit").default(1),
   filtersLimit: integer("filters_limit").default(5),
   bandwidthUsed: bigint("bandwidth_used", { mode: "number" }).default(0),
@@ -101,7 +103,9 @@ export const backend = pgTable(
     rateLimit: integer("rate_limit"), // requests per second
     rateLimitWindow: integer("rate_limit_window").default(1), // seconds
     // Load balancer settings
-    loadBalancerAlgorithm: loadBalancerAlgorithmEnum("load_balancer_algorithm").default("round_robin"),
+    loadBalancerAlgorithm: loadBalancerAlgorithmEnum(
+      "load_balancer_algorithm",
+    ).default("round_robin"),
     stickySessions: boolean("sticky_sessions").default(false),
     stickySessionTtl: integer("sticky_session_ttl").default(3600),
     // Health check settings
@@ -121,7 +125,7 @@ export const backend = pgTable(
   (table) => [
     index("backend_organization_id_idx").on(table.organizationId),
     index("backend_status_idx").on(table.status),
-  ]
+  ],
 ).enableRLS();
 
 // Backend origins (actual server endpoints)
@@ -151,9 +155,7 @@ export const backendOrigin = pgTable(
     lastHealthCheck: timestamp("last_health_check"),
     lastHealthCheckMessage: text("last_health_check_message"),
   },
-  (table) => [
-    index("backend_origin_backend_id_idx").on(table.backendId),
-  ]
+  (table) => [index("backend_origin_backend_id_idx").on(table.backendId)],
 ).enableRLS();
 
 // Domains for backends
@@ -176,7 +178,7 @@ export const backendDomain = pgTable(
   (table) => [
     index("backend_domain_backend_id_idx").on(table.backendId),
     index("backend_domain_domain_idx").on(table.domain),
-  ]
+  ],
 ).enableRLS();
 
 // Filter rules
@@ -187,8 +189,9 @@ export const filter = pgTable(
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    backendId: uuid("backend_id")
-      .references(() => backend.id, { onDelete: "cascade" }),
+    backendId: uuid("backend_id").references(() => backend.id, {
+      onDelete: "cascade",
+    }),
     name: text("name").notNull(),
     description: text("description"),
     protocol: protocolEnum("protocol"),
@@ -228,7 +231,7 @@ export const filter = pgTable(
     index("filter_organization_id_idx").on(table.organizationId),
     index("filter_backend_id_idx").on(table.backendId),
     index("filter_priority_idx").on(table.priority),
-  ]
+  ],
 ).enableRLS();
 
 // IP blocklist/allowlist
@@ -246,13 +249,15 @@ export const ipList = pgTable(
     source: text("source").default("manual"), // manual, automatic, api
     expiresAt: timestamp("expires_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
-    createdBy: uuid("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdBy: uuid("created_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
   },
   (table) => [
     index("ip_list_organization_id_idx").on(table.organizationId),
     index("ip_list_ip_idx").on(table.ip),
     index("ip_list_type_idx").on(table.type),
-  ]
+  ],
 ).enableRLS();
 
 // IP scores (global reputation)
@@ -264,7 +269,9 @@ export const ipScore = pgTable(
     score: integer("score").notNull().default(100), // 0-100, higher is better
     totalRequests: bigint("total_requests", { mode: "number" }).default(0),
     blockedRequests: bigint("blocked_requests", { mode: "number" }).default(0),
-    successfulRequests: bigint("successful_requests", { mode: "number" }).default(0),
+    successfulRequests: bigint("successful_requests", {
+      mode: "number",
+    }).default(0),
     lastSeen: timestamp("last_seen").notNull().defaultNow(),
     firstSeen: timestamp("first_seen").notNull().defaultNow(),
     // Reputation factors
@@ -285,7 +292,7 @@ export const ipScore = pgTable(
   (table) => [
     index("ip_score_ip_idx").on(table.ip),
     index("ip_score_score_idx").on(table.score),
-  ]
+  ],
 ).enableRLS();
 
 // Connection attempts (for IP lookup in dashboard)
@@ -296,15 +303,17 @@ export const connectionAttempt = pgTable(
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    backendId: uuid("backend_id")
-      .references(() => backend.id, { onDelete: "set null" }),
+    backendId: uuid("backend_id").references(() => backend.id, {
+      onDelete: "set null",
+    }),
     sourceIp: varchar("source_ip", { length: 45 }).notNull(),
     destPort: integer("dest_port"),
     protocol: protocolEnum("protocol"),
     success: boolean("success").notNull(),
     blockedReason: text("blocked_reason"),
-    filterId: uuid("filter_id")
-      .references(() => filter.id, { onDelete: "set null" }),
+    filterId: uuid("filter_id").references(() => filter.id, {
+      onDelete: "set null",
+    }),
     latencyMs: integer("latency_ms"),
     bytesIn: bigint("bytes_in", { mode: "number" }),
     bytesOut: bigint("bytes_out", { mode: "number" }),
@@ -315,7 +324,7 @@ export const connectionAttempt = pgTable(
     index("connection_attempt_organization_id_idx").on(table.organizationId),
     index("connection_attempt_source_ip_idx").on(table.sourceIp),
     index("connection_attempt_timestamp_idx").on(table.timestamp),
-  ]
+  ],
 ).enableRLS();
 
 // Attack events
@@ -326,8 +335,9 @@ export const attackEvent = pgTable(
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    backendId: uuid("backend_id")
-      .references(() => backend.id, { onDelete: "set null" }),
+    backendId: uuid("backend_id").references(() => backend.id, {
+      onDelete: "set null",
+    }),
     type: text("type").notNull(), // syn_flood, udp_flood, http_flood, etc.
     severity: severityEnum("severity").notNull(),
     sourceIps: jsonb("source_ips").$type<string[]>(),
@@ -349,7 +359,7 @@ export const attackEvent = pgTable(
     index("attack_event_backend_id_idx").on(table.backendId),
     index("attack_event_type_idx").on(table.type),
     index("attack_event_started_at_idx").on(table.startedAt),
-  ]
+  ],
 ).enableRLS();
 
 // Traffic metrics (aggregated)
@@ -360,14 +370,17 @@ export const trafficMetric = pgTable(
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    backendId: uuid("backend_id")
-      .references(() => backend.id, { onDelete: "set null" }),
+    backendId: uuid("backend_id").references(() => backend.id, {
+      onDelete: "set null",
+    }),
     timestamp: timestamp("timestamp").notNull(),
     intervalSeconds: integer("interval_seconds").notNull().default(60),
     requestsTotal: bigint("requests_total", { mode: "number" }).default(0),
     requestsAllowed: bigint("requests_allowed", { mode: "number" }).default(0),
     requestsBlocked: bigint("requests_blocked", { mode: "number" }).default(0),
-    requestsChallenged: bigint("requests_challenged", { mode: "number" }).default(0),
+    requestsChallenged: bigint("requests_challenged", {
+      mode: "number",
+    }).default(0),
     bytesIn: bigint("bytes_in", { mode: "number" }).default(0),
     bytesOut: bigint("bytes_out", { mode: "number" }).default(0),
     avgLatencyMs: real("avg_latency_ms"),
@@ -381,7 +394,7 @@ export const trafficMetric = pgTable(
     index("traffic_metric_organization_id_idx").on(table.organizationId),
     index("traffic_metric_backend_id_idx").on(table.backendId),
     index("traffic_metric_timestamp_idx").on(table.timestamp),
-  ]
+  ],
 ).enableRLS();
 
 // Audit log
@@ -389,10 +402,10 @@ export const auditLog = pgTable(
   "audit_log",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    organizationId: uuid("organization_id")
-      .references(() => organization.id, { onDelete: "set null" }),
-    userId: uuid("user_id")
-      .references(() => user.id, { onDelete: "set null" }),
+    organizationId: uuid("organization_id").references(() => organization.id, {
+      onDelete: "set null",
+    }),
+    userId: uuid("user_id").references(() => user.id, { onDelete: "set null" }),
     action: text("action").notNull(),
     resource: text("resource").notNull(),
     resourceId: text("resource_id"),
@@ -406,7 +419,7 @@ export const auditLog = pgTable(
     index("audit_log_organization_id_idx").on(table.organizationId),
     index("audit_log_user_id_idx").on(table.userId),
     index("audit_log_timestamp_idx").on(table.timestamp),
-  ]
+  ],
 ).enableRLS();
 
 // GeoDNS configuration
@@ -419,17 +432,18 @@ export const geoDnsConfig = pgTable(
       .references(() => backend.id, { onDelete: "cascade" }),
     enabled: boolean("enabled").default(false),
     defaultRegion: text("default_region"),
-    regions: jsonb("regions").$type<{
-      region: string;
-      originIds: string[];
-      weight: number;
-    }[]>(),
+    regions:
+      jsonb("regions").$type<
+        {
+          region: string;
+          originIds: string[];
+          weight: number;
+        }[]
+      >(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (table) => [
-    index("geo_dns_config_backend_id_idx").on(table.backendId),
-  ]
+  (table) => [index("geo_dns_config_backend_id_idx").on(table.backendId)],
 ).enableRLS();
 
 // Minecraft-specific settings
@@ -449,7 +463,9 @@ export const minecraftConfig = pgTable(
     maxPlayersPerIp: integer("max_players_per_ip").default(5),
     // Bedrock Edition specific (RakNet)
     raknetValidation: boolean("raknet_validation").default(true),
-    raknetAmplificationProtection: boolean("raknet_amplification_protection").default(true),
+    raknetAmplificationProtection: boolean(
+      "raknet_amplification_protection",
+    ).default(true),
     // Fallback server (when backend is offline)
     fallbackEnabled: boolean("fallback_enabled").default(false),
     fallbackMotd: text("fallback_motd"),
@@ -460,9 +476,7 @@ export const minecraftConfig = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (table) => [
-    index("minecraft_config_backend_id_idx").on(table.backendId),
-  ]
+  (table) => [index("minecraft_config_backend_id_idx").on(table.backendId)],
 ).enableRLS();
 
 // Relations
@@ -473,7 +487,7 @@ export const protectionOrganizationRelations = relations(
       fields: [protectionOrganization.organizationId],
       references: [organization.id],
     }),
-  })
+  }),
 );
 
 export const backendRelations = relations(backend, ({ one, many }) => ({
@@ -526,20 +540,23 @@ export const ipListRelations = relations(ipList, ({ one }) => ({
   }),
 }));
 
-export const connectionAttemptRelations = relations(connectionAttempt, ({ one }) => ({
-  organization: one(organization, {
-    fields: [connectionAttempt.organizationId],
-    references: [organization.id],
+export const connectionAttemptRelations = relations(
+  connectionAttempt,
+  ({ one }) => ({
+    organization: one(organization, {
+      fields: [connectionAttempt.organizationId],
+      references: [organization.id],
+    }),
+    backend: one(backend, {
+      fields: [connectionAttempt.backendId],
+      references: [backend.id],
+    }),
+    filter: one(filter, {
+      fields: [connectionAttempt.filterId],
+      references: [filter.id],
+    }),
   }),
-  backend: one(backend, {
-    fields: [connectionAttempt.backendId],
-    references: [backend.id],
-  }),
-  filter: one(filter, {
-    fields: [connectionAttempt.filterId],
-    references: [filter.id],
-  }),
-}));
+);
 
 export const attackEventRelations = relations(attackEvent, ({ one }) => ({
   organization: one(organization, {
@@ -581,9 +598,12 @@ export const geoDnsConfigRelations = relations(geoDnsConfig, ({ one }) => ({
   }),
 }));
 
-export const minecraftConfigRelations = relations(minecraftConfig, ({ one }) => ({
-  backend: one(backend, {
-    fields: [minecraftConfig.backendId],
-    references: [backend.id],
+export const minecraftConfigRelations = relations(
+  minecraftConfig,
+  ({ one }) => ({
+    backend: one(backend, {
+      fields: [minecraftConfig.backendId],
+      references: [backend.id],
+    }),
   }),
-}));
+);

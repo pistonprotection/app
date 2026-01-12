@@ -1,12 +1,12 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError, z } from "zod";
-import { auth, type Session, type Organization } from "@/server/auth";
+import { auth, type Organization, type Session } from "@/server/auth";
 import { db } from "@/server/db";
 import {
+  getProtectionOrganizationById,
   getRoleOfUserInOrg,
   hasActiveSubscription,
-  getProtectionOrganizationById,
 } from "@/server/server-utils";
 
 /**
@@ -31,7 +31,8 @@ const t = initTRPC.context<typeof createTRPCContext>().create({
       ...shape,
       data: {
         ...shape.data,
-        zodError: error.cause instanceof ZodError ? error.cause.flatten() : null,
+        zodError:
+          error.cause instanceof ZodError ? error.cause.flatten() : null,
       },
     };
   },
@@ -90,7 +91,7 @@ const enforceUserIsPlatformAdmin = enforceUserIsAuthed.unstable_pipe(
       throw new TRPCError({ code: "FORBIDDEN" });
     }
     return next({ ctx });
-  }
+  },
 );
 
 export const adminProcedure = t.procedure
@@ -130,7 +131,10 @@ export const organizationProcedure = protectedProcedure
  */
 export const organizationOwnerProcedure = organizationProcedure.use(
   async ({ ctx, input, next }) => {
-    const role = await getRoleOfUserInOrg(ctx.session.user.id, input.organizationId);
+    const role = await getRoleOfUserInOrg(
+      ctx.session.user.id,
+      input.organizationId,
+    );
 
     if (role !== "owner") {
       throw new TRPCError({
@@ -140,7 +144,7 @@ export const organizationOwnerProcedure = organizationProcedure.use(
     }
 
     return next({ ctx });
-  }
+  },
 );
 
 /**
@@ -148,7 +152,10 @@ export const organizationOwnerProcedure = organizationProcedure.use(
  */
 export const organizationAdminProcedure = organizationProcedure.use(
   async ({ ctx, input, next }) => {
-    const role = await getRoleOfUserInOrg(ctx.session.user.id, input.organizationId);
+    const role = await getRoleOfUserInOrg(
+      ctx.session.user.id,
+      input.organizationId,
+    );
 
     if (role !== "owner" && role !== "admin") {
       throw new TRPCError({
@@ -158,7 +165,7 @@ export const organizationAdminProcedure = organizationProcedure.use(
     }
 
     return next({ ctx });
-  }
+  },
 );
 
 /**
@@ -175,7 +182,9 @@ export const organizationWithSubscriptionProcedure = organizationProcedure.use(
       });
     }
 
-    const protectionOrg = await getProtectionOrganizationById(input.organizationId);
+    const protectionOrg = await getProtectionOrganizationById(
+      input.organizationId,
+    );
 
     return next({
       ctx: {
@@ -183,10 +192,12 @@ export const organizationWithSubscriptionProcedure = organizationProcedure.use(
         protectionOrganization: protectionOrg,
       },
     });
-  }
+  },
 );
 
 // Type exports for use in routers
 export type Context = Awaited<ReturnType<typeof createTRPCContext>>;
 export type ProtectedContext = Context & { session: Session };
-export type OrganizationContext = ProtectedContext & { organization: Organization };
+export type OrganizationContext = ProtectedContext & {
+  organization: Organization;
+};

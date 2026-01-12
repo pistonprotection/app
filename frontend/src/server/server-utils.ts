@@ -1,8 +1,8 @@
 import type { StripePlan } from "@better-auth/stripe";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/server/db";
 import { member } from "@/server/db/auth-schema";
 import { protectionOrganization } from "@/server/db/schema";
-import { eq, and } from "drizzle-orm";
 
 // Protection plan definitions for Stripe
 export const protectionPlans: StripePlan[] = [
@@ -85,7 +85,7 @@ export const protectionPlans: StripePlan[] = [
 // Get a user's role in an organization
 export async function getRoleOfUserInOrg(
   userId: string,
-  orgId: string
+  orgId: string,
 ): Promise<string | null> {
   const memberRecord = await db.query.member.findFirst({
     where: and(eq(member.userId, userId), eq(member.organizationId, orgId)),
@@ -100,7 +100,7 @@ export async function hasActiveSubscription(orgId: string): Promise<boolean> {
     where: (sub, { eq, and, inArray }) =>
       and(
         eq(sub.referenceId, orgId),
-        inArray(sub.status, ["active", "trialing"])
+        inArray(sub.status, ["active", "trialing"]),
       ),
   });
 
@@ -124,7 +124,7 @@ export async function getOrganizationLimits(orgId: string): Promise<{
     where: (sub, { eq, and, inArray }) =>
       and(
         eq(sub.referenceId, orgId),
-        inArray(sub.status, ["active", "trialing"])
+        inArray(sub.status, ["active", "trialing"]),
       ),
   });
 
@@ -162,7 +162,7 @@ export function formatBytes(bytes: number): string {
   const sizes = ["B", "KB", "MB", "GB", "TB", "PB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
-  return `${Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+  return `${Number.parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
 }
 
 // Format number with commas

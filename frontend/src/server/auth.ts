@@ -4,6 +4,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import {
   admin,
   apiKey,
+  emailOTP,
   haveIBeenPwned,
   jwt,
   oneTimeToken,
@@ -11,17 +12,16 @@ import {
   organization,
   twoFactor,
   username,
-  emailOTP,
 } from "better-auth/plugins";
 import { emailHarmony } from "better-auth-harmony";
 import { eq } from "drizzle-orm";
 import { env } from "@/env";
+import { authNotifications } from "@/server/auth-notifications";
 import { db } from "@/server/db";
 import * as authSchema from "@/server/db/auth-schema";
 import * as appSchema from "@/server/db/schema";
-import { protectionPlans, getRoleOfUserInOrg } from "@/server/server-utils";
-import { stripeClient, handleStripeEvent } from "@/server/stripe";
-import { authNotifications } from "@/server/auth-notifications";
+import { getRoleOfUserInOrg, protectionPlans } from "@/server/server-utils";
+import { handleStripeEvent, stripeClient } from "@/server/stripe";
 
 const siteName = "PistonProtection";
 const baseUrlString = env.PUBLIC_APP_URL;
@@ -97,7 +97,8 @@ export const auth = betterAuth({
             data: {
               ...user,
               username: customTypedUser.username ?? uniqueUsername,
-              displayUsername: customTypedUser.displayUsername ?? uniqueUsername,
+              displayUsername:
+                customTypedUser.displayUsername ?? uniqueUsername,
             },
           };
         },
@@ -244,7 +245,9 @@ export const auth = betterAuth({
             case "cancel-subscription":
             case "restore-subscription":
             case "billing-portal":
-              return (await getRoleOfUserInOrg(user.id, referenceId)) === "owner";
+              return (
+                (await getRoleOfUserInOrg(user.id, referenceId)) === "owner"
+              );
             default:
               return false;
           }
@@ -267,7 +270,8 @@ export const auth = betterAuth({
               billing_address_collection: "required",
               custom_text: {
                 submit: {
-                  message: "Your DDoS protection will be activated immediately after payment.",
+                  message:
+                    "Your DDoS protection will be activated immediately after payment.",
                 },
               },
             },
@@ -283,7 +287,8 @@ export const auth = betterAuth({
           }
 
           const dbUser = await db.query.user.findFirst({
-            where: (user, { eq }) => eq(user.stripeCustomerId, stripeCustomerId),
+            where: (user, { eq }) =>
+              eq(user.stripeCustomerId, stripeCustomerId),
           });
           if (!dbUser) {
             throw new Error("User not found for the given Stripe customer id");
@@ -301,7 +306,8 @@ export const auth = betterAuth({
           }
 
           const dbUser = await db.query.user.findFirst({
-            where: (user, { eq }) => eq(user.stripeCustomerId, stripeCustomerId),
+            where: (user, { eq }) =>
+              eq(user.stripeCustomerId, stripeCustomerId),
           });
           if (!dbUser) {
             throw new Error("User not found for the given Stripe customer id");

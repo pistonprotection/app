@@ -1,8 +1,26 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
 import { useForm } from "@tanstack/react-form";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-form-adapter";
+import {
+  Bell,
+  Copy,
+  Eye,
+  EyeOff,
+  Key,
+  Loader2,
+  MoreVertical,
+  Plus,
+  RefreshCw,
+  Settings,
+  Shield,
+  Trash2,
+} from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { z } from "zod";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -10,20 +28,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +38,23 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import {
   Table,
   TableBody,
   TableCell,
@@ -41,29 +62,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Settings,
-  Shield,
-  Bell,
-  Key,
-  Loader2,
-  Plus,
-  Copy,
-  Trash2,
-  MoreVertical,
-  Eye,
-  EyeOff,
-  RefreshCw,
-} from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTRPC } from "@/lib/trpc/client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 
 export const Route = createFileRoute("/dashboard/settings")({
   component: SettingsPage,
@@ -101,22 +101,22 @@ function SettingsPage() {
 
   // Get organization settings
   const { data: orgSettings, isLoading: orgLoading } = useQuery(
-    trpc.settings.getOrganization.queryOptions()
+    trpc.settings.getOrganization.queryOptions(),
   );
 
   // Get security settings
   const { data: securitySettings, isLoading: securityLoading } = useQuery(
-    trpc.settings.getSecurity.queryOptions()
+    trpc.settings.getSecurity.queryOptions(),
   );
 
   // Get notification settings
   const { data: notificationSettings, isLoading: notifLoading } = useQuery(
-    trpc.settings.getNotifications.queryOptions()
+    trpc.settings.getNotifications.queryOptions(),
   );
 
   // Get API keys
   const { data: apiKeys, isLoading: keysLoading } = useQuery(
-    trpc.settings.listApiKeys.queryOptions()
+    trpc.settings.listApiKeys.queryOptions(),
   );
 
   // Update organization mutation
@@ -129,7 +129,7 @@ function SettingsPage() {
       onError: (error) => {
         toast.error(`Failed to update organization: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Update security mutation
@@ -142,7 +142,7 @@ function SettingsPage() {
       onError: (error) => {
         toast.error(`Failed to update security settings: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Update notification mutation
@@ -155,7 +155,7 @@ function SettingsPage() {
       onError: (error) => {
         toast.error(`Failed to update notification settings: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Create API key mutation
@@ -169,7 +169,7 @@ function SettingsPage() {
       onError: (error) => {
         toast.error(`Failed to create API key: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Delete API key mutation
@@ -183,7 +183,7 @@ function SettingsPage() {
       onError: (error) => {
         toast.error(`Failed to delete API key: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Regenerate API key mutation
@@ -198,7 +198,7 @@ function SettingsPage() {
       onError: (error) => {
         toast.error(`Failed to regenerate API key: ${error.message}`);
       },
-    })
+    }),
   );
 
   // Organization form
@@ -332,10 +332,7 @@ function SettingsPage() {
                       </div>
                     )}
                   </orgForm.Field>
-                  <Button
-                    type="submit"
-                    disabled={updateOrgMutation.isPending}
-                  >
+                  <Button type="submit" disabled={updateOrgMutation.isPending}>
                     {updateOrgMutation.isPending && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
@@ -737,7 +734,7 @@ function SettingsPage() {
                               size="icon"
                               onClick={() =>
                                 setShowApiKey(
-                                  showApiKey === key.id ? null : key.id
+                                  showApiKey === key.id ? null : key.id,
                                 )
                               }
                             >
