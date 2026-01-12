@@ -3,8 +3,7 @@
 //! Provides builders for creating test packets of various protocols.
 
 use std::net::Ipv4Addr;
-#[allow(dead_code)]
-use std::net::Ipv6Addr; // Reserved for future IPv6 support
+// Note: Ipv6Addr will be needed when IPv6 support is added
 
 /// Ethernet header constants
 pub const ETH_P_IP: u16 = 0x0800;
