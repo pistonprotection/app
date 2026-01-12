@@ -8,11 +8,12 @@ import {
   Activity,
   AlertTriangle,
   Ban,
+  Building2,
   LayoutDashboard,
   Server,
   Settings,
   Shield,
-  Users,
+  UserCog,
 } from "lucide-react";
 import {
   Sidebar,
@@ -41,12 +42,12 @@ const adminNavItems = [
   {
     title: "Organizations",
     href: "/admin/organizations",
-    icon: Users,
+    icon: Building2,
   },
   {
     title: "Users",
     href: "/admin/users",
-    icon: Users,
+    icon: UserCog,
   },
   {
     title: "Backends",

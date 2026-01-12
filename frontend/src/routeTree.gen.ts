@@ -22,9 +22,14 @@ import { Route as DashboardBillingRouteImport } from './routes/dashboard/billing
 import { Route as DashboardBackendsRouteImport } from './routes/dashboard/backends'
 import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard/analytics'
 import { Route as AuthAuthViewRouteImport } from './routes/auth/$authView'
+import { Route as AdminUsersRouteImport } from './routes/admin/users'
+import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminOverviewRouteImport } from './routes/admin/overview'
 import { Route as AdminOrganizationsRouteImport } from './routes/admin/organizations'
+import { Route as AdminMetricsRouteImport } from './routes/admin/metrics'
 import { Route as AdminBlacklistsRouteImport } from './routes/admin/blacklists'
+import { Route as AdminBackendsRouteImport } from './routes/admin/backends'
+import { Route as AdminAttacksRouteImport } from './routes/admin/attacks'
 
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
@@ -91,6 +96,16 @@ const AuthAuthViewRoute = AuthAuthViewRouteImport.update({
   path: '/auth/$authView',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/admin/users',
+  path: '/admin/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/admin/settings',
+  path: '/admin/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminOverviewRoute = AdminOverviewRouteImport.update({
   id: '/admin/overview',
   path: '/admin/overview',
@@ -101,18 +116,38 @@ const AdminOrganizationsRoute = AdminOrganizationsRouteImport.update({
   path: '/admin/organizations',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminMetricsRoute = AdminMetricsRouteImport.update({
+  id: '/admin/metrics',
+  path: '/admin/metrics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminBlacklistsRoute = AdminBlacklistsRouteImport.update({
   id: '/admin/blacklists',
   path: '/admin/blacklists',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminBackendsRoute = AdminBackendsRouteImport.update({
+  id: '/admin/backends',
+  path: '/admin/backends',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminAttacksRoute = AdminAttacksRouteImport.update({
+  id: '/admin/attacks',
+  path: '/admin/attacks',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/admin/attacks': typeof AdminAttacksRoute
+  '/admin/backends': typeof AdminBackendsRoute
   '/admin/blacklists': typeof AdminBlacklistsRoute
+  '/admin/metrics': typeof AdminMetricsRoute
   '/admin/organizations': typeof AdminOrganizationsRoute
   '/admin/overview': typeof AdminOverviewRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/auth/$authView': typeof AuthAuthViewRoute
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/backends': typeof DashboardBackendsRoute
@@ -127,9 +162,14 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin/attacks': typeof AdminAttacksRoute
+  '/admin/backends': typeof AdminBackendsRoute
   '/admin/blacklists': typeof AdminBlacklistsRoute
+  '/admin/metrics': typeof AdminMetricsRoute
   '/admin/organizations': typeof AdminOrganizationsRoute
   '/admin/overview': typeof AdminOverviewRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/auth/$authView': typeof AuthAuthViewRoute
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/backends': typeof DashboardBackendsRoute
@@ -146,9 +186,14 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/admin/attacks': typeof AdminAttacksRoute
+  '/admin/backends': typeof AdminBackendsRoute
   '/admin/blacklists': typeof AdminBlacklistsRoute
+  '/admin/metrics': typeof AdminMetricsRoute
   '/admin/organizations': typeof AdminOrganizationsRoute
   '/admin/overview': typeof AdminOverviewRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/auth/$authView': typeof AuthAuthViewRoute
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/backends': typeof DashboardBackendsRoute
@@ -166,9 +211,14 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/dashboard'
+    | '/admin/attacks'
+    | '/admin/backends'
     | '/admin/blacklists'
+    | '/admin/metrics'
     | '/admin/organizations'
     | '/admin/overview'
+    | '/admin/settings'
+    | '/admin/users'
     | '/auth/$authView'
     | '/dashboard/analytics'
     | '/dashboard/backends'
@@ -183,9 +233,14 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin/attacks'
+    | '/admin/backends'
     | '/admin/blacklists'
+    | '/admin/metrics'
     | '/admin/organizations'
     | '/admin/overview'
+    | '/admin/settings'
+    | '/admin/users'
     | '/auth/$authView'
     | '/dashboard/analytics'
     | '/dashboard/backends'
@@ -201,9 +256,14 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/dashboard'
+    | '/admin/attacks'
+    | '/admin/backends'
     | '/admin/blacklists'
+    | '/admin/metrics'
     | '/admin/organizations'
     | '/admin/overview'
+    | '/admin/settings'
+    | '/admin/users'
     | '/auth/$authView'
     | '/dashboard/analytics'
     | '/dashboard/backends'
@@ -220,9 +280,14 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRouteWithChildren
+  AdminAttacksRoute: typeof AdminAttacksRoute
+  AdminBackendsRoute: typeof AdminBackendsRoute
   AdminBlacklistsRoute: typeof AdminBlacklistsRoute
+  AdminMetricsRoute: typeof AdminMetricsRoute
   AdminOrganizationsRoute: typeof AdminOrganizationsRoute
   AdminOverviewRoute: typeof AdminOverviewRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminUsersRoute: typeof AdminUsersRoute
   AuthAuthViewRoute: typeof AuthAuthViewRoute
   DocsSplatRoute: typeof DocsSplatRoute
   AdminIndexRoute: typeof AdminIndexRoute
@@ -322,6 +387,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthAuthViewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/admin/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/admin/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/overview': {
       id: '/admin/overview'
       path: '/admin/overview'
@@ -336,11 +415,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminOrganizationsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/metrics': {
+      id: '/admin/metrics'
+      path: '/admin/metrics'
+      fullPath: '/admin/metrics'
+      preLoaderRoute: typeof AdminMetricsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/blacklists': {
       id: '/admin/blacklists'
       path: '/admin/blacklists'
       fullPath: '/admin/blacklists'
       preLoaderRoute: typeof AdminBlacklistsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/backends': {
+      id: '/admin/backends'
+      path: '/admin/backends'
+      fullPath: '/admin/backends'
+      preLoaderRoute: typeof AdminBackendsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/attacks': {
+      id: '/admin/attacks'
+      path: '/admin/attacks'
+      fullPath: '/admin/attacks'
+      preLoaderRoute: typeof AdminAttacksRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -373,9 +473,14 @@ const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRouteWithChildren,
+  AdminAttacksRoute: AdminAttacksRoute,
+  AdminBackendsRoute: AdminBackendsRoute,
   AdminBlacklistsRoute: AdminBlacklistsRoute,
+  AdminMetricsRoute: AdminMetricsRoute,
   AdminOrganizationsRoute: AdminOrganizationsRoute,
   AdminOverviewRoute: AdminOverviewRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
+  AdminUsersRoute: AdminUsersRoute,
   AuthAuthViewRoute: AuthAuthViewRoute,
   DocsSplatRoute: DocsSplatRoute,
   AdminIndexRoute: AdminIndexRoute,
