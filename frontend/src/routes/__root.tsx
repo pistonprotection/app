@@ -75,9 +75,13 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             onSessionChange={() => {
               window.location.reload();
             }}
+            social={{
+              providers: ["google", "discord", "github"],
+            }}
             emailOTP
             emailVerification
             changeEmail
+            passkey
             deleteUser={{
               verification: true,
             }}
@@ -92,12 +96,18 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             twoFactor={["otp", "totp"]}
             redirectTo="/dashboard"
             organization={{
+              pathMode: "slug",
               apiKey: true,
               basePath: "/dashboard/organization",
               personalPath: "/dashboard",
             }}
             account={{
               basePath: "/dashboard",
+            }}
+            localization={{
+              NAME: "Display Name",
+              NAME_DESCRIPTION: "Please enter a display name.",
+              NAME_PLACEHOLDER: "Display Name",
             }}
           >
             {children}

@@ -183,7 +183,7 @@ export const billingRouter = createTRPCRouter({
   // ==================== ORGANIZATION LIMITS ====================
 
   // Get organization limits
-  getLimits: organizationProcedure.query(async ({ ctx, input }) => {
+  getLimits: organizationProcedure.query(async ({ input }) => {
     const limits = await getOrganizationLimits(input.organizationId);
 
     return {

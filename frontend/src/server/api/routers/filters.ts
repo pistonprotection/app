@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq, gte, isNull, or } from "drizzle-orm";
+import { and, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { z } from "zod";
 import {
   createTRPCRouter,
@@ -424,9 +424,13 @@ export const filtersRouter = createTRPCRouter({
       }
 
       if (!input.includeExpired) {
-        conditions.push(
-          or(isNull(ipList.expiresAt), gte(ipList.expiresAt, new Date()))!,
+        const expiryCondition = or(
+          isNull(ipList.expiresAt),
+          gte(ipList.expiresAt, new Date()),
         );
+        if (expiryCondition) {
+          conditions.push(expiryCondition);
+        }
       }
 
       return ctx.db.query.ipList.findMany({
@@ -614,7 +618,7 @@ export const filtersRouter = createTRPCRouter({
         .where(
           and(
             eq(ipList.organizationId, input.organizationId),
-            gte(now, ipList.expiresAt!),
+            lt(ipList.expiresAt, now),
           ),
         )
         .returning();

@@ -1,3 +1,4 @@
+import { passkey } from "@better-auth/passkey";
 import { stripe } from "@better-auth/stripe";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -218,6 +219,10 @@ export const auth = betterAuth({
     }),
     oneTimeToken(),
     openAPI(),
+    passkey({
+      rpID: new URL(baseUrlString).hostname,
+      rpName: siteName,
+    }),
     haveIBeenPwned({
       customPasswordCompromisedMessage: "Please choose a more secure password.",
     }),

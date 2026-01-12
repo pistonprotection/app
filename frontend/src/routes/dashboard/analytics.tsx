@@ -114,7 +114,7 @@ function AnalyticsPage() {
   );
 
   // Get attack stats
-  const { data: attackStats, isLoading: attacksLoading } = useQuery(
+  const { data: attackStats } = useQuery(
     trpc.analytics.getAttackStats.queryOptions({
       organizationId,
       hours: timeRangeToHours[timeRange],

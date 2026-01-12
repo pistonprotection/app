@@ -1,3 +1,4 @@
+import { passkeyClient } from "@better-auth/passkey/client";
 import { stripeClient } from "@better-auth/stripe/client";
 import {
   adminClient,
@@ -5,6 +6,7 @@ import {
   emailOTPClient,
   inferAdditionalFields,
   inferOrgAdditionalFields,
+  lastLoginMethodClient,
   oneTimeTokenClient,
   organizationClient,
   twoFactorClient,
@@ -54,6 +56,7 @@ const clientOptions = {
     twoFactorClient(),
     usernameClient(),
     emailOTPClient(),
+    passkeyClient(),
     adminClient({
       ac: globalAc,
       roles: globalRoleConfig,
@@ -68,6 +71,7 @@ const clientOptions = {
     stripeClient({
       subscription: true,
     }),
+    lastLoginMethodClient(),
   ],
 };
 

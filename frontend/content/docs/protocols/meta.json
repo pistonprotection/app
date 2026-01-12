@@ -1,4 +1,11 @@
 {
   "title": "Protocols",
-  "pages": ["index", "minecraft-java", "minecraft-bedrock", "http", "quic", "tcp-udp"]
+  "pages": [
+    "index",
+    "minecraft-java",
+    "minecraft-bedrock",
+    "http",
+    "quic",
+    "tcp-udp"
+  ]
 }

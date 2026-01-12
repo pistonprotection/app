@@ -23,7 +23,12 @@
     "indentWidth": 2
   },
   "linter": {
-    "includes": ["**", "!src/components/ui/**", "!src/routeTree.gen.ts"],
+    "includes": [
+      "**",
+      "!src/components/ui/**",
+      "!src/routeTree.gen.ts",
+      "!.source/**"
+    ],
     "enabled": true,
     "rules": {
       "recommended": true,

@@ -13,7 +13,6 @@ import {
   Globe,
   HardDrive,
   Lock,
-  Map,
   Menu,
   Network,
   Server,
@@ -49,10 +48,14 @@ export const Route = createFileRoute("/")({
         content:
           "DDoS protection, eBPF, XDP, Minecraft protection, game server protection, TCP proxy, UDP proxy, anti-DDoS, self-hosted",
       },
-      { property: "og:title", content: "PistonProtection - Enterprise DDoS Protection" },
+      {
+        property: "og:title",
+        content: "PistonProtection - Enterprise DDoS Protection",
+      },
       {
         property: "og:description",
-        content: "Open-source, self-hostable DDoS protection with eBPF/XDP kernel-level filtering.",
+        content:
+          "Open-source, self-hostable DDoS protection with eBPF/XDP kernel-level filtering.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -114,14 +117,46 @@ function LandingPage() {
   ];
 
   const protocols = [
-    { name: "HTTP/1.1", icon: Globe, attacks: ["Slowloris", "HTTP Flood", "Header Injection"] },
-    { name: "HTTP/2", icon: Network, attacks: ["Stream Flood", "HPACK Bomb", "Reset Attack"] },
-    { name: "HTTP/3 (QUIC)", icon: Zap, attacks: ["Initial Flood", "Retry Amplification", "Connection Flood"] },
-    { name: "Minecraft Java", icon: Gamepad2, attacks: ["Handshake Flood", "Bot Joins", "Packet Spam"] },
-    { name: "Minecraft Bedrock", icon: Gamepad2, attacks: ["RakNet Amplification", "Ping Flood", "MOTD Abuse"] },
-    { name: "Generic TCP", icon: Server, attacks: ["SYN Flood", "ACK Flood", "RST Attack", "Slow Read"] },
-    { name: "Generic UDP", icon: HardDrive, attacks: ["Amplification", "Fragmentation", "Port Scan"] },
-    { name: "QUIC", icon: Lock, attacks: ["Version Negotiation", "Token Validation", "Retry Storm"] },
+    {
+      name: "HTTP/1.1",
+      icon: Globe,
+      attacks: ["Slowloris", "HTTP Flood", "Header Injection"],
+    },
+    {
+      name: "HTTP/2",
+      icon: Network,
+      attacks: ["Stream Flood", "HPACK Bomb", "Reset Attack"],
+    },
+    {
+      name: "HTTP/3 (QUIC)",
+      icon: Zap,
+      attacks: ["Initial Flood", "Retry Amplification", "Connection Flood"],
+    },
+    {
+      name: "Minecraft Java",
+      icon: Gamepad2,
+      attacks: ["Handshake Flood", "Bot Joins", "Packet Spam"],
+    },
+    {
+      name: "Minecraft Bedrock",
+      icon: Gamepad2,
+      attacks: ["RakNet Amplification", "Ping Flood", "MOTD Abuse"],
+    },
+    {
+      name: "Generic TCP",
+      icon: Server,
+      attacks: ["SYN Flood", "ACK Flood", "RST Attack", "Slow Read"],
+    },
+    {
+      name: "Generic UDP",
+      icon: HardDrive,
+      attacks: ["Amplification", "Fragmentation", "Port Scan"],
+    },
+    {
+      name: "QUIC",
+      icon: Lock,
+      attacks: ["Version Negotiation", "Token Validation", "Retry Storm"],
+    },
   ];
 
   const stats = [
@@ -271,8 +306,9 @@ function LandingPage() {
                 <span className="text-primary">Powered by eBPF/XDP</span>
               </h1>
               <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-8 leading-relaxed">
-                Stop volumetric attacks at the network edge with kernel-level packet filtering.
-                Protect TCP, UDP, HTTP, QUIC, and game servers with sub-millisecond latency.
+                Stop volumetric attacks at the network edge with kernel-level
+                packet filtering. Protect TCP, UDP, HTTP, QUIC, and game servers
+                with sub-millisecond latency.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
                 <Link to="/auth/register">
@@ -286,7 +322,11 @@ function LandingPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Button size="lg" variant="outline" className="w-full sm:w-auto">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                  >
                     <Github className="mr-2 h-4 w-4" />
                     View on GitHub
                   </Button>
@@ -323,7 +363,9 @@ function LandingPage() {
                   <div className="text-3xl md:text-4xl font-bold text-primary mb-1">
                     {stat.value}
                   </div>
-                  <div className="text-sm text-muted-foreground">{stat.label}</div>
+                  <div className="text-sm text-muted-foreground">
+                    {stat.label}
+                  </div>
                 </div>
               ))}
             </div>
@@ -342,13 +384,17 @@ function LandingPage() {
                 Built for Modern Infrastructure
               </h2>
               <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
-                eBPF/XDP technology operates at the Linux kernel level, processing packets
-                before they reach the network stack for maximum performance.
+                eBPF/XDP technology operates at the Linux kernel level,
+                processing packets before they reach the network stack for
+                maximum performance.
               </p>
             </div>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
               {features.map((f, i) => (
-                <Card key={i} className="group hover:border-primary/50 transition-colors">
+                <Card
+                  key={i}
+                  className="group hover:border-primary/50 transition-colors"
+                >
                   <CardHeader>
                     <div className="mb-3 p-2 rounded-lg bg-primary/10 w-fit group-hover:bg-primary/20 transition-colors">
                       <f.icon className="h-6 w-6 text-primary" />
@@ -396,7 +442,11 @@ function LandingPage() {
                   <CardContent>
                     <div className="flex flex-wrap gap-1.5">
                       {p.attacks.map((attack, j) => (
-                        <Badge key={j} variant="secondary" className="text-xs font-normal">
+                        <Badge
+                          key={j}
+                          variant="secondary"
+                          className="text-xs font-normal"
+                        >
                           {attack}
                         </Badge>
                       ))}
@@ -420,7 +470,8 @@ function LandingPage() {
                 Protection at Wire Speed
               </h2>
               <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
-                Traffic flows through our XDP-powered edge nodes before reaching your servers.
+                Traffic flows through our XDP-powered edge nodes before reaching
+                your servers.
               </p>
             </div>
             <div className="max-w-4xl mx-auto">
@@ -431,7 +482,8 @@ function LandingPage() {
                   </div>
                   <h3 className="font-semibold mb-2">1. Traffic Arrives</h3>
                   <p className="text-sm text-muted-foreground">
-                    Incoming traffic reaches our edge network via Anycast or GeoDNS routing.
+                    Incoming traffic reaches our edge network via Anycast or
+                    GeoDNS routing.
                   </p>
                 </div>
                 <div className="text-center">
@@ -440,7 +492,8 @@ function LandingPage() {
                   </div>
                   <h3 className="font-semibold mb-2">2. XDP Filters</h3>
                   <p className="text-sm text-muted-foreground">
-                    eBPF programs inspect and filter packets at the kernel level before userspace.
+                    eBPF programs inspect and filter packets at the kernel level
+                    before userspace.
                   </p>
                 </div>
                 <div className="text-center">
@@ -449,7 +502,8 @@ function LandingPage() {
                   </div>
                   <h3 className="font-semibold mb-2">3. Clean Traffic</h3>
                   <p className="text-sm text-muted-foreground">
-                    Only legitimate traffic is proxied to your backend servers with real client IPs.
+                    Only legitimate traffic is proxied to your backend servers
+                    with real client IPs.
                   </p>
                 </div>
               </div>
@@ -478,7 +532,9 @@ function LandingPage() {
                   <div className="grid grid-cols-3 gap-4 p-4 border-b bg-muted/50 font-semibold">
                     <div>Feature</div>
                     <div className="text-center">PistonProtection</div>
-                    <div className="text-center text-muted-foreground">Others</div>
+                    <div className="text-center text-muted-foreground">
+                      Others
+                    </div>
                   </div>
                   {comparisons.map((c, i) => (
                     <div
@@ -490,7 +546,9 @@ function LandingPage() {
                         {c.piston === true ? (
                           <Check className="h-5 w-5 text-green-500 mx-auto" />
                         ) : (
-                          <span className="text-sm text-muted-foreground">{c.piston}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {c.piston}
+                          </span>
                         )}
                       </div>
                       <div className="text-center">
@@ -499,7 +557,9 @@ function LandingPage() {
                         ) : c.others === false ? (
                           <span className="text-muted-foreground">-</span>
                         ) : (
-                          <span className="text-sm text-muted-foreground">{c.others}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {c.others}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -522,7 +582,8 @@ function LandingPage() {
                 Simple, Transparent Pricing
               </h2>
               <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
-                Choose the plan that fits your needs. All plans include our core protection features.
+                Choose the plan that fits your needs. All plans include our core
+                protection features.
               </p>
             </div>
             <div className="grid gap-8 md:grid-cols-3 max-w-6xl mx-auto">
@@ -542,7 +603,9 @@ function LandingPage() {
                       <span className="text-4xl font-bold">${p.price}</span>
                       <span className="text-muted-foreground">/month</span>
                     </div>
-                    <CardDescription className="mt-2">{p.description}</CardDescription>
+                    <CardDescription className="mt-2">
+                      {p.description}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <ul className="space-y-3">
@@ -591,8 +654,8 @@ function LandingPage() {
               Ready to Protect Your Infrastructure?
             </h2>
             <p className="text-primary-foreground/80 max-w-2xl mx-auto mb-8 text-lg">
-              Join thousands of servers protected by PistonProtection.
-              Start your free trial today or deploy on your own infrastructure.
+              Join thousands of servers protected by PistonProtection. Start
+              your free trial today or deploy on your own infrastructure.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link to="/auth/register">
@@ -602,7 +665,11 @@ function LandingPage() {
                 </Button>
               </Link>
               <Link to="/docs">
-                <Button size="lg" variant="outline" className="bg-transparent border-primary-foreground/20 hover:bg-primary-foreground/10">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="bg-transparent border-primary-foreground/20 hover:bg-primary-foreground/10"
+                >
                   Read Documentation
                 </Button>
               </Link>
@@ -621,7 +688,8 @@ function LandingPage() {
                 <span className="font-bold text-lg">PistonProtection</span>
               </div>
               <p className="text-sm text-muted-foreground mb-4">
-                Open-source, enterprise-grade DDoS protection powered by eBPF/XDP.
+                Open-source, enterprise-grade DDoS protection powered by
+                eBPF/XDP.
               </p>
               <div className="flex gap-4">
                 <a
@@ -637,33 +705,113 @@ function LandingPage() {
             <div>
               <h4 className="font-semibold mb-4">Product</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#features" className="hover:text-foreground transition-colors">Features</a></li>
-                <li><a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a></li>
-                <li><Link to="/docs" className="hover:text-foreground transition-colors">Documentation</Link></li>
-                <li><a href="https://github.com/PistonProtection/pistonprotection/releases" className="hover:text-foreground transition-colors">Changelog</a></li>
+                <li>
+                  <a
+                    href="#features"
+                    className="hover:text-foreground transition-colors"
+                  >
+                    Features
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="#pricing"
+                    className="hover:text-foreground transition-colors"
+                  >
+                    Pricing
+                  </a>
+                </li>
+                <li>
+                  <Link
+                    to="/docs"
+                    className="hover:text-foreground transition-colors"
+                  >
+                    Documentation
+                  </Link>
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/PistonProtection/pistonprotection/releases"
+                    className="hover:text-foreground transition-colors"
+                  >
+                    Changelog
+                  </a>
+                </li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Resources</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link to="/docs" className="hover:text-foreground transition-colors">Getting Started</Link></li>
-                <li><Link to="/docs" className="hover:text-foreground transition-colors">API Reference</Link></li>
-                <li><a href="https://github.com/PistonProtection/pistonprotection" className="hover:text-foreground transition-colors">GitHub</a></li>
-                <li><a href="https://github.com/PistonProtection/pistonprotection/issues" className="hover:text-foreground transition-colors">Support</a></li>
+                <li>
+                  <Link
+                    to="/docs"
+                    className="hover:text-foreground transition-colors"
+                  >
+                    Getting Started
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/docs"
+                    className="hover:text-foreground transition-colors"
+                  >
+                    API Reference
+                  </Link>
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/PistonProtection/pistonprotection"
+                    className="hover:text-foreground transition-colors"
+                  >
+                    GitHub
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/PistonProtection/pistonprotection/issues"
+                    className="hover:text-foreground transition-colors"
+                  >
+                    Support
+                  </a>
+                </li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Legal</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link></li>
-                <li><Link to="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link></li>
-                <li><a href="https://github.com/PistonProtection/pistonprotection/blob/main/LICENSE" className="hover:text-foreground transition-colors">License (Apache 2.0)</a></li>
+                <li>
+                  <Link
+                    to="/privacy"
+                    className="hover:text-foreground transition-colors"
+                  >
+                    Privacy Policy
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/terms"
+                    className="hover:text-foreground transition-colors"
+                  >
+                    Terms of Service
+                  </Link>
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/PistonProtection/pistonprotection/blob/main/LICENSE"
+                    className="hover:text-foreground transition-colors"
+                  >
+                    License (Apache 2.0)
+                  </a>
+                </li>
               </ul>
             </div>
           </div>
           <Separator className="mb-8" />
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
-            <p>© {new Date().getFullYear()} PistonProtection. All rights reserved.</p>
+            <p>
+              © {new Date().getFullYear()} PistonProtection. All rights
+              reserved.
+            </p>
             <p>Built with eBPF, Rust, and React</p>
           </div>
         </div>
