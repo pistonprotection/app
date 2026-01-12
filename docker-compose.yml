@@ -327,18 +327,35 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  promtail:
-    image: grafana/promtail:3.1.0
-    container_name: pp-promtail
+  # Grafana Alloy - unified telemetry collector (replaces deprecated Promtail)
+  # Promtail reached end-of-life on March 2, 2026 - Alloy is the recommended replacement
+  alloy:
+    image: grafana/alloy:v1.5.1
+    container_name: pp-alloy
+    ports:
+      - "12345:12345"  # Alloy UI and health
+      - "4319:4317"    # OTLP gRPC (for direct log ingestion)
     volumes:
-      - ./observability/promtail/promtail-config.yaml:/etc/promtail/config.yml:ro
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/log:/var/log:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    command: -config.file=/etc/promtail/config.yml
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --stability.level=generally-available
     networks:
       - pistonprotection
     depends_on:
       - loki
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:12345/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
 
   otel-collector:

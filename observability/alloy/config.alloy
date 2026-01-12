@@ -1,0 +1,172 @@
+// PistonProtection Grafana Alloy Configuration
+// Replaces deprecated Promtail for log collection
+// Alloy is Grafana's unified telemetry collector for logs, metrics, and traces
+
+// =============================================================================
+// Discovery: Docker containers
+// =============================================================================
+
+discovery.docker "local" {
+  host = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+}
+
+// =============================================================================
+// Relabeling for Docker containers
+// =============================================================================
+
+discovery.relabel "docker_containers" {
+  targets = discovery.docker.local.targets
+
+  // Extract container name from the full docker container name
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  // Extract docker compose service name
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  // Extract docker compose project name
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "project"
+  }
+
+  // Add PistonProtection specific labels
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/pp-(.*)"
+    target_label  = "component"
+  }
+
+  // Set job label
+  rule {
+    replacement  = "pistonprotection"
+    target_label = "job"
+  }
+}
+
+// =============================================================================
+// Log collection from Docker containers
+// =============================================================================
+
+loki.source.docker "docker_logs" {
+  host             = "unix:///var/run/docker.sock"
+  targets          = discovery.relabel.docker_containers.output
+  forward_to       = [loki.process.docker_logs.receiver]
+  relabel_rules    = discovery.relabel.docker_containers.rules
+  refresh_interval = "5s"
+}
+
+// =============================================================================
+// Log processing pipeline
+// =============================================================================
+
+loki.process "docker_logs" {
+  forward_to = [loki.write.loki.receiver]
+
+  // Parse JSON logs from Rust services
+  stage.json {
+    expressions = {
+      level     = "level",
+      msg       = "msg",
+      message   = "message",
+      target    = "target",
+      span_id   = "span_id",
+      trace_id  = "trace_id",
+      timestamp = "timestamp",
+    }
+  }
+
+  // Extract level label
+  stage.labels {
+    values = {
+      level  = "",
+      target = "",
+    }
+  }
+
+  // Handle multiline logs (stack traces, etc.)
+  stage.multiline {
+    firstline     = "^\\d{4}-\\d{2}-\\d{2}|\\[INFO\\]|\\[WARN\\]|\\[ERROR\\]|\\[DEBUG\\]|^\\{"
+    max_wait_time = "3s"
+    max_lines     = 128
+  }
+
+  // Parse timestamp from structured logs
+  stage.timestamp {
+    source = "timestamp"
+    format = "RFC3339Nano"
+  }
+}
+
+// =============================================================================
+// Loki writer configuration
+// =============================================================================
+
+loki.write "loki" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+
+    // Tenant ID for multi-tenancy
+    tenant_id = "pistonprotection"
+
+    // Batch and retry configuration
+    batch_wait    = "1s"
+    batch_size    = "1MiB"
+    min_backoff   = "500ms"
+    max_backoff   = "5m"
+    max_retries   = 10
+  }
+
+  external_labels = {
+    cluster = "pistonprotection-local",
+    env     = "development",
+  }
+}
+
+// =============================================================================
+// Optional: File-based log collection (for host logs)
+// =============================================================================
+
+local.file_match "var_logs" {
+  path_targets = [{
+    __address__ = "localhost",
+    __path__    = "/var/log/*.log",
+    job         = "varlogs",
+  }]
+}
+
+loki.source.file "var_logs" {
+  targets    = local.file_match.var_logs.targets
+  forward_to = [loki.write.loki.receiver]
+}
+
+// =============================================================================
+// Metrics: Alloy internal metrics
+// =============================================================================
+
+prometheus.exporter.self "alloy_metrics" {}
+
+prometheus.scrape "alloy_self" {
+  targets    = prometheus.exporter.self.alloy_metrics.targets
+  forward_to = [prometheus.remote_write.metrics.receiver]
+  scrape_interval = "15s"
+}
+
+prometheus.remote_write "metrics" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+
+// =============================================================================
+// Health check endpoint
+// =============================================================================
+
+// Alloy exposes health at :12345/ready by default

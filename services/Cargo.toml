@@ -19,15 +19,15 @@ repository = "https://github.com/PistonProtection/pistonprotection"
 
 [workspace.dependencies]
 # Async runtime
-tokio = { version = "1.44", features = ["full", "tracing"] }
+tokio = { version = "1.49", features = ["full", "tracing"] }
 tokio-stream = "0.1"
 tokio-util = { version = "0.7", features = ["codec"] }
 
 # gRPC and Protobuf
-tonic = { version = "0.12", features = ["transport", "tls", "gzip", "zstd"] }
-tonic-build = "0.12"
-tonic-health = "0.12"
-tonic-reflection = "0.12"
+tonic = { version = "0.13", features = ["transport", "tls", "gzip", "zstd"] }
+tonic-build = "0.13"
+tonic-health = "0.13"
+tonic-reflection = "0.13"
 prost = "0.13"
 prost-types = "0.13"
 
@@ -36,7 +36,7 @@ sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chro
 deadpool-postgres = "0.14"
 
 # Redis
-redis = { version = "0.28", features = ["tokio-comp", "connection-manager", "cluster"] }
+redis = { version = "0.29", features = ["tokio-comp", "connection-manager", "cluster"] }
 deadpool-redis = "0.22"
 
 # Serialization
@@ -49,9 +49,9 @@ validator = { version = "0.20", features = ["derive"] }
 # Logging and tracing
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tracing-opentelemetry = "0.28"
-opentelemetry = { version = "0.28", features = ["trace", "metrics"] }
-opentelemetry-otlp = { version = "0.28", features = ["trace", "metrics"] }
+tracing-opentelemetry = "0.29"
+opentelemetry = { version = "0.29", features = ["trace", "metrics"] }
+opentelemetry-otlp = { version = "0.29", features = ["trace", "metrics"] }
 
 # Metrics
 prometheus = "0.14"
@@ -59,7 +59,7 @@ metrics = "0.24"
 metrics-exporter-prometheus = "0.17"
 
 # Configuration
-config = "0.14"
+config = "0.15"
 
 # Error handling
 thiserror = "2.0"
@@ -72,7 +72,7 @@ bytes = "1.0"
 base64 = "0.22"
 sha2 = "0.10"
 hmac = "0.12"
-rand = "0.8"
+rand = "0.9"
 futures = "0.3"
 async-trait = "0.1"
 parking_lot = "0.12"
@@ -84,17 +84,17 @@ hex = "0.4"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 
 # IP and network
-ipnetwork = "0.20"
-trust-dns-resolver = "0.24"
+ipnetwork = "0.21"
+hickory-resolver = "0.25" # Renamed from trust-dns-resolver
 
 # GeoIP
-maxminddb = "0.24"
+maxminddb = "0.25"
 
 # Rate limiting
-governor = "0.8"
+governor = "0.10"
 
 # Kubernetes
-kube = { version = "0.98", features = ["runtime", "derive", "ws"] }
+kube = { version = "0.99", features = ["runtime", "derive", "ws"] }
 k8s-openapi = { version = "0.24", features = ["v1_32"] }
 
 # eBPF
@@ -102,7 +102,7 @@ aya = "0.13"
 aya-log = "0.2"
 
 # ClickHouse
-clickhouse = { version = "0.12", features = ["inserter", "watch", "uuid"] }
+clickhouse = { version = "0.13", features = ["inserter", "watch", "uuid"] }
 
 # Testing
 tokio-test = "0.4"

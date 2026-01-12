@@ -548,14 +548,14 @@ impl BackendService {
 
     /// Check DNS TXT record for domain verification
     async fn check_dns_txt_record(&self, domain: &str, expected_value: &str) -> bool {
-        // In production, use a DNS resolver like trust-dns-resolver
+        // In production, use a DNS resolver like hickory-resolver
         // For now, we'll implement a placeholder that can be replaced
         use std::net::ToSocketAddrs;
 
         let lookup_domain = format!("_piston-verify.{}", domain);
 
         // Attempt DNS resolution (simplified check)
-        // In production, use trust-dns-resolver for TXT record lookup
+        // In production, use hickory-resolver for TXT record lookup
         match format!("{}:443", lookup_domain).to_socket_addrs() {
             Ok(_) => {
                 // Would need actual TXT record lookup here
