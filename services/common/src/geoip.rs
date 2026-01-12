@@ -1,6 +1,6 @@
 //! GeoIP lookup service
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use maxminddb::{geoip2, Reader};
 use std::net::IpAddr;
 use std::path::Path;
@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tracing::{info, warn};
 
 /// GeoIP lookup result
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct GeoIpInfo {
     pub country_code: Option<String>,
     pub country_name: Option<String>,
@@ -18,21 +18,6 @@ pub struct GeoIpInfo {
     pub longitude: Option<f64>,
     pub asn: Option<u32>,
     pub as_org: Option<String>,
-}
-
-impl Default for GeoIpInfo {
-    fn default() -> Self {
-        Self {
-            country_code: None,
-            country_name: None,
-            continent_code: None,
-            city: None,
-            latitude: None,
-            longitude: None,
-            asn: None,
-            as_org: None,
-        }
-    }
 }
 
 /// GeoIP service for IP lookups

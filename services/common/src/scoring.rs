@@ -13,9 +13,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 use thiserror::Error;
-use tracing::{debug, info, warn};
+use tracing::info;
 
 /// Scoring errors
 #[derive(Debug, Error)]

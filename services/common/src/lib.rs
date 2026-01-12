@@ -2,6 +2,9 @@
 //!
 //! Shared utilities, configuration, and abstractions used across all services.
 
+// Allow large error variants - the Error enum includes tonic::Status which is large
+#![allow(clippy::result_large_err)]
+
 pub mod config;
 pub mod db;
 pub mod error;

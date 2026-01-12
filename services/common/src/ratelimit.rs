@@ -68,6 +68,7 @@ impl GlobalRateLimiter {
 pub struct IpRateLimiter {
     limiters: DashMap<IpAddr, Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>>,
     config: RateLimitConfig,
+    #[allow(dead_code)]
     cleanup_interval: Duration,
 }
 

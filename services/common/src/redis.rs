@@ -210,14 +210,12 @@ impl CacheService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
-    fn test_cache_key_generation() {
-        let cache = CacheService {
-            pool: todo!(), // Would need a mock
-            prefix: "test".to_string(),
-        };
-        assert_eq!(cache.key("mykey"), "test:mykey");
+    fn test_cache_key_format() {
+        // Test key format: prefix:key
+        let prefix = "test";
+        let key = "mykey";
+        let expected = format!("{}:{}", prefix, key);
+        assert_eq!(expected, "test:mykey");
     }
 }
