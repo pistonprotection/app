@@ -1,0 +1,183 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: ddosprotections.pistonprotection.io
+spec:
+  group: pistonprotection.io
+  names:
+    kind: DDoSProtection
+    listKind: DDoSProtectionList
+    plural: ddosprotections
+    singular: ddosprotection
+    shortNames:
+      - ddos
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - backends
+              properties:
+                backends:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - name
+                      - address
+                      - protocol
+                    properties:
+                      name:
+                        type: string
+                        description: Backend name
+                      address:
+                        type: string
+                        description: Backend address (IP:port or hostname:port)
+                      protocol:
+                        type: string
+                        enum:
+                          - tcp
+                          - udp
+                          - http
+                          - https
+                          - minecraftJava
+                          - minecraftBedrock
+                          - quic
+                        description: Protocol type
+                      healthCheck:
+                        type: object
+                        properties:
+                          intervalSeconds:
+                            type: integer
+                            default: 10
+                          timeoutSeconds:
+                            type: integer
+                            default: 5
+                          unhealthyThreshold:
+                            type: integer
+                            default: 3
+                      rateLimit:
+                        type: object
+                        properties:
+                          ppsPerIp:
+                            type: integer
+                          burst:
+                            type: integer
+                          globalPps:
+                            type: integer
+                protectionLevel:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  default: 3
+                  description: Protection level (1-5, higher is stricter)
+                rateLimit:
+                  type: object
+                  properties:
+                    ppsPerIp:
+                      type: integer
+                      description: Packets per second limit per IP
+                    burst:
+                      type: integer
+                      description: Burst size
+                    globalPps:
+                      type: integer
+                      description: Global PPS limit
+                protocol:
+                  type: object
+                  properties:
+                    minecraftValidation:
+                      type: boolean
+                      default: false
+                    minecraftVersions:
+                      type: object
+                      properties:
+                        min:
+                          type: integer
+                        max:
+                          type: integer
+                    quicEnabled:
+                      type: boolean
+                      default: false
+                    synCookies:
+                      type: boolean
+                      default: true
+                geoFilter:
+                  type: object
+                  properties:
+                    mode:
+                      type: string
+                      enum:
+                        - allow
+                        - deny
+                    countries:
+                      type: array
+                      items:
+                        type: string
+                nodeSelector:
+                  type: object
+                  additionalProperties:
+                    type: string
+                replicas:
+                  type: integer
+                  default: 2
+                  minimum: 1
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                backendCount:
+                  type: integer
+                readyWorkers:
+                  type: integer
+                lastUpdated:
+                  type: string
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                metrics:
+                  type: object
+                  properties:
+                    totalRequests:
+                      type: integer
+                    blockedRequests:
+                      type: integer
+                    avgLatencyMs:
+                      type: number
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Status
+          type: string
+          jsonPath: .status.phase
+        - name: Backends
+          type: integer
+          jsonPath: .status.backendCount
+        - name: Workers
+          type: integer
+          jsonPath: .status.readyWorkers
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

@@ -1,0 +1,34 @@
+apiVersion: v2
+name: pistonprotection
+description: Enterprise DDoS protection with eBPF/XDP filtering
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/pistonprotection/pistonprotection
+sources:
+  - https://github.com/pistonprotection/pistonprotection
+maintainers:
+  - name: PistonProtection
+    email: hello@pistonprotection.io
+keywords:
+  - ddos
+  - protection
+  - ebpf
+  - xdp
+  - networking
+  - security
+  - minecraft
+  - game-server
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/operator: "true"
+  artifacthub.io/operatorCapabilities: Full Lifecycle
+dependencies:
+  - name: postgresql
+    version: "15.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+  - name: redis
+    version: "19.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled

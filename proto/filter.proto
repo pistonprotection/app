@@ -1,0 +1,334 @@
+syntax = "proto3";
+
+package pistonprotection.filter;
+
+import "common.proto";
+
+option go_package = "github.com/pistonprotection/pistonprotection/pkg/proto/filter";
+
+// Filter rule definition
+message FilterRule {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+
+  // Priority (lower = higher priority)
+  uint32 priority = 4;
+
+  // Matching criteria
+  FilterMatch match = 5;
+
+  // Action to take
+  common.Action action = 6;
+
+  // Rate limit config (if action is RATE_LIMIT)
+  common.RateLimit rate_limit = 7;
+
+  // Whether rule is enabled
+  bool enabled = 8;
+
+  // Timestamps
+  common.Timestamp created_at = 9;
+  common.Timestamp updated_at = 10;
+
+  // Rule statistics
+  FilterStats stats = 11;
+}
+
+// Filter matching criteria
+message FilterMatch {
+  // Source matching
+  repeated common.IPNetwork source_ips = 1;
+  repeated common.IPNetwork source_ip_blacklist = 2;
+  repeated string source_countries = 3;
+  repeated string source_country_blacklist = 4;
+  repeated string source_asns = 5;
+
+  // Destination matching
+  repeated common.IPNetwork destination_ips = 6;
+  repeated common.PortRange destination_ports = 7;
+
+  // Protocol matching
+  repeated common.Protocol protocols = 8;
+  repeated common.L7Protocol l7_protocols = 9;
+
+  // L7 specific matching
+  L7Match l7_match = 10;
+
+  // Time-based matching
+  TimeMatch time_match = 11;
+}
+
+// L7 protocol specific matching
+message L7Match {
+  oneof match {
+    HttpMatch http = 1;
+    MinecraftJavaMatch minecraft_java = 2;
+    MinecraftBedrockMatch minecraft_bedrock = 3;
+    QuicMatch quic = 4;
+  }
+}
+
+// HTTP matching
+message HttpMatch {
+  repeated string methods = 1;  // GET, POST, etc.
+  repeated string paths = 2;  // Path patterns (supports wildcards)
+  repeated string hosts = 3;  // Host header patterns
+  map<string, string> headers = 4;  // Header matching
+  repeated string user_agents = 5;  // User-agent patterns
+
+  // HTTP version
+  repeated uint32 versions = 6;  // 1, 2, 3
+
+  // Request size limits
+  uint64 max_body_size = 7;
+  uint64 max_header_size = 8;
+
+  // TLS/SSL
+  bool require_tls = 9;
+  repeated string tls_versions = 10;
+}
+
+// Minecraft Java Edition matching
+message MinecraftJavaMatch {
+  // Protocol version range
+  uint32 min_protocol_version = 1;
+  uint32 max_protocol_version = 2;
+
+  // Packet types to filter
+  repeated MinecraftJavaPacketType packet_types = 3;
+
+  // Handshake validation
+  bool validate_handshake = 4;
+
+  // Status ping rate limiting
+  bool rate_limit_status = 5;
+
+  // Player name validation
+  bool validate_player_names = 6;
+
+  // Maximum packet size
+  uint32 max_packet_size = 7;
+
+  // Connection rate per IP
+  uint32 max_connections_per_ip = 8;
+}
+
+// Minecraft Java packet types
+enum MinecraftJavaPacketType {
+  MC_JAVA_PACKET_UNSPECIFIED = 0;
+  MC_JAVA_PACKET_HANDSHAKE = 1;
+  MC_JAVA_PACKET_STATUS_REQUEST = 2;
+  MC_JAVA_PACKET_STATUS_PING = 3;
+  MC_JAVA_PACKET_LOGIN_START = 4;
+  MC_JAVA_PACKET_ENCRYPTION_RESPONSE = 5;
+  MC_JAVA_PACKET_PLUGIN_MESSAGE = 6;
+}
+
+// Minecraft Bedrock Edition matching (RakNet)
+message MinecraftBedrockMatch {
+  // Protocol version range
+  uint32 min_protocol_version = 1;
+  uint32 max_protocol_version = 2;
+
+  // RakNet packet types
+  repeated MinecraftBedrockPacketType packet_types = 3;
+
+  // Validate RakNet magic
+  bool validate_raknet_magic = 4;
+
+  // Maximum packet size
+  uint32 max_packet_size = 5;
+
+  // Connection rate per IP
+  uint32 max_connections_per_ip = 6;
+
+  // MOTD request rate limiting
+  bool rate_limit_motd = 7;
+}
+
+// Minecraft Bedrock packet types
+enum MinecraftBedrockPacketType {
+  MC_BEDROCK_PACKET_UNSPECIFIED = 0;
+  MC_BEDROCK_PACKET_UNCONNECTED_PING = 1;
+  MC_BEDROCK_PACKET_UNCONNECTED_PONG = 2;
+  MC_BEDROCK_PACKET_OPEN_CONNECTION_REQUEST_1 = 3;
+  MC_BEDROCK_PACKET_OPEN_CONNECTION_REPLY_1 = 4;
+  MC_BEDROCK_PACKET_OPEN_CONNECTION_REQUEST_2 = 5;
+  MC_BEDROCK_PACKET_OPEN_CONNECTION_REPLY_2 = 6;
+  MC_BEDROCK_PACKET_CONNECTION_REQUEST = 7;
+  MC_BEDROCK_PACKET_CONNECTION_ACCEPTED = 8;
+}
+
+// QUIC protocol matching
+message QuicMatch {
+  // QUIC versions to allow
+  repeated uint32 allowed_versions = 1;
+
+  // Validate initial packet
+  bool validate_initial = 2;
+
+  // Connection ID length validation
+  uint32 min_cid_length = 3;
+  uint32 max_cid_length = 4;
+
+  // Token validation
+  bool require_token = 5;
+
+  // Maximum packet size
+  uint32 max_packet_size = 6;
+}
+
+// Time-based matching
+message TimeMatch {
+  // Days of week (0 = Sunday, 6 = Saturday)
+  repeated uint32 days_of_week = 1;
+
+  // Time ranges (in minutes from midnight UTC)
+  repeated TimeRange time_ranges = 2;
+}
+
+message TimeRange {
+  uint32 start_minutes = 1;
+  uint32 end_minutes = 2;
+}
+
+// Filter statistics
+message FilterStats {
+  uint64 packets_matched = 1;
+  uint64 bytes_matched = 2;
+  uint64 packets_allowed = 3;
+  uint64 packets_dropped = 4;
+  uint64 packets_rate_limited = 5;
+  uint64 packets_challenged = 6;
+  common.Timestamp last_matched = 7;
+}
+
+// Filter service messages
+service FilterService {
+  // Rule management
+  rpc CreateRule(CreateRuleRequest) returns (CreateRuleResponse);
+  rpc GetRule(GetRuleRequest) returns (GetRuleResponse);
+  rpc UpdateRule(UpdateRuleRequest) returns (UpdateRuleResponse);
+  rpc DeleteRule(DeleteRuleRequest) returns (DeleteRuleResponse);
+  rpc ListRules(ListRulesRequest) returns (ListRulesResponse);
+
+  // Bulk operations
+  rpc BulkCreateRules(BulkCreateRulesRequest) returns (BulkCreateRulesResponse);
+  rpc BulkDeleteRules(BulkDeleteRulesRequest) returns (BulkDeleteRulesResponse);
+
+  // Rule ordering
+  rpc ReorderRules(ReorderRulesRequest) returns (ReorderRulesResponse);
+
+  // Get rule stats
+  rpc GetRuleStats(GetRuleStatsRequest) returns (GetRuleStatsResponse);
+
+  // Stream rule updates
+  rpc WatchRules(WatchRulesRequest) returns (stream RuleUpdate);
+}
+
+// Request/Response messages
+message CreateRuleRequest {
+  string backend_id = 1;
+  FilterRule rule = 2;
+}
+
+message CreateRuleResponse {
+  FilterRule rule = 1;
+}
+
+message GetRuleRequest {
+  string rule_id = 1;
+}
+
+message GetRuleResponse {
+  FilterRule rule = 1;
+}
+
+message UpdateRuleRequest {
+  FilterRule rule = 1;
+}
+
+message UpdateRuleResponse {
+  FilterRule rule = 1;
+}
+
+message DeleteRuleRequest {
+  string rule_id = 1;
+}
+
+message DeleteRuleResponse {
+  bool success = 1;
+}
+
+message ListRulesRequest {
+  string backend_id = 1;
+  common.Pagination pagination = 2;
+  bool include_disabled = 3;
+}
+
+message ListRulesResponse {
+  repeated FilterRule rules = 1;
+  common.PaginationInfo pagination = 2;
+}
+
+message BulkCreateRulesRequest {
+  string backend_id = 1;
+  repeated FilterRule rules = 2;
+}
+
+message BulkCreateRulesResponse {
+  repeated FilterRule rules = 1;
+  repeated common.Error errors = 2;
+}
+
+message BulkDeleteRulesRequest {
+  repeated string rule_ids = 1;
+}
+
+message BulkDeleteRulesResponse {
+  uint32 deleted_count = 1;
+  repeated common.Error errors = 2;
+}
+
+message ReorderRulesRequest {
+  string backend_id = 1;
+  repeated string rule_ids = 2;  // In desired order
+}
+
+message ReorderRulesResponse {
+  bool success = 1;
+}
+
+message GetRuleStatsRequest {
+  string rule_id = 1;
+  common.Timestamp from = 2;
+  common.Timestamp to = 3;
+}
+
+message GetRuleStatsResponse {
+  FilterStats stats = 1;
+  repeated TimeSeriesPoint time_series = 2;
+}
+
+message TimeSeriesPoint {
+  common.Timestamp timestamp = 1;
+  uint64 packets = 2;
+  uint64 bytes = 3;
+}
+
+message WatchRulesRequest {
+  string backend_id = 1;
+}
+
+message RuleUpdate {
+  enum UpdateType {
+    UPDATE_TYPE_UNSPECIFIED = 0;
+    UPDATE_TYPE_CREATED = 1;
+    UPDATE_TYPE_UPDATED = 2;
+    UPDATE_TYPE_DELETED = 3;
+  }
+
+  UpdateType type = 1;
+  FilterRule rule = 2;
+}

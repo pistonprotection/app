@@ -1,0 +1,450 @@
+syntax = "proto3";
+
+package pistonprotection.metrics;
+
+import "common.proto";
+
+option go_package = "github.com/pistonprotection/pistonprotection/pkg/proto/metrics";
+
+// Traffic metrics for a backend
+message TrafficMetrics {
+  string backend_id = 1;
+  common.Timestamp timestamp = 2;
+
+  // Request metrics
+  uint64 requests_total = 3;
+  uint64 requests_per_second = 4;
+
+  // Byte metrics
+  uint64 bytes_in = 5;
+  uint64 bytes_out = 6;
+  uint64 bytes_per_second_in = 7;
+  uint64 bytes_per_second_out = 8;
+
+  // Packet metrics (L4)
+  uint64 packets_in = 9;
+  uint64 packets_out = 10;
+  uint64 packets_per_second = 11;
+
+  // Connection metrics
+  uint64 active_connections = 12;
+  uint64 new_connections = 13;
+  uint64 closed_connections = 14;
+
+  // Protocol breakdown
+  map<string, uint64> requests_by_protocol = 15;
+}
+
+// Attack metrics
+message AttackMetrics {
+  string backend_id = 1;
+  common.Timestamp timestamp = 2;
+
+  // Attack detection
+  bool under_attack = 3;
+  string attack_type = 4;
+  AttackSeverity severity = 5;
+
+  // Attack volume
+  uint64 attack_requests = 6;
+  uint64 attack_bytes = 7;
+  uint64 attack_pps = 8;  // Packets per second
+  uint64 attack_bps = 9;  // Bits per second
+
+  // Mitigation stats
+  uint64 requests_dropped = 10;
+  uint64 requests_challenged = 11;
+  uint64 requests_rate_limited = 12;
+
+  // Attack sources
+  uint32 unique_attack_ips = 13;
+  repeated AttackSource top_sources = 14;
+}
+
+// Attack severity
+enum AttackSeverity {
+  ATTACK_SEVERITY_UNSPECIFIED = 0;
+  ATTACK_SEVERITY_LOW = 1;
+  ATTACK_SEVERITY_MEDIUM = 2;
+  ATTACK_SEVERITY_HIGH = 3;
+  ATTACK_SEVERITY_CRITICAL = 4;
+}
+
+// Attack source information
+message AttackSource {
+  common.IPAddress ip = 1;
+  string country = 2;
+  string asn = 3;
+  uint64 requests = 4;
+  uint64 bytes = 5;
+  common.Action action_taken = 6;
+}
+
+// Origin metrics
+message OriginMetrics {
+  string backend_id = 1;
+  string origin_id = 2;
+  common.Timestamp timestamp = 3;
+
+  // Health
+  common.HealthStatus health = 4;
+  float uptime_percent = 5;
+
+  // Latency (milliseconds)
+  float latency_avg = 6;
+  float latency_p50 = 7;
+  float latency_p95 = 8;
+  float latency_p99 = 9;
+
+  // Request metrics
+  uint64 requests_total = 10;
+  uint64 requests_success = 11;
+  uint64 requests_error = 12;
+  float error_rate = 13;
+
+  // Connection metrics
+  uint64 active_connections = 14;
+  uint64 connection_errors = 15;
+}
+
+// Worker node metrics
+message WorkerMetrics {
+  string worker_id = 1;
+  string node_name = 2;
+  common.Timestamp timestamp = 3;
+
+  // Resource utilization
+  float cpu_percent = 4;
+  float memory_percent = 5;
+  uint64 memory_bytes = 6;
+
+  // Network
+  uint64 network_rx_bytes = 7;
+  uint64 network_tx_bytes = 8;
+  uint64 network_rx_pps = 9;
+  uint64 network_tx_pps = 10;
+
+  // XDP stats
+  XdpStats xdp_stats = 11;
+
+  // Health
+  common.HealthStatus health = 12;
+}
+
+// XDP/eBPF program statistics
+message XdpStats {
+  uint64 packets_processed = 1;
+  uint64 packets_passed = 2;
+  uint64 packets_dropped = 3;
+  uint64 packets_redirected = 4;
+  uint64 packets_error = 5;
+
+  // Processing latency (nanoseconds)
+  uint64 latency_avg_ns = 6;
+  uint64 latency_p99_ns = 7;
+
+  // Per-filter stats
+  map<string, uint64> drops_by_filter = 8;
+}
+
+// Geographic traffic distribution
+message GeoMetrics {
+  string backend_id = 1;
+  common.Timestamp timestamp = 2;
+
+  // Traffic by country
+  repeated CountryMetrics countries = 3;
+}
+
+message CountryMetrics {
+  string country_code = 1;
+  string country_name = 2;
+  uint64 requests = 3;
+  uint64 bytes = 4;
+  uint64 unique_ips = 5;
+  bool blocked = 6;
+}
+
+// Time series query
+message TimeSeriesQuery {
+  string backend_id = 1;
+  common.Timestamp start_time = 2;
+  common.Timestamp end_time = 3;
+  TimeGranularity granularity = 4;
+  repeated string metrics = 5;  // Metric names to fetch
+}
+
+// Time granularity
+enum TimeGranularity {
+  TIME_GRANULARITY_UNSPECIFIED = 0;
+  TIME_GRANULARITY_MINUTE = 1;
+  TIME_GRANULARITY_FIVE_MINUTES = 2;
+  TIME_GRANULARITY_FIFTEEN_MINUTES = 3;
+  TIME_GRANULARITY_HOUR = 4;
+  TIME_GRANULARITY_DAY = 5;
+}
+
+// Time series data point
+message DataPoint {
+  common.Timestamp timestamp = 1;
+  double value = 2;
+}
+
+// Time series
+message TimeSeries {
+  string metric_name = 1;
+  repeated DataPoint points = 2;
+}
+
+// Alert definition
+message Alert {
+  string id = 1;
+  string backend_id = 2;
+  string name = 3;
+
+  // Alert condition
+  AlertCondition condition = 4;
+
+  // Notification settings
+  repeated AlertNotification notifications = 5;
+
+  // Status
+  bool enabled = 6;
+  AlertState state = 7;
+  common.Timestamp last_triggered = 8;
+
+  // Timestamps
+  common.Timestamp created_at = 9;
+  common.Timestamp updated_at = 10;
+}
+
+// Alert condition
+message AlertCondition {
+  string metric = 1;
+  AlertOperator operator = 2;
+  double threshold = 3;
+  uint32 duration_seconds = 4;  // How long condition must be true
+}
+
+// Alert operators
+enum AlertOperator {
+  ALERT_OPERATOR_UNSPECIFIED = 0;
+  ALERT_OPERATOR_GREATER_THAN = 1;
+  ALERT_OPERATOR_LESS_THAN = 2;
+  ALERT_OPERATOR_EQUAL = 3;
+  ALERT_OPERATOR_NOT_EQUAL = 4;
+}
+
+// Alert state
+enum AlertState {
+  ALERT_STATE_UNSPECIFIED = 0;
+  ALERT_STATE_OK = 1;
+  ALERT_STATE_PENDING = 2;
+  ALERT_STATE_FIRING = 3;
+}
+
+// Alert notification
+message AlertNotification {
+  AlertNotificationType type = 1;
+  string destination = 2;  // Email, webhook URL, etc.
+}
+
+// Notification types
+enum AlertNotificationType {
+  ALERT_NOTIFICATION_TYPE_UNSPECIFIED = 0;
+  ALERT_NOTIFICATION_TYPE_EMAIL = 1;
+  ALERT_NOTIFICATION_TYPE_WEBHOOK = 2;
+  ALERT_NOTIFICATION_TYPE_SLACK = 3;
+  ALERT_NOTIFICATION_TYPE_DISCORD = 4;
+  ALERT_NOTIFICATION_TYPE_PAGERDUTY = 5;
+}
+
+// Attack event for logging
+message AttackEvent {
+  string id = 1;
+  string backend_id = 2;
+  common.Timestamp started_at = 3;
+  common.Timestamp ended_at = 4;
+  uint32 duration_seconds = 5;
+
+  // Attack details
+  string attack_type = 6;
+  AttackSeverity severity = 7;
+  uint64 peak_pps = 8;
+  uint64 peak_bps = 9;
+  uint64 total_packets = 10;
+  uint64 total_bytes = 11;
+
+  // Mitigation
+  uint64 packets_mitigated = 12;
+  float mitigation_rate = 13;
+
+  // Sources
+  uint32 unique_sources = 14;
+  repeated string top_countries = 15;
+  repeated string top_asns = 16;
+}
+
+// Metrics service
+service MetricsService {
+  // Traffic metrics
+  rpc GetTrafficMetrics(GetTrafficMetricsRequest) returns (GetTrafficMetricsResponse);
+  rpc GetTrafficTimeSeries(TimeSeriesQuery) returns (GetTimeSeriesResponse);
+  rpc StreamTrafficMetrics(StreamTrafficMetricsRequest) returns (stream TrafficMetrics);
+
+  // Attack metrics
+  rpc GetAttackMetrics(GetAttackMetricsRequest) returns (GetAttackMetricsResponse);
+  rpc GetAttackTimeSeries(TimeSeriesQuery) returns (GetTimeSeriesResponse);
+  rpc StreamAttackMetrics(StreamAttackMetricsRequest) returns (stream AttackMetrics);
+
+  // Origin metrics
+  rpc GetOriginMetrics(GetOriginMetricsRequest) returns (GetOriginMetricsResponse);
+
+  // Worker metrics
+  rpc GetWorkerMetrics(GetWorkerMetricsRequest) returns (GetWorkerMetricsResponse);
+  rpc ListWorkerMetrics(ListWorkerMetricsRequest) returns (ListWorkerMetricsResponse);
+
+  // Geo metrics
+  rpc GetGeoMetrics(GetGeoMetricsRequest) returns (GetGeoMetricsResponse);
+
+  // Alerts
+  rpc CreateAlert(CreateAlertRequest) returns (CreateAlertResponse);
+  rpc GetAlert(GetAlertRequest) returns (GetAlertResponse);
+  rpc UpdateAlert(UpdateAlertRequest) returns (UpdateAlertResponse);
+  rpc DeleteAlert(DeleteAlertRequest) returns (DeleteAlertResponse);
+  rpc ListAlerts(ListAlertsRequest) returns (ListAlertsResponse);
+
+  // Attack events
+  rpc GetAttackEvent(GetAttackEventRequest) returns (GetAttackEventResponse);
+  rpc ListAttackEvents(ListAttackEventsRequest) returns (ListAttackEventsResponse);
+}
+
+// Request/Response messages
+message GetTrafficMetricsRequest {
+  string backend_id = 1;
+}
+
+message GetTrafficMetricsResponse {
+  TrafficMetrics metrics = 1;
+}
+
+message StreamTrafficMetricsRequest {
+  string backend_id = 1;
+  uint32 interval_seconds = 2;
+}
+
+message GetAttackMetricsRequest {
+  string backend_id = 1;
+}
+
+message GetAttackMetricsResponse {
+  AttackMetrics metrics = 1;
+}
+
+message StreamAttackMetricsRequest {
+  string backend_id = 1;
+  uint32 interval_seconds = 2;
+}
+
+message GetTimeSeriesResponse {
+  repeated TimeSeries series = 1;
+}
+
+message GetOriginMetricsRequest {
+  string backend_id = 1;
+  string origin_id = 2;
+}
+
+message GetOriginMetricsResponse {
+  OriginMetrics metrics = 1;
+}
+
+message GetWorkerMetricsRequest {
+  string worker_id = 1;
+}
+
+message GetWorkerMetricsResponse {
+  WorkerMetrics metrics = 1;
+}
+
+message ListWorkerMetricsRequest {
+  common.Pagination pagination = 1;
+}
+
+message ListWorkerMetricsResponse {
+  repeated WorkerMetrics workers = 1;
+  common.PaginationInfo pagination = 2;
+}
+
+message GetGeoMetricsRequest {
+  string backend_id = 1;
+  common.Timestamp start_time = 2;
+  common.Timestamp end_time = 3;
+}
+
+message GetGeoMetricsResponse {
+  GeoMetrics metrics = 1;
+}
+
+message CreateAlertRequest {
+  string backend_id = 1;
+  Alert alert = 2;
+}
+
+message CreateAlertResponse {
+  Alert alert = 1;
+}
+
+message GetAlertRequest {
+  string alert_id = 1;
+}
+
+message GetAlertResponse {
+  Alert alert = 1;
+}
+
+message UpdateAlertRequest {
+  Alert alert = 1;
+}
+
+message UpdateAlertResponse {
+  Alert alert = 1;
+}
+
+message DeleteAlertRequest {
+  string alert_id = 1;
+}
+
+message DeleteAlertResponse {
+  bool success = 1;
+}
+
+message ListAlertsRequest {
+  string backend_id = 1;
+  common.Pagination pagination = 2;
+}
+
+message ListAlertsResponse {
+  repeated Alert alerts = 1;
+  common.PaginationInfo pagination = 2;
+}
+
+message GetAttackEventRequest {
+  string event_id = 1;
+}
+
+message GetAttackEventResponse {
+  AttackEvent event = 1;
+}
+
+message ListAttackEventsRequest {
+  string backend_id = 1;
+  common.Timestamp start_time = 2;
+  common.Timestamp end_time = 3;
+  common.Pagination pagination = 4;
+}
+
+message ListAttackEventsResponse {
+  repeated AttackEvent events = 1;
+  common.PaginationInfo pagination = 2;
+}

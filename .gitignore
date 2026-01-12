@@ -1,0 +1,57 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock
+
+# eBPF
+*.o
+
+# Node.js
+node_modules/
+.output/
+.vinxi/
+dist/
+.next/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Helm
+charts/*/charts/
+*.tgz
+
+# Kubernetes secrets
+*-secret.yaml
+*-secrets.yaml
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

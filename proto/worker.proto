@@ -1,0 +1,437 @@
+syntax = "proto3";
+
+package pistonprotection.worker;
+
+import "common.proto";
+import "filter.proto";
+
+option go_package = "github.com/pistonprotection/pistonprotection/pkg/proto/worker";
+
+// Worker node registration
+message Worker {
+  string id = 1;
+  string node_name = 2;
+  string hostname = 3;
+
+  // Network interfaces
+  repeated NetworkInterface interfaces = 4;
+
+  // Capabilities
+  WorkerCapabilities capabilities = 5;
+
+  // Status
+  WorkerStatus status = 6;
+
+  // Labels
+  map<string, string> labels = 7;
+
+  // Timestamps
+  common.Timestamp registered_at = 8;
+  common.Timestamp last_heartbeat = 9;
+}
+
+// Network interface on worker
+message NetworkInterface {
+  string name = 1;
+  common.IPAddress ip_address = 2;
+  string mac_address = 3;
+
+  // XDP program status
+  XdpStatus xdp_status = 4;
+
+  // Interface stats
+  uint64 rx_bytes = 5;
+  uint64 tx_bytes = 6;
+  uint64 rx_packets = 7;
+  uint64 tx_packets = 8;
+  uint64 rx_dropped = 9;
+  uint64 tx_dropped = 10;
+}
+
+// XDP program status
+message XdpStatus {
+  bool attached = 1;
+  string program_id = 2;
+  XdpMode mode = 3;
+  uint32 program_version = 4;
+  common.Timestamp attached_at = 5;
+}
+
+// XDP attachment mode
+enum XdpMode {
+  XDP_MODE_UNSPECIFIED = 0;
+  XDP_MODE_NATIVE = 1;      // Hardware offload (best performance)
+  XDP_MODE_DRIVER = 2;      // Driver level
+  XDP_MODE_GENERIC = 3;     // Software fallback (slowest)
+}
+
+// Worker capabilities
+message WorkerCapabilities {
+  // XDP support
+  bool xdp_native = 1;
+  bool xdp_driver = 2;
+  bool xdp_offload = 3;
+
+  // eBPF features
+  repeated string bpf_helpers = 4;
+  uint32 max_bpf_stack_size = 5;
+  uint32 max_map_entries = 6;
+
+  // Hardware
+  uint32 cpu_cores = 7;
+  uint64 memory_bytes = 8;
+  repeated string network_drivers = 9;
+
+  // Kernel version
+  string kernel_version = 10;
+  uint32 kernel_major = 11;
+  uint32 kernel_minor = 12;
+}
+
+// Worker status
+enum WorkerStatus {
+  WORKER_STATUS_UNSPECIFIED = 0;
+  WORKER_STATUS_REGISTERING = 1;
+  WORKER_STATUS_READY = 2;
+  WORKER_STATUS_DRAINING = 3;
+  WORKER_STATUS_UNHEALTHY = 4;
+  WORKER_STATUS_OFFLINE = 5;
+}
+
+// Filter configuration for worker
+message FilterConfig {
+  string config_id = 1;
+  uint32 version = 2;
+
+  // Backends to protect
+  repeated BackendFilter backends = 3;
+
+  // Global settings
+  GlobalFilterSettings global = 4;
+
+  // Generated at
+  common.Timestamp generated_at = 5;
+}
+
+// Backend-specific filter configuration
+message BackendFilter {
+  string backend_id = 1;
+
+  // Destination IPs/ports for this backend
+  repeated common.IPNetwork destination_ips = 2;
+  repeated common.PortRange destination_ports = 3;
+
+  // Protocol
+  common.L7Protocol protocol = 4;
+
+  // Protection settings
+  ProtectionConfig protection = 5;
+
+  // Filter rules
+  repeated filter.FilterRule rules = 6;
+}
+
+// Protection configuration
+message ProtectionConfig {
+  bool enabled = 1;
+  uint32 level = 2;  // 0-5
+
+  // Rate limits (converted to XDP-friendly format)
+  RateLimitConfig global_rate = 3;
+  RateLimitConfig per_ip_rate = 4;
+
+  // GeoIP blocking
+  repeated uint16 blocked_country_ids = 5;  // GeoIP database country IDs
+  repeated uint16 allowed_country_ids = 6;
+
+  // Challenge settings
+  bool challenge_enabled = 7;
+  uint32 challenge_threshold = 8;
+}
+
+// Rate limit config for XDP
+message RateLimitConfig {
+  uint64 tokens_per_second = 1;
+  uint64 bucket_size = 2;
+}
+
+// Global filter settings
+message GlobalFilterSettings {
+  // Default action for unmatched traffic
+  common.Action default_action = 1;
+
+  // Sampling rate for logging (1 in N packets)
+  uint32 log_sampling_rate = 2;
+
+  // Emergency mode settings
+  bool emergency_mode = 3;
+  uint64 emergency_pps_threshold = 4;
+}
+
+// eBPF map update
+message MapUpdate {
+  string map_name = 1;
+  MapOperation operation = 2;
+  bytes key = 3;
+  bytes value = 4;
+  uint32 flags = 5;
+}
+
+// Map operation type
+enum MapOperation {
+  MAP_OPERATION_UNSPECIFIED = 0;
+  MAP_OPERATION_UPDATE = 1;
+  MAP_OPERATION_DELETE = 2;
+  MAP_OPERATION_LOOKUP = 3;
+}
+
+// Connection tracking entry
+message ConnTrackEntry {
+  common.IPAddress src_ip = 1;
+  uint32 src_port = 2;
+  common.IPAddress dst_ip = 3;
+  uint32 dst_port = 4;
+  common.Protocol protocol = 5;
+
+  // State
+  ConnTrackState state = 6;
+  uint64 packets = 7;
+  uint64 bytes = 8;
+
+  // Timestamps
+  common.Timestamp created_at = 9;
+  common.Timestamp last_seen = 10;
+  common.Timestamp expires_at = 11;
+}
+
+// Connection tracking state
+enum ConnTrackState {
+  CONN_TRACK_STATE_UNSPECIFIED = 0;
+  CONN_TRACK_STATE_NEW = 1;
+  CONN_TRACK_STATE_ESTABLISHED = 2;
+  CONN_TRACK_STATE_RELATED = 3;
+  CONN_TRACK_STATE_CLOSING = 4;
+  CONN_TRACK_STATE_CLOSED = 5;
+}
+
+// Blocked IP entry
+message BlockedIp {
+  common.IPAddress ip = 1;
+  string reason = 2;
+  uint64 packets_blocked = 3;
+  common.Timestamp blocked_at = 4;
+  common.Timestamp expires_at = 5;  // 0 = permanent
+}
+
+// Worker service for control plane communication
+service WorkerService {
+  // Worker lifecycle
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc Deregister(DeregisterRequest) returns (DeregisterResponse);
+
+  // Configuration
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+  rpc StreamConfig(StreamConfigRequest) returns (stream FilterConfig);
+
+  // Map updates (for incremental updates)
+  rpc ApplyMapUpdates(ApplyMapUpdatesRequest) returns (ApplyMapUpdatesResponse);
+
+  // Reporting
+  rpc ReportMetrics(ReportMetricsRequest) returns (ReportMetricsResponse);
+  rpc ReportAttack(ReportAttackRequest) returns (ReportAttackResponse);
+
+  // Connection tracking
+  rpc SyncConnTrack(stream ConnTrackSync) returns (stream ConnTrackSync);
+
+  // Blocked IPs
+  rpc GetBlockedIps(GetBlockedIpsRequest) returns (GetBlockedIpsResponse);
+  rpc BlockIp(BlockIpRequest) returns (BlockIpResponse);
+  rpc UnblockIp(UnblockIpRequest) returns (UnblockIpResponse);
+
+  // Debugging
+  rpc GetXdpStats(GetXdpStatsRequest) returns (GetXdpStatsResponse);
+  rpc DumpMaps(DumpMapsRequest) returns (DumpMapsResponse);
+}
+
+// Request/Response messages
+message RegisterRequest {
+  Worker worker = 1;
+}
+
+message RegisterResponse {
+  string worker_id = 1;
+  FilterConfig initial_config = 2;
+}
+
+message HeartbeatRequest {
+  string worker_id = 1;
+  WorkerStatus status = 2;
+  WorkerMetrics metrics = 3;
+}
+
+message WorkerMetrics {
+  float cpu_percent = 1;
+  float memory_percent = 2;
+  repeated InterfaceMetrics interfaces = 3;
+}
+
+message InterfaceMetrics {
+  string name = 1;
+  uint64 rx_pps = 2;
+  uint64 tx_pps = 3;
+  uint64 rx_bps = 4;
+  uint64 tx_bps = 5;
+  uint64 xdp_pass = 6;
+  uint64 xdp_drop = 7;
+  uint64 xdp_redirect = 8;
+}
+
+message HeartbeatResponse {
+  bool config_update_available = 1;
+  uint32 latest_config_version = 2;
+}
+
+message DeregisterRequest {
+  string worker_id = 1;
+}
+
+message DeregisterResponse {
+  bool success = 1;
+}
+
+message GetConfigRequest {
+  string worker_id = 1;
+  uint32 current_version = 2;
+}
+
+message GetConfigResponse {
+  FilterConfig config = 1;
+  bool up_to_date = 2;
+}
+
+message StreamConfigRequest {
+  string worker_id = 1;
+}
+
+message ApplyMapUpdatesRequest {
+  string worker_id = 1;
+  repeated MapUpdate updates = 2;
+}
+
+message ApplyMapUpdatesResponse {
+  bool success = 1;
+  repeated string errors = 2;
+}
+
+message ReportMetricsRequest {
+  string worker_id = 1;
+  repeated BackendMetrics backend_metrics = 2;
+}
+
+message BackendMetrics {
+  string backend_id = 1;
+  uint64 packets_in = 2;
+  uint64 packets_out = 3;
+  uint64 bytes_in = 4;
+  uint64 bytes_out = 5;
+  uint64 packets_dropped = 6;
+  uint64 packets_challenged = 7;
+  map<string, uint64> drops_by_reason = 8;
+}
+
+message ReportMetricsResponse {
+  bool success = 1;
+}
+
+message ReportAttackRequest {
+  string worker_id = 1;
+  string backend_id = 2;
+  string attack_type = 3;
+  uint64 attack_pps = 4;
+  uint64 attack_bps = 5;
+  repeated AttackSourceInfo sources = 6;
+}
+
+message AttackSourceInfo {
+  common.IPAddress ip = 1;
+  uint64 packets = 2;
+  uint64 bytes = 3;
+}
+
+message ReportAttackResponse {
+  // Response actions
+  repeated MapUpdate block_updates = 1;
+  bool escalate_protection = 2;
+  uint32 new_protection_level = 3;
+}
+
+message ConnTrackSync {
+  enum SyncType {
+    SYNC_TYPE_UNSPECIFIED = 0;
+    SYNC_TYPE_FULL = 1;
+    SYNC_TYPE_UPDATE = 2;
+    SYNC_TYPE_DELETE = 3;
+  }
+
+  SyncType type = 1;
+  repeated ConnTrackEntry entries = 2;
+}
+
+message GetBlockedIpsRequest {
+  string worker_id = 1;
+  common.Pagination pagination = 2;
+}
+
+message GetBlockedIpsResponse {
+  repeated BlockedIp ips = 1;
+  common.PaginationInfo pagination = 2;
+}
+
+message BlockIpRequest {
+  common.IPAddress ip = 1;
+  string reason = 2;
+  uint32 duration_seconds = 3;  // 0 = permanent
+}
+
+message BlockIpResponse {
+  bool success = 1;
+}
+
+message UnblockIpRequest {
+  common.IPAddress ip = 1;
+}
+
+message UnblockIpResponse {
+  bool success = 1;
+}
+
+message GetXdpStatsRequest {
+  string worker_id = 1;
+  string interface_name = 2;
+}
+
+message GetXdpStatsResponse {
+  uint64 packets_processed = 1;
+  uint64 packets_passed = 2;
+  uint64 packets_dropped = 3;
+  uint64 packets_redirected = 4;
+  uint64 packets_aborted = 5;
+  map<string, uint64> per_cpu_stats = 6;
+}
+
+message DumpMapsRequest {
+  string worker_id = 1;
+  string map_name = 2;
+  uint32 max_entries = 3;
+}
+
+message DumpMapsResponse {
+  string map_name = 1;
+  repeated MapEntry entries = 2;
+}
+
+message MapEntry {
+  bytes key = 1;
+  bytes value = 2;
+}

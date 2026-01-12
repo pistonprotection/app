@@ -1,0 +1,123 @@
+groups:
+  - name: pistonprotection
+    rules:
+      # High packet drop rate
+      - alert: HighPacketDropRate
+        expr: |
+          sum(rate(pistonprotection_packets_dropped[5m])) /
+          sum(rate(pistonprotection_packets_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High packet drop rate detected
+          description: "More than 10% of packets are being dropped. Current drop rate: {{ $value | humanizePercentage }}"
+
+      # Backend down
+      - alert: BackendDown
+        expr: pistonprotection_backend_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Backend {{ $labels.backend }} is down
+          description: "Backend {{ $labels.backend }} has been down for more than 1 minute"
+
+      # High latency
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(pistonprotection_request_duration_seconds_bucket[5m])) by (le)) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High latency detected
+          description: "P95 latency is above 10ms. Current value: {{ $value | humanizeDuration }}"
+
+      # Attack detected
+      - alert: DDoSAttackDetected
+        expr: |
+          sum(rate(pistonprotection_packets_dropped{reason="attack"}[1m])) > 10000
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: DDoS attack detected
+          description: "Blocking more than 10,000 attack packets per second"
+
+      # Worker down
+      - alert: WorkerDown
+        expr: up{job="pistonprotection-worker"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Worker {{ $labels.instance }} is down
+          description: "Worker node {{ $labels.instance }} has been unreachable for more than 1 minute"
+
+      # Rate limit triggered
+      - alert: RateLimitTriggered
+        expr: |
+          sum(rate(pistonprotection_rate_limit_hits[5m])) by (ip) > 100
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: Rate limit frequently triggered for IP
+          description: "IP {{ $labels.ip }} is frequently hitting rate limits"
+
+      # High blocked IP count
+      - alert: HighBlockedIPCount
+        expr: sum(pistonprotection_blocked_ips) > 10000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: High number of blocked IPs
+          description: "More than 10,000 IPs are currently blocked. This may indicate an ongoing attack."
+
+      # eBPF map near capacity
+      - alert: EBPFMapNearCapacity
+        expr: |
+          pistonprotection_ebpf_map_entries / pistonprotection_ebpf_map_max_entries > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: eBPF map {{ $labels.map }} is near capacity
+          description: "Map {{ $labels.map }} is at {{ $value | humanizePercentage }} capacity"
+
+      # Gateway errors
+      - alert: HighGatewayErrorRate
+        expr: |
+          sum(rate(pistonprotection_gateway_errors_total[5m])) /
+          sum(rate(pistonprotection_gateway_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High gateway error rate
+          description: "Gateway error rate is above 5%. Current rate: {{ $value | humanizePercentage }}"
+
+  - name: pistonprotection-operator
+    rules:
+      # Reconciliation failures
+      - alert: OperatorReconciliationFailure
+        expr: |
+          increase(pistonprotection_reconciliation_errors_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Operator reconciliation failures
+          description: "The operator has encountered multiple reconciliation failures"
+
+      # Operator down
+      - alert: OperatorDown
+        expr: up{job="pistonprotection-operator"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: PistonProtection operator is down
+          description: "The Kubernetes operator has been unreachable for more than 5 minutes"

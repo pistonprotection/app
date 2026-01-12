@@ -1,0 +1,124 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: filterrules.pistonprotection.io
+spec:
+  group: pistonprotection.io
+  names:
+    kind: FilterRule
+    listKind: FilterRuleList
+    plural: filterrules
+    singular: filterrule
+    shortNames:
+      - fr
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - name
+                - ruleType
+                - action
+                - config
+              properties:
+                name:
+                  type: string
+                  description: Rule name
+                ruleType:
+                  type: string
+                  enum:
+                    - ip_blocklist
+                    - ip_allowlist
+                    - rate_limit
+                    - geo_block
+                    - protocol_validation
+                    - syn_flood
+                    - udp_amplification
+                    - custom
+                  description: Rule type
+                action:
+                  type: string
+                  enum:
+                    - drop
+                    - allow
+                    - ratelimit
+                    - log
+                    - challenge
+                  description: Action to take
+                priority:
+                  type: integer
+                  default: 50
+                  minimum: 1
+                  maximum: 100
+                  description: Priority (higher = processed first)
+                config:
+                  type: object
+                  properties:
+                    ipRanges:
+                      type: array
+                      items:
+                        type: string
+                      description: IP addresses or CIDR ranges
+                    countries:
+                      type: array
+                      items:
+                        type: string
+                      description: Country codes for geo filtering
+                    rateLimit:
+                      type: object
+                      properties:
+                        ppsPerIp:
+                          type: integer
+                        burst:
+                          type: integer
+                        globalPps:
+                          type: integer
+                    customProgram:
+                      type: string
+                      description: Custom eBPF program (base64 encoded)
+                selector:
+                  type: object
+                  properties:
+                    matchLabels:
+                      type: object
+                      additionalProperties:
+                        type: string
+            status:
+              type: object
+              properties:
+                active:
+                  type: boolean
+                matchCount:
+                  type: integer
+                lastMatch:
+                  type: string
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Type
+          type: string
+          jsonPath: .spec.ruleType
+        - name: Action
+          type: string
+          jsonPath: .spec.action
+        - name: Priority
+          type: integer
+          jsonPath: .spec.priority
+        - name: Active
+          type: boolean
+          jsonPath: .status.active
+        - name: Matches
+          type: integer
+          jsonPath: .status.matchCount
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

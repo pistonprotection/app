@@ -1,0 +1,429 @@
+syntax = "proto3";
+
+package pistonprotection.auth;
+
+import "common.proto";
+
+option go_package = "github.com/pistonprotection/pistonprotection/pkg/proto/auth";
+
+// User account
+message User {
+  string id = 1;
+  string email = 2;
+  string username = 3;
+  string name = 4;
+  string avatar_url = 5;
+
+  // Account status
+  bool email_verified = 6;
+  bool two_factor_enabled = 7;
+
+  // Role
+  UserRole role = 8;
+
+  // Timestamps
+  common.Timestamp created_at = 9;
+  common.Timestamp updated_at = 10;
+  common.Timestamp last_login_at = 11;
+}
+
+// User role
+enum UserRole {
+  USER_ROLE_UNSPECIFIED = 0;
+  USER_ROLE_USER = 1;
+  USER_ROLE_ADMIN = 2;
+}
+
+// Organization
+message Organization {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  string logo_url = 4;
+
+  // Subscription
+  Subscription subscription = 5;
+
+  // Limits based on subscription
+  OrganizationLimits limits = 6;
+
+  // Usage
+  OrganizationUsage usage = 7;
+
+  // Timestamps
+  common.Timestamp created_at = 8;
+  common.Timestamp updated_at = 9;
+}
+
+// Organization member
+message OrganizationMember {
+  string id = 1;
+  string user_id = 2;
+  string organization_id = 3;
+  OrganizationRole role = 4;
+
+  // User details (populated on fetch)
+  User user = 5;
+
+  common.Timestamp joined_at = 6;
+}
+
+// Organization role
+enum OrganizationRole {
+  ORGANIZATION_ROLE_UNSPECIFIED = 0;
+  ORGANIZATION_ROLE_OWNER = 1;
+  ORGANIZATION_ROLE_ADMIN = 2;
+  ORGANIZATION_ROLE_MEMBER = 3;
+  ORGANIZATION_ROLE_VIEWER = 4;
+}
+
+// Subscription plan
+message Subscription {
+  string id = 1;
+  string plan_id = 2;
+  string plan_name = 3;
+  SubscriptionStatus status = 4;
+
+  // Billing
+  string stripe_customer_id = 5;
+  string stripe_subscription_id = 6;
+
+  // Period
+  common.Timestamp current_period_start = 7;
+  common.Timestamp current_period_end = 8;
+
+  // Trial
+  bool in_trial = 9;
+  common.Timestamp trial_ends_at = 10;
+
+  // Cancellation
+  bool cancel_at_period_end = 11;
+  common.Timestamp canceled_at = 12;
+}
+
+// Subscription status
+enum SubscriptionStatus {
+  SUBSCRIPTION_STATUS_UNSPECIFIED = 0;
+  SUBSCRIPTION_STATUS_ACTIVE = 1;
+  SUBSCRIPTION_STATUS_TRIALING = 2;
+  SUBSCRIPTION_STATUS_PAST_DUE = 3;
+  SUBSCRIPTION_STATUS_CANCELED = 4;
+  SUBSCRIPTION_STATUS_UNPAID = 5;
+}
+
+// Organization limits based on plan
+message OrganizationLimits {
+  uint32 max_backends = 1;
+  uint32 max_origins_per_backend = 2;
+  uint32 max_domains = 3;
+  uint32 max_filter_rules = 4;
+  uint64 max_bandwidth_bytes = 5;  // Per month
+  uint64 max_requests = 6;  // Per month
+  bool advanced_protection = 7;
+  bool priority_support = 8;
+  bool custom_ssl = 9;
+  bool api_access = 10;
+  uint32 data_retention_days = 11;
+}
+
+// Organization usage
+message OrganizationUsage {
+  uint32 backends_count = 1;
+  uint32 domains_count = 2;
+  uint32 filter_rules_count = 3;
+  uint64 bandwidth_used = 4;  // This month
+  uint64 requests_used = 5;  // This month
+  common.Timestamp usage_reset_at = 6;
+}
+
+// API Key
+message ApiKey {
+  string id = 1;
+  string organization_id = 2;
+  string name = 3;
+  string prefix = 4;  // First few chars for identification
+
+  // Permissions
+  repeated ApiKeyPermission permissions = 5;
+
+  // Restrictions
+  repeated string allowed_ips = 6;
+
+  // Status
+  bool enabled = 7;
+  common.Timestamp expires_at = 8;
+  common.Timestamp last_used_at = 9;
+
+  // Timestamps
+  common.Timestamp created_at = 10;
+}
+
+// API key permission
+enum ApiKeyPermission {
+  API_KEY_PERMISSION_UNSPECIFIED = 0;
+  API_KEY_PERMISSION_READ = 1;
+  API_KEY_PERMISSION_WRITE = 2;
+  API_KEY_PERMISSION_DELETE = 3;
+  API_KEY_PERMISSION_ADMIN = 4;
+}
+
+// Session
+message Session {
+  string id = 1;
+  string user_id = 2;
+  string token = 3;  // JWT or session token
+
+  // Device info
+  string ip_address = 4;
+  string user_agent = 5;
+  string device_type = 6;
+
+  // Status
+  bool active = 7;
+  common.Timestamp expires_at = 8;
+  common.Timestamp created_at = 9;
+  common.Timestamp last_active_at = 10;
+}
+
+// Audit log entry
+message AuditLogEntry {
+  string id = 1;
+  string organization_id = 2;
+  string user_id = 3;
+  string user_email = 4;
+
+  // Action
+  string action = 5;
+  string resource_type = 6;
+  string resource_id = 7;
+
+  // Details
+  string description = 8;
+  map<string, string> metadata = 9;
+
+  // Request info
+  string ip_address = 10;
+  string user_agent = 11;
+
+  common.Timestamp timestamp = 12;
+}
+
+// Invitation
+message Invitation {
+  string id = 1;
+  string organization_id = 2;
+  string email = 3;
+  OrganizationRole role = 4;
+  string invited_by_user_id = 5;
+
+  // Status
+  InvitationStatus status = 6;
+  common.Timestamp expires_at = 7;
+  common.Timestamp accepted_at = 8;
+
+  common.Timestamp created_at = 9;
+}
+
+// Invitation status
+enum InvitationStatus {
+  INVITATION_STATUS_UNSPECIFIED = 0;
+  INVITATION_STATUS_PENDING = 1;
+  INVITATION_STATUS_ACCEPTED = 2;
+  INVITATION_STATUS_EXPIRED = 3;
+  INVITATION_STATUS_REVOKED = 4;
+}
+
+// Auth service (internal service-to-service communication)
+service AuthService {
+  // User operations
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  rpc GetUserByEmail(GetUserByEmailRequest) returns (GetUserResponse);
+
+  // Organization operations
+  rpc GetOrganization(GetOrganizationRequest) returns (GetOrganizationResponse);
+  rpc ListUserOrganizations(ListUserOrganizationsRequest) returns (ListUserOrganizationsResponse);
+  rpc GetOrganizationMember(GetOrganizationMemberRequest) returns (GetOrganizationMemberResponse);
+  rpc ListOrganizationMembers(ListOrganizationMembersRequest) returns (ListOrganizationMembersResponse);
+
+  // Authorization
+  rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+  rpc ValidateApiKey(ValidateApiKeyRequest) returns (ValidateApiKeyResponse);
+
+  // API Keys
+  rpc CreateApiKey(CreateApiKeyRequest) returns (CreateApiKeyResponse);
+  rpc ListApiKeys(ListApiKeysRequest) returns (ListApiKeysResponse);
+  rpc RevokeApiKey(RevokeApiKeyRequest) returns (RevokeApiKeyResponse);
+
+  // Audit logging
+  rpc CreateAuditLog(CreateAuditLogRequest) returns (CreateAuditLogResponse);
+  rpc ListAuditLogs(ListAuditLogsRequest) returns (ListAuditLogsResponse);
+
+  // Invitations
+  rpc CreateInvitation(CreateInvitationRequest) returns (CreateInvitationResponse);
+  rpc ListInvitations(ListInvitationsRequest) returns (ListInvitationsResponse);
+  rpc RevokeInvitation(RevokeInvitationRequest) returns (RevokeInvitationResponse);
+}
+
+// Request/Response messages
+message GetUserRequest {
+  string user_id = 1;
+}
+
+message GetUserByEmailRequest {
+  string email = 1;
+}
+
+message GetUserResponse {
+  User user = 1;
+}
+
+message GetOrganizationRequest {
+  string organization_id = 1;
+}
+
+message GetOrganizationResponse {
+  Organization organization = 1;
+}
+
+message ListUserOrganizationsRequest {
+  string user_id = 1;
+}
+
+message ListUserOrganizationsResponse {
+  repeated Organization organizations = 1;
+}
+
+message GetOrganizationMemberRequest {
+  string organization_id = 1;
+  string user_id = 2;
+}
+
+message GetOrganizationMemberResponse {
+  OrganizationMember member = 1;
+}
+
+message ListOrganizationMembersRequest {
+  string organization_id = 1;
+  common.Pagination pagination = 2;
+}
+
+message ListOrganizationMembersResponse {
+  repeated OrganizationMember members = 1;
+  common.PaginationInfo pagination = 2;
+}
+
+message CheckPermissionRequest {
+  string user_id = 1;
+  string organization_id = 2;
+  string resource_type = 3;
+  string resource_id = 4;
+  string action = 5;
+}
+
+message CheckPermissionResponse {
+  bool allowed = 1;
+  string reason = 2;
+}
+
+message ValidateTokenRequest {
+  string token = 1;
+}
+
+message ValidateTokenResponse {
+  bool valid = 1;
+  User user = 2;
+  Session session = 3;
+}
+
+message ValidateApiKeyRequest {
+  string api_key = 1;
+}
+
+message ValidateApiKeyResponse {
+  bool valid = 1;
+  ApiKey key = 2;
+  Organization organization = 3;
+}
+
+message CreateApiKeyRequest {
+  string organization_id = 1;
+  string name = 2;
+  repeated ApiKeyPermission permissions = 3;
+  repeated string allowed_ips = 4;
+  common.Timestamp expires_at = 5;
+}
+
+message CreateApiKeyResponse {
+  ApiKey key = 1;
+  string secret = 2;  // Only returned once on creation
+}
+
+message ListApiKeysRequest {
+  string organization_id = 1;
+  common.Pagination pagination = 2;
+}
+
+message ListApiKeysResponse {
+  repeated ApiKey keys = 1;
+  common.PaginationInfo pagination = 2;
+}
+
+message RevokeApiKeyRequest {
+  string key_id = 1;
+}
+
+message RevokeApiKeyResponse {
+  bool success = 1;
+}
+
+message CreateAuditLogRequest {
+  AuditLogEntry entry = 1;
+}
+
+message CreateAuditLogResponse {
+  AuditLogEntry entry = 1;
+}
+
+message ListAuditLogsRequest {
+  string organization_id = 1;
+  string user_id = 2;
+  string resource_type = 3;
+  common.Timestamp start_time = 4;
+  common.Timestamp end_time = 5;
+  common.Pagination pagination = 6;
+}
+
+message ListAuditLogsResponse {
+  repeated AuditLogEntry entries = 1;
+  common.PaginationInfo pagination = 2;
+}
+
+message CreateInvitationRequest {
+  string organization_id = 1;
+  string email = 2;
+  OrganizationRole role = 3;
+}
+
+message CreateInvitationResponse {
+  Invitation invitation = 1;
+}
+
+message ListInvitationsRequest {
+  string organization_id = 1;
+  InvitationStatus status = 2;
+  common.Pagination pagination = 3;
+}
+
+message ListInvitationsResponse {
+  repeated Invitation invitations = 1;
+  common.PaginationInfo pagination = 2;
+}
+
+message RevokeInvitationRequest {
+  string invitation_id = 1;
+}
+
+message RevokeInvitationResponse {
+  bool success = 1;
+}

@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+package pistonprotection.common;
+
+option go_package = "github.com/pistonprotection/pistonprotection/pkg/proto/common";
+
+// Timestamp in nanoseconds since epoch
+message Timestamp {
+  int64 seconds = 1;
+  int32 nanos = 2;
+}
+
+// IP address (supports both IPv4 and IPv6)
+message IPAddress {
+  oneof address {
+    fixed32 ipv4 = 1;
+    bytes ipv6 = 2;  // 16 bytes for IPv6
+  }
+}
+
+// IP network (CIDR)
+message IPNetwork {
+  IPAddress address = 1;
+  uint32 prefix_length = 2;
+}
+
+// Port range
+message PortRange {
+  uint32 start = 1;
+  uint32 end = 2;
+}
+
+// Protocol type
+enum Protocol {
+  PROTOCOL_UNSPECIFIED = 0;
+  PROTOCOL_TCP = 1;
+  PROTOCOL_UDP = 2;
+  PROTOCOL_ICMP = 3;
+}
+
+// L7 Protocol type
+enum L7Protocol {
+  L7_PROTOCOL_UNSPECIFIED = 0;
+  L7_PROTOCOL_HTTP = 1;
+  L7_PROTOCOL_HTTP2 = 2;
+  L7_PROTOCOL_HTTP3 = 3;
+  L7_PROTOCOL_QUIC = 4;
+  L7_PROTOCOL_MINECRAFT_JAVA = 5;
+  L7_PROTOCOL_MINECRAFT_BEDROCK = 6;
+  L7_PROTOCOL_GENERIC_TCP = 7;
+  L7_PROTOCOL_GENERIC_UDP = 8;
+}
+
+// Action to take on matching traffic
+enum Action {
+  ACTION_UNSPECIFIED = 0;
+  ACTION_ALLOW = 1;
+  ACTION_DROP = 2;
+  ACTION_RATE_LIMIT = 3;
+  ACTION_CHALLENGE = 4;  // L7 challenge-response
+  ACTION_LOG = 5;
+  ACTION_REDIRECT = 6;  // Redirect to honeypot
+}
+
+// GeoIP country code (ISO 3166-1 alpha-2)
+message GeoLocation {
+  string country_code = 1;
+  string region = 2;
+  string city = 3;
+  float latitude = 4;
+  float longitude = 5;
+}
+
+// Rate limit configuration
+message RateLimit {
+  uint64 requests_per_second = 1;
+  uint64 burst_size = 2;
+  uint32 window_seconds = 3;
+}
+
+// Health status
+enum HealthStatus {
+  HEALTH_STATUS_UNSPECIFIED = 0;
+  HEALTH_STATUS_HEALTHY = 1;
+  HEALTH_STATUS_DEGRADED = 2;
+  HEALTH_STATUS_UNHEALTHY = 3;
+}
+
+// Pagination for list requests
+message Pagination {
+  uint32 page = 1;
+  uint32 page_size = 2;
+  string cursor = 3;
+}
+
+// Pagination response
+message PaginationInfo {
+  uint32 total_count = 1;
+  uint32 page = 2;
+  uint32 page_size = 3;
+  bool has_next = 4;
+  string next_cursor = 5;
+}
+
+// Error details
+message Error {
+  string code = 1;
+  string message = 2;
+  map<string, string> details = 3;
+}
+
+// UUID wrapper
+message UUID {
+  string value = 1;
+}
