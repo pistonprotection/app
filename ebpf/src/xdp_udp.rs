@@ -103,6 +103,7 @@ pub struct UdpPortState {
 
 /// UDP filter configuration
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct UdpConfig {
     /// Filter enabled
     pub enabled: u32,

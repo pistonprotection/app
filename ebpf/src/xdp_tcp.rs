@@ -139,6 +139,7 @@ pub struct SynCookieEntry {
 
 /// TCP filter configuration
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct TcpConfig {
     /// Filter enabled
     pub enabled: u32,

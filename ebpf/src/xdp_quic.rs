@@ -116,6 +116,7 @@ pub struct QuicRateLimit {
 
 /// QUIC filter configuration
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct QuicConfig {
     /// Filter enabled
     pub enabled: u32,

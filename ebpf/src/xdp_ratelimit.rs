@@ -63,6 +63,7 @@ pub struct TokenBucket {
 
 /// Rate limit configuration
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct RateLimitConfig {
     /// Tokens added per second (PPS limit)
     pub tokens_per_second: u64,

@@ -75,6 +75,7 @@ struct TcpHdr {
 
 /// HTTP connection tracking state
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct HttpConnectionState {
     /// Connection state: 0=new, 1=request_started, 2=headers, 3=body, 4=complete
     pub state: u8,
@@ -104,6 +105,7 @@ pub struct HttpConnectionState {
 
 /// HTTP/2 connection state tracking
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct Http2ConnectionState {
     /// Whether HTTP/2 preface was seen
     pub preface_seen: u8,
@@ -150,6 +152,7 @@ pub struct HttpRateLimit {
 
 /// HTTP filter configuration
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct HttpConfig {
     /// Filter enabled
     pub enabled: u32,

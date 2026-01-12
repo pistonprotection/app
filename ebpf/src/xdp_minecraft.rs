@@ -76,6 +76,7 @@ const RAKNET_MAGIC: [u8; 16] = [
 
 /// Minecraft configuration
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct McConfig {
     pub enabled: u32,
     pub java_port: u16,

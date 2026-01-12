@@ -99,6 +99,7 @@ pub struct Stats {
 
 /// Global configuration
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct FilterConfig {
     pub enabled: u32,
     pub protection_level: u32,
