@@ -14,6 +14,8 @@ pub mod user;
 pub mod organization;
 pub mod audit;
 pub mod stripe;
+pub mod email;
+pub mod dunning;
 
 pub use auth::AuthService;
 pub use session::SessionService;
@@ -24,6 +26,8 @@ pub use user::UserService;
 pub use organization::OrganizationService;
 pub use audit::AuditService;
 pub use stripe::StripeService;
+pub use email::{EmailService, EmailConfig, EmailRecipient, EmailTemplate, EmailMessage};
+pub use dunning::{DunningService, DunningConfig, DunningRecord, DunningState};
 
 use crate::config::AuthConfig;
 
@@ -38,6 +42,8 @@ pub struct AppState {
     pub session_service: Arc<SessionService>,
     pub permission_service: Arc<PermissionService>,
     pub stripe_service: Option<Arc<StripeService>>,
+    pub email_service: Arc<EmailService>,
+    pub dunning_service: Option<Arc<DunningService>>,
 }
 
 impl AppState {
@@ -55,6 +61,9 @@ impl AppState {
             auth_config.rbac.clone(),
         ));
 
+        // Initialize email service
+        let email_service = Arc::new(EmailService::new(EmailConfig::default()));
+
         // Initialize Stripe service if configured
         let stripe_service = if auth_config.stripe.is_configured() {
             Some(Arc::new(StripeService::new(
@@ -65,6 +74,16 @@ impl AppState {
             None
         };
 
+        // Initialize dunning service if Stripe is enabled
+        let dunning_service = stripe_service.as_ref().map(|stripe| {
+            Arc::new(DunningService::new(
+                db.clone(),
+                Arc::clone(stripe),
+                Arc::clone(&email_service),
+                DunningConfig::default(),
+            ))
+        });
+
         Self {
             db,
             cache,
@@ -74,6 +93,8 @@ impl AppState {
             session_service,
             permission_service,
             stripe_service,
+            email_service,
+            dunning_service,
         }
     }
 
@@ -119,5 +140,15 @@ impl AppState {
     /// Check if Stripe is enabled
     pub fn is_stripe_enabled(&self) -> bool {
         self.stripe_service.is_some()
+    }
+
+    /// Get the email service
+    pub fn email_service(&self) -> Arc<EmailService> {
+        Arc::clone(&self.email_service)
+    }
+
+    /// Get the dunning service if enabled
+    pub fn dunning_service(&self) -> Option<Arc<DunningService>> {
+        self.dunning_service.clone()
     }
 }

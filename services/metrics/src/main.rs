@@ -5,12 +5,14 @@
 
 mod aggregator;
 mod alerts;
+pub mod clickhouse;
 mod handlers;
 mod storage;
 mod streams;
 
 use aggregator::{AggregatorConfig, MetricsAggregator};
 use alerts::{AlertConfig, AlertManager};
+use clickhouse::{ClickHouseAnalytics, ClickHouseConfig};
 use handlers::MetricsGrpcService;
 use pistonprotection_common::{config::Config, geoip::GeoIpService, redis::CacheService, telemetry};
 use pistonprotection_proto::metrics::metrics_service_server::MetricsServiceServer;
@@ -35,7 +37,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 const SERVICE_NAME: &str = "metrics";
 
@@ -46,6 +48,7 @@ pub struct AppState {
     pub storage: Arc<TimeSeriesStorage>,
     pub alerts: Arc<AlertManager>,
     pub streamer: Arc<MetricsStreamer>,
+    pub clickhouse: Option<Arc<ClickHouseAnalytics>>,
 }
 
 #[tokio::main]
@@ -186,12 +189,59 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create metrics streamer
     let streamer = Arc::new(MetricsStreamer::new(aggregator.clone()));
 
+    // Initialize ClickHouse for high-volume event analytics
+    let clickhouse = if let Ok(clickhouse_url) = std::env::var("CLICKHOUSE_URL") {
+        let ch_config = ClickHouseConfig {
+            url: clickhouse_url,
+            database: std::env::var("CLICKHOUSE_DATABASE")
+                .unwrap_or_else(|_| "pistonprotection".to_string()),
+            username: std::env::var("CLICKHOUSE_USERNAME").ok(),
+            password: std::env::var("CLICKHOUSE_PASSWORD").ok(),
+            batch_size: std::env::var("CLICKHOUSE_BATCH_SIZE")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(10000),
+            flush_interval: Duration::from_secs(
+                std::env::var("CLICKHOUSE_FLUSH_INTERVAL_SECS")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(5),
+            ),
+            raw_ttl_days: std::env::var("CLICKHOUSE_RAW_TTL_DAYS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(7),
+            aggregated_ttl_days: std::env::var("CLICKHOUSE_AGGREGATED_TTL_DAYS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(365),
+        };
+
+        match ClickHouseAnalytics::new(ch_config.clone()).await {
+            Ok(ch) => {
+                info!("ClickHouse analytics initialized");
+                let ch = Arc::new(ch);
+                // Start background flush task
+                clickhouse::start_flush_task(ch.clone(), ch_config.flush_interval);
+                Some(ch)
+            }
+            Err(e) => {
+                warn!("Failed to initialize ClickHouse: {}. Running without event analytics.", e);
+                None
+            }
+        }
+    } else {
+        info!("No CLICKHOUSE_URL configured, running without event analytics");
+        None
+    };
+
     // Create application state
     let app_state = AppState {
         aggregator: aggregator.clone(),
         storage: storage.clone(),
         alerts: alerts.clone(),
         streamer: streamer.clone(),
+        clickhouse: clickhouse.clone(),
     };
 
     // Start background tasks
@@ -244,24 +294,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Spawn HTTP server
     let http_handle = tokio::spawn(async move {
-        info!("HTTP server listening on {}", http_addr);
-        let listener = tokio::net::TcpListener::bind(http_addr)
-            .await
-            .expect("Failed to bind HTTP listener");
-        axum::serve(listener, http_router)
-            .await
-            .expect("HTTP server error");
+        info!(addr = %http_addr, "Starting HTTP server");
+        match tokio::net::TcpListener::bind(http_addr).await {
+            Ok(listener) => {
+                info!(addr = %http_addr, "HTTP server listening");
+                if let Err(e) = axum::serve(listener, http_router).await {
+                    error!(error = %e, "HTTP server error");
+                }
+            }
+            Err(e) => {
+                error!(error = %e, addr = %http_addr, "Failed to bind HTTP server");
+            }
+        }
     });
 
     // Spawn gRPC server
     let grpc_handle = tokio::spawn(async move {
-        info!("gRPC server listening on {}", grpc_addr);
-        Server::builder()
+        info!(addr = %grpc_addr, "Starting gRPC server");
+        match Server::builder()
             .add_service(health_service)
             .add_service(MetricsServiceServer::new(metrics_service))
             .serve(grpc_addr)
             .await
-            .expect("gRPC server error");
+        {
+            Ok(()) => info!("gRPC server shut down"),
+            Err(e) => error!(error = %e, "gRPC server error"),
+        }
     });
 
     info!("Metrics collector ready");
@@ -283,6 +341,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         error!("Failed to flush metrics during shutdown: {}", e);
     }
 
+    // Flush ClickHouse events
+    if let Some(ref ch) = clickhouse {
+        if let Err(e) = ch.flush_all().await {
+            error!("Failed to flush ClickHouse events during shutdown: {}", e);
+        }
+    }
+
     telemetry::shutdown();
 
     info!("Shutdown complete");
@@ -302,6 +367,13 @@ fn create_http_router(state: AppState) -> Router {
         .route("/health/ready", get(readiness_check))
         .route("/metrics", get(prometheus_metrics))
         .route("/api/v1/status", get(service_status))
+        // ClickHouse analytics endpoints
+        .route("/api/v1/analytics/traffic/:backend_id", get(get_traffic_analytics))
+        .route("/api/v1/analytics/sources/:backend_id", get(get_top_sources))
+        .route("/api/v1/analytics/countries/:backend_id", get(get_traffic_by_country))
+        .route("/api/v1/analytics/timeseries/:backend_id", get(get_traffic_timeseries))
+        .route("/api/v1/analytics/attacks/:backend_id", get(get_attack_analytics))
+        .route("/api/v1/analytics/filters/:backend_id", get(get_filter_analytics))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state)
@@ -372,19 +444,181 @@ async fn service_status(State(state): State<AppState>) -> impl IntoResponse {
     })
 }
 
+/// Query parameters for analytics endpoints
+#[derive(Debug, Deserialize)]
+struct AnalyticsQuery {
+    /// Start time in RFC3339 format (optional, defaults to 24h ago)
+    start: Option<String>,
+    /// End time in RFC3339 format (optional, defaults to now)
+    end: Option<String>,
+    /// Limit for results (optional)
+    limit: Option<u32>,
+    /// Interval in seconds for time series (optional, defaults to 300)
+    interval: Option<u32>,
+}
+
+impl AnalyticsQuery {
+    fn parse_times(&self) -> (DateTime<Utc>, DateTime<Utc>) {
+        use chrono::Duration;
+        let end = self
+            .end
+            .as_ref()
+            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(Utc::now);
+        let start = self
+            .start
+            .as_ref()
+            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(|| end - Duration::hours(24));
+        (start, end)
+    }
+}
+
+use axum::extract::Path;
+use chrono::{DateTime as ChronoDateTime, Utc as ChronoUtc};
+
+async fn get_traffic_analytics(
+    State(state): State<AppState>,
+    Path(backend_id): Path<String>,
+    axum::extract::Query(query): axum::extract::Query<AnalyticsQuery>,
+) -> impl IntoResponse {
+    let Some(ref ch) = state.clickhouse else {
+        return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+            "error": "ClickHouse analytics not configured"
+        })));
+    };
+
+    let (start, end) = query.parse_times();
+    match ch.get_traffic_stats(&backend_id, start, end).await {
+        Ok(stats) => (StatusCode::OK, Json(serde_json::to_value(stats).unwrap_or_default())),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": e.to_string()
+        }))),
+    }
+}
+
+async fn get_top_sources(
+    State(state): State<AppState>,
+    Path(backend_id): Path<String>,
+    axum::extract::Query(query): axum::extract::Query<AnalyticsQuery>,
+) -> impl IntoResponse {
+    let Some(ref ch) = state.clickhouse else {
+        return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+            "error": "ClickHouse analytics not configured"
+        })));
+    };
+
+    let (start, end) = query.parse_times();
+    let limit = query.limit.unwrap_or(100);
+    match ch.get_top_sources(&backend_id, start, end, limit).await {
+        Ok(sources) => (StatusCode::OK, Json(serde_json::to_value(sources).unwrap_or_default())),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": e.to_string()
+        }))),
+    }
+}
+
+async fn get_traffic_by_country(
+    State(state): State<AppState>,
+    Path(backend_id): Path<String>,
+    axum::extract::Query(query): axum::extract::Query<AnalyticsQuery>,
+) -> impl IntoResponse {
+    let Some(ref ch) = state.clickhouse else {
+        return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+            "error": "ClickHouse analytics not configured"
+        })));
+    };
+
+    let (start, end) = query.parse_times();
+    match ch.get_traffic_by_country(&backend_id, start, end).await {
+        Ok(countries) => (StatusCode::OK, Json(serde_json::to_value(countries).unwrap_or_default())),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": e.to_string()
+        }))),
+    }
+}
+
+async fn get_traffic_timeseries(
+    State(state): State<AppState>,
+    Path(backend_id): Path<String>,
+    axum::extract::Query(query): axum::extract::Query<AnalyticsQuery>,
+) -> impl IntoResponse {
+    let Some(ref ch) = state.clickhouse else {
+        return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+            "error": "ClickHouse analytics not configured"
+        })));
+    };
+
+    let (start, end) = query.parse_times();
+    let interval = query.interval.unwrap_or(300); // 5 minutes default
+    match ch.get_traffic_time_series(&backend_id, start, end, interval).await {
+        Ok(series) => (StatusCode::OK, Json(serde_json::to_value(series).unwrap_or_default())),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": e.to_string()
+        }))),
+    }
+}
+
+async fn get_attack_analytics(
+    State(state): State<AppState>,
+    Path(backend_id): Path<String>,
+    axum::extract::Query(query): axum::extract::Query<AnalyticsQuery>,
+) -> impl IntoResponse {
+    let Some(ref ch) = state.clickhouse else {
+        return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+            "error": "ClickHouse analytics not configured"
+        })));
+    };
+
+    let (start, end) = query.parse_times();
+    let limit = query.limit.unwrap_or(50);
+    match ch.get_attack_events(&backend_id, start, end, limit).await {
+        Ok(attacks) => (StatusCode::OK, Json(serde_json::to_value(attacks).unwrap_or_default())),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": e.to_string()
+        }))),
+    }
+}
+
+async fn get_filter_analytics(
+    State(state): State<AppState>,
+    Path(backend_id): Path<String>,
+    axum::extract::Query(query): axum::extract::Query<AnalyticsQuery>,
+) -> impl IntoResponse {
+    let Some(ref ch) = state.clickhouse else {
+        return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+            "error": "ClickHouse analytics not configured"
+        })));
+    };
+
+    let (start, end) = query.parse_times();
+    match ch.get_filter_stats(&backend_id, start, end).await {
+        Ok(filters) => (StatusCode::OK, Json(serde_json::to_value(filters).unwrap_or_default())),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": e.to_string()
+        }))),
+    }
+}
+
 async fn shutdown_signal() {
     let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("Failed to install Ctrl+C handler");
+        match signal::ctrl_c().await {
+            Ok(()) => info!("Received Ctrl+C signal"),
+            Err(e) => error!(error = %e, "Failed to listen for Ctrl+C signal"),
+        }
     };
 
     #[cfg(unix)]
     let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("Failed to install signal handler")
-            .recv()
-            .await;
+        match signal::unix::signal(signal::unix::SignalKind::terminate()) {
+            Ok(mut signal) => {
+                signal.recv().await;
+                info!("Received SIGTERM signal");
+            }
+            Err(e) => error!(error = %e, "Failed to listen for SIGTERM signal"),
+        }
     };
 
     #[cfg(not(unix))]

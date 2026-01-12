@@ -5,6 +5,7 @@
 //! - DDoSProtection CRD for defining protected backends
 //! - FilterRule CRD for custom filtering rules
 //! - Backend CRD for backend service definitions
+//! - IPBlocklist CRD for IP blocklist management
 //!
 //! The operator synchronizes configuration with the PistonProtection gateway
 //! service via gRPC and manages worker deployments for traffic filtering.
@@ -25,7 +26,7 @@ use kube::{
         events::{Recorder, Reporter},
         watcher::Config as WatcherConfig,
     },
-    Client, CustomResourceExt,
+    Client, CustomResourceExt, Resource,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -33,15 +34,11 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
-mod client;
-mod controllers;
-mod crd;
-mod error;
-mod metrics;
-
-use client::{GatewayClient, GatewayClientConfig};
-use crd::{Backend, DDoSProtection, FilterRule};
-use metrics::Metrics;
+use pistonprotection_operator::client::{GatewayClient, GatewayClientConfig};
+use pistonprotection_operator::controllers;
+use pistonprotection_operator::crd::{Backend, DDoSProtection, FilterRule, IPBlocklist};
+use pistonprotection_operator::metrics::Metrics;
+use pistonprotection_operator::worker::WorkerManager;
 
 /// Application state shared across components
 struct AppState {
@@ -55,6 +52,8 @@ struct AppState {
     metrics: Arc<Metrics>,
     /// Gateway client
     gateway_client: Arc<GatewayClient>,
+    /// Worker manager
+    worker_manager: Arc<RwLock<Option<WorkerManager>>>,
 }
 
 impl AppState {
@@ -65,6 +64,7 @@ impl AppState {
             is_leader: AtomicBool::new(false),
             metrics,
             gateway_client,
+            worker_manager: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -86,6 +86,14 @@ struct OperatorConfig {
     health_addr: String,
     /// Enable Backend controller
     enable_backend_controller: bool,
+    /// Enable IPBlocklist controller
+    enable_ipblocklist_controller: bool,
+    /// Worker namespace for pod discovery
+    worker_namespace: String,
+    /// Worker pod selector
+    worker_selector: String,
+    /// Worker gRPC port
+    worker_grpc_port: u16,
     /// Reconciliation concurrency
     concurrency: usize,
 }
@@ -108,6 +116,17 @@ impl Default for OperatorConfig {
             enable_backend_controller: std::env::var("ENABLE_BACKEND_CONTROLLER")
                 .map(|v| v.to_lowercase() == "true")
                 .unwrap_or(true),
+            enable_ipblocklist_controller: std::env::var("ENABLE_IPBLOCKLIST_CONTROLLER")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(true),
+            worker_namespace: std::env::var("WORKER_NAMESPACE")
+                .unwrap_or_else(|_| "pistonprotection-system".to_string()),
+            worker_selector: std::env::var("WORKER_SELECTOR")
+                .unwrap_or_else(|_| "app.kubernetes.io/component=worker".to_string()),
+            worker_grpc_port: std::env::var("WORKER_GRPC_PORT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(50052),
             concurrency: std::env::var("RECONCILIATION_CONCURRENCY")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -162,6 +181,31 @@ async fn main() -> Result<()> {
 
     // Create application state
     let state = Arc::new(AppState::new(metrics.clone(), gateway_client.clone()));
+
+    // Initialize worker manager
+    let worker_manager = WorkerManager::new(
+        client.clone(),
+        config.worker_namespace.clone(),
+        config.worker_selector.clone(),
+        config.worker_grpc_port,
+    );
+    {
+        let mut wm = state.worker_manager.write().await;
+        *wm = Some(worker_manager);
+    }
+
+    // Initial worker discovery
+    if let Some(ref wm) = *state.worker_manager.read().await {
+        match wm.discover_workers().await {
+            Ok(workers) => {
+                info!("Discovered {} worker pods", workers.len());
+                metrics.record_worker_count(workers.len());
+            }
+            Err(e) => {
+                warn!("Initial worker discovery failed: {}", e);
+            }
+        }
+    }
 
     // Start health/metrics server
     let health_server = start_health_server(state.clone(), &config);
@@ -218,6 +262,18 @@ async fn main() -> Result<()> {
         None
     };
 
+    let ipblocklist_controller = if config.enable_ipblocklist_controller {
+        Some(start_ipblocklist_controller(
+            client.clone(),
+            gateway_client.clone(),
+            metrics.clone(),
+            &config,
+            reporter.clone(),
+        ))
+    } else {
+        None
+    };
+
     // Mark as ready
     state.ready.store(true, Ordering::SeqCst);
     info!("Operator is ready");
@@ -245,6 +301,16 @@ async fn main() -> Result<()> {
         } => {
             error!("Backend controller exited unexpectedly");
         }
+        _ = async {
+            if let Some(ctrl) = ipblocklist_controller {
+                ctrl.await
+            } else {
+                // Never completes if IPBlocklist controller is disabled
+                std::future::pending::<()>().await
+            }
+        } => {
+            error!("IPBlocklist controller exited unexpectedly");
+        }
         _ = tokio::signal::ctrl_c() => {
             info!("Received shutdown signal");
         }
@@ -269,13 +335,11 @@ async fn start_ddos_controller(
         None => Api::all(client.clone()),
     };
 
-    let recorder = Recorder::new(client.clone(), reporter, "DDoSProtection".to_string());
-
     let ctx = Arc::new(controllers::ddos_protection::Context::new(
         client.clone(),
         (*gateway_client).clone(),
         metrics.clone(),
-        recorder,
+        reporter,
     ));
 
     info!("Starting DDoSProtection controller");
@@ -313,13 +377,11 @@ async fn start_filter_controller(
         None => Api::all(client.clone()),
     };
 
-    let recorder = Recorder::new(client.clone(), reporter, "FilterRule".to_string());
-
     let ctx = Arc::new(controllers::filter_rule::Context::new(
         client.clone(),
         (*gateway_client).clone(),
         metrics.clone(),
-        recorder,
+        reporter,
     ));
 
     info!("Starting FilterRule controller");
@@ -357,13 +419,11 @@ async fn start_backend_controller(
         None => Api::all(client.clone()),
     };
 
-    let recorder = Recorder::new(client.clone(), reporter, "Backend".to_string());
-
     let ctx = Arc::new(controllers::backend::Context::new(
         client.clone(),
         (*gateway_client).clone(),
         metrics.clone(),
-        recorder,
+        reporter,
     ));
 
     info!("Starting Backend controller");
@@ -388,6 +448,48 @@ async fn start_backend_controller(
         .await;
 }
 
+/// Start the IPBlocklist controller
+async fn start_ipblocklist_controller(
+    client: Client,
+    gateway_client: Arc<GatewayClient>,
+    metrics: Arc<Metrics>,
+    config: &OperatorConfig,
+    reporter: Reporter,
+) {
+    let api: Api<IPBlocklist> = match &config.namespace {
+        Some(ns) => Api::namespaced(client.clone(), ns),
+        None => Api::all(client.clone()),
+    };
+
+    let ctx = Arc::new(controllers::ip_blocklist::Context::new(
+        client.clone(),
+        (*gateway_client).clone(),
+        metrics.clone(),
+        reporter,
+    ));
+
+    info!("Starting IPBlocklist controller");
+
+    Controller::new(api, WatcherConfig::default().any_semantic())
+        .shutdown_on_signal()
+        .run(
+            controllers::ip_blocklist::reconcile,
+            controllers::ip_blocklist::error_policy,
+            ctx,
+        )
+        .for_each(|result| async {
+            match result {
+                Ok((obj, _action)) => {
+                    info!("Reconciled IPBlocklist: {}", obj.name);
+                }
+                Err(e) => {
+                    error!("Reconciliation error: {:?}", e);
+                }
+            }
+        })
+        .await;
+}
+
 /// Start the health and metrics HTTP server
 async fn start_health_server(
     state: Arc<AppState>,
@@ -400,10 +502,10 @@ async fn start_health_server(
         .route("/", get(root_handler))
         .with_state(state);
 
-    let addr = config.health_addr.parse()?;
+    let addr: std::net::SocketAddr = config.health_addr.parse()?;
     info!("Starting health/metrics server on {}", addr);
 
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app)
         .await
         .context("Health server failed")?;
@@ -468,6 +570,11 @@ fn print_crd_info() {
         Backend::group(&()),
         Backend::kind(&())
     );
+    info!(
+        "  - {}/{}",
+        IPBlocklist::group(&()),
+        IPBlocklist::kind(&())
+    );
 }
 
 /// Generate CRD YAML manifests (for installation)
@@ -476,15 +583,16 @@ fn generate_crds() -> String {
     let ddos_crd = serde_yaml::to_string(&DDoSProtection::crd()).unwrap();
     let filter_crd = serde_yaml::to_string(&FilterRule::crd()).unwrap();
     let backend_crd = serde_yaml::to_string(&Backend::crd()).unwrap();
+    let ipblocklist_crd = serde_yaml::to_string(&IPBlocklist::crd()).unwrap();
 
     format!(
-        "---\n{}\n---\n{}\n---\n{}",
-        ddos_crd, filter_crd, backend_crd
+        "---\n{}\n---\n{}\n---\n{}\n---\n{}",
+        ddos_crd, filter_crd, backend_crd, ipblocklist_crd
     )
 }
 
 #[cfg(test)]
-mod tests {
+mod main_tests {
     use super::*;
 
     #[test]
@@ -492,6 +600,8 @@ mod tests {
         let config = OperatorConfig::default();
         assert!(config.leader_election);
         assert_eq!(config.concurrency, 4);
+        assert!(config.enable_backend_controller);
+        assert!(config.enable_ipblocklist_controller);
     }
 
     #[test]
@@ -500,6 +610,7 @@ mod tests {
         assert!(crds.contains("DDoSProtection"));
         assert!(crds.contains("FilterRule"));
         assert!(crds.contains("Backend"));
+        assert!(crds.contains("IPBlocklist"));
         assert!(crds.contains("pistonprotection.io"));
     }
 

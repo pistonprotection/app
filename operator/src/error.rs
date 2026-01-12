@@ -140,6 +140,10 @@ pub enum Error {
     /// Metrics error
     #[error("Metrics error: {0}")]
     MetricsError(String),
+
+    /// Permanent error that should not be retried
+    #[error("Permanent error: {0}")]
+    Permanent(String),
 }
 
 impl Error {
@@ -169,6 +173,7 @@ impl Error {
                 | Error::ValidationError { .. }
                 | Error::MissingField(_)
                 | Error::ConfigError(_)
+                | Error::Permanent(_)
         )
     }
 
@@ -241,7 +246,8 @@ impl Error {
 
             Error::InternalError(_)
             | Error::LeaderElectionError(_)
-            | Error::MetricsError(_) => "internal",
+            | Error::MetricsError(_)
+            | Error::Permanent(_) => "internal",
         }
     }
 

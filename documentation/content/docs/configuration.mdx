@@ -1,0 +1,163 @@
+---
+title: Configuration
+description: Configure PistonProtection protection rules and settings
+---
+
+# Configuration Guide
+
+This guide covers configuring PistonProtection for optimal DDoS protection.
+
+## Protection Levels
+
+PistonProtection supports multiple protection levels:
+
+| Level | Description | Use Case |
+|-------|-------------|----------|
+| 1 - Low | Minimal filtering | Trusted networks |
+| 2 - Medium | Balanced protection | General use |
+| 3 - High | Aggressive filtering | Under attack |
+| 4 - Maximum | Strict validation | Active attack mitigation |
+
+```yaml
+protection:
+  defaultLevel: 3
+```
+
+## Rate Limiting
+
+Configure rate limits to prevent flood attacks:
+
+```yaml
+protection:
+  rateLimit:
+    # Packets per second per IP
+    ppsPerIp: 1000
+    # Burst allowance
+    burst: 2000
+    # Global packets per second limit
+    globalPps: 1000000
+    # Connections per IP limit
+    connectionsPerIp: 100
+    # New connections per second per IP
+    newConnectionsPerSecond: 50
+```
+
+## Protocol-Specific Settings
+
+### TCP Protection
+
+```yaml
+protection:
+  protocols:
+    tcp:
+      enabled: true
+      maxSegmentSize: 1460
+      connectionTracking: true
+    synCookies:
+      enabled: true
+      threshold: 1000
+```
+
+### UDP Protection
+
+```yaml
+protection:
+  protocols:
+    udp:
+      enabled: true
+      timeout: 30
+```
+
+### Minecraft Protocol
+
+```yaml
+protection:
+  protocols:
+    minecraft:
+      enabled: true
+      minVersion: 47        # 1.8.x
+      maxVersion: 769       # 1.21.x
+      packetInspection: true
+      maxPacketSize: 32767
+```
+
+### QUIC Protocol
+
+```yaml
+protection:
+  protocols:
+    quic:
+      enabled: true
+      maxStreams: 100
+```
+
+## Challenge Settings
+
+Configure JavaScript challenges for suspicious traffic:
+
+```yaml
+protection:
+  challenge:
+    jsChallenge: true
+    cookieLifetime: 3600
+    difficulty: 5
+```
+
+## Blocklist and Allowlist
+
+```yaml
+protection:
+  lists:
+    blacklistEnabled: true
+    whitelistEnabled: true
+    autoBlacklistThreshold: 10
+    autoBlacklistDuration: 3600
+```
+
+## Environment Variables
+
+Required environment variables:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `DATABASE_URL` | PostgreSQL connection string | Yes |
+| `REDIS_URL` | Redis connection string | Yes |
+| `BETTER_AUTH_SECRET` | Auth signing secret | Yes |
+| `STRIPE_SECRET_KEY` | Stripe API key | For billing |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook secret | For billing |
+
+## Backend Configuration
+
+Add backends to protect:
+
+```bash
+curl -X POST https://api.pistonprotection.io/v1/backends \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Main API Server",
+    "address": "api.example.com",
+    "port": 443,
+    "protocol": "https"
+  }'
+```
+
+## Filter Rules
+
+Create custom filter rules via API or dashboard:
+
+```bash
+curl -X POST https://api.pistonprotection.io/v1/filters \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Block SYN Flood",
+    "type": "tcp",
+    "action": "block",
+    "priority": 100,
+    "conditions": {
+      "synRatePerIp": { "gt": 10000 }
+    },
+    "enabled": true
+  }'
+```

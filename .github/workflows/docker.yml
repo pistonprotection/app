@@ -1,0 +1,321 @@
+# =============================================================================
+# PistonProtection - Docker Build Workflow
+# =============================================================================
+# This workflow builds and pushes Docker images to GitHub Container Registry.
+# Triggers on push to main and version tags.
+# =============================================================================
+
+name: Docker
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      push:
+        description: 'Push images to registry'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ===========================================================================
+  # Prepare - Extract metadata and set build matrix
+  # ===========================================================================
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      push: ${{ steps.meta.outputs.push }}
+      is_tag: ${{ steps.meta.outputs.is_tag }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Extract metadata
+        id: meta
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "is_tag=true" >> $GITHUB_OUTPUT
+            echo "push=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "version=dev-${{ github.sha }}" >> $GITHUB_OUTPUT
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+            echo "push=${{ inputs.push }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=main-${{ github.sha }}" >> $GITHUB_OUTPUT
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+            echo "push=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set build matrix
+        id: matrix
+        run: |
+          echo 'matrix={"include":[
+            {"component":"gateway","context":".","file":"./docker/gateway/Dockerfile"},
+            {"component":"worker","context":".","file":"./docker/worker/Dockerfile"},
+            {"component":"config-mgr","context":".","file":"./docker/config-mgr/Dockerfile"},
+            {"component":"metrics","context":".","file":"./docker/metrics/Dockerfile"},
+            {"component":"auth","context":".","file":"./docker/auth/Dockerfile"},
+            {"component":"operator","context":".","file":"./docker/operator/Dockerfile"},
+            {"component":"frontend","context":".","file":"./docker/frontend/Dockerfile"}
+          ]}' >> $GITHUB_OUTPUT
+
+  # ===========================================================================
+  # Build and Push Docker Images
+  # ===========================================================================
+  build:
+    name: Build ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        if: ${{ needs.prepare.outputs.push == 'true' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.component }}
+          tags: |
+            # Tag events - create semver tags
+            type=semver,pattern={{version}},enable=${{ needs.prepare.outputs.is_tag == 'true' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.prepare.outputs.is_tag == 'true' }}
+            type=semver,pattern={{major}},enable=${{ needs.prepare.outputs.is_tag == 'true' }}
+            # Main branch - tag with 'latest' and sha
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=sha-,enable=${{ github.ref == 'refs/heads/main' }}
+            # Always add git sha for traceability
+            type=sha,format=long
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ needs.prepare.outputs.push == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+          build-args: |
+            VERSION=${{ needs.prepare.outputs.version }}
+            GIT_COMMIT=${{ github.sha }}
+          provenance: true
+          sbom: true
+
+      - name: Export image digest
+        if: ${{ needs.prepare.outputs.push == 'true' }}
+        run: |
+          mkdir -p /tmp/digests
+          echo "${{ steps.meta.outputs.tags }}" > /tmp/digests/${{ matrix.component }}.txt
+
+      - name: Upload digest
+        if: ${{ needs.prepare.outputs.push == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.component }}
+          path: /tmp/digests
+          retention-days: 1
+
+  # ===========================================================================
+  # Sign Container Images (for tagged releases)
+  # ===========================================================================
+  sign:
+    name: Sign Images
+    runs-on: ubuntu-latest
+    needs: [prepare, build]
+    if: ${{ needs.prepare.outputs.is_tag == 'true' && needs.prepare.outputs.push == 'true' }}
+    strategy:
+      matrix:
+        component:
+          - gateway
+          - worker
+          - config-mgr
+          - metrics
+          - auth
+          - operator
+          - frontend
+    steps:
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sign image with cosign
+        run: |
+          cosign sign --yes \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.component }}:${{ needs.prepare.outputs.version }}
+
+  # ===========================================================================
+  # Generate SBOM for all images
+  # ===========================================================================
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    needs: [prepare, build]
+    if: ${{ needs.prepare.outputs.push == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - gateway
+          - worker
+          - config-mgr
+          - metrics
+          - auth
+          - operator
+          - frontend
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.component }}:${{ needs.prepare.outputs.version }}
+          artifact-name: sbom-${{ matrix.component }}.spdx.json
+          output-file: sbom-${{ matrix.component }}.spdx.json
+        continue-on-error: true
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.component }}
+          path: sbom-${{ matrix.component }}.spdx.json
+        continue-on-error: true
+
+  # ===========================================================================
+  # Scan Images with Trivy
+  # ===========================================================================
+  scan:
+    name: Scan ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    needs: [prepare, build]
+    if: ${{ needs.prepare.outputs.push == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - gateway
+          - worker
+          - config-mgr
+          - metrics
+          - auth
+          - operator
+          - frontend
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.component }}:${{ needs.prepare.outputs.version }}
+          severity: 'CRITICAL,HIGH'
+          format: 'sarif'
+          output: 'trivy-${{ matrix.component }}.sarif'
+          exit-code: '0'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-${{ matrix.component }}.sarif'
+          category: 'trivy-${{ matrix.component }}'
+
+  # ===========================================================================
+  # Summary
+  # ===========================================================================
+  summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [prepare, build, sign, sbom, scan]
+    if: always()
+    steps:
+      - name: Download all digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digest-*
+          path: /tmp/digests
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Generate summary
+        run: |
+          echo "# Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.prepare.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Push:** ${{ needs.prepare.outputs.push }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Built Images" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          for component in gateway worker config-mgr metrics auth operator frontend; do
+            if [ -f "/tmp/digests/$component.txt" ]; then
+              echo "| $component | Built |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| $component | - |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Pull Commands" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          for component in gateway worker config-mgr metrics auth operator frontend; do
+            echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/$component:${{ needs.prepare.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          done
+          echo '```' >> $GITHUB_STEP_SUMMARY

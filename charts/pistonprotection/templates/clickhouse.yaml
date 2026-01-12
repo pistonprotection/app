@@ -1,0 +1,168 @@
+{{- if .Values.clickhouse.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pistonprotection.fullname" . }}-clickhouse-config
+  labels:
+    {{- include "pistonprotection.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+data:
+  config.xml: |
+    <?xml version="1.0"?>
+    <clickhouse>
+        <logger>
+            <level>{{ .Values.clickhouse.config.logLevel }}</level>
+            <console>true</console>
+        </logger>
+
+        <listen_host>::</listen_host>
+        <http_port>8123</http_port>
+        <tcp_port>9000</tcp_port>
+
+        <max_server_memory_usage>{{ .Values.clickhouse.config.maxServerMemoryUsage }}</max_server_memory_usage>
+        <max_concurrent_queries>{{ .Values.clickhouse.config.maxConcurrentQueries }}</max_concurrent_queries>
+        <background_pool_size>{{ .Values.clickhouse.config.backgroundPoolSize }}</background_pool_size>
+
+        <path>/var/lib/clickhouse/</path>
+        <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+        <user_files_path>/var/lib/clickhouse/user_files/</user_files_path>
+
+        <mark_cache_size>5368709120</mark_cache_size>
+
+        <profiles>
+            <default>
+                <max_memory_usage>{{ .Values.clickhouse.config.maxMemoryUsage }}</max_memory_usage>
+            </default>
+        </profiles>
+
+        <users>
+            <{{ .Values.clickhouse.auth.username }}>
+                <password>{{ .Values.clickhouse.auth.password }}</password>
+                <networks>
+                    <ip>::/0</ip>
+                </networks>
+                <profile>default</profile>
+                <quota>default</quota>
+            </{{ .Values.clickhouse.auth.username }}>
+        </users>
+
+        <quotas>
+            <default>
+                <interval>
+                    <duration>3600</duration>
+                    <queries>0</queries>
+                    <errors>0</errors>
+                    <result_rows>0</result_rows>
+                    <read_rows>0</read_rows>
+                    <execution_time>0</execution_time>
+                </interval>
+            </default>
+        </quotas>
+    </clickhouse>
+  init.sql: |
+    CREATE DATABASE IF NOT EXISTS {{ .Values.clickhouse.database }};
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pistonprotection.fullname" . }}-clickhouse
+  labels:
+    {{- include "pistonprotection.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8123
+      targetPort: 8123
+    - name: native
+      port: 9000
+      targetPort: 9000
+  selector:
+    {{- include "pistonprotection.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "pistonprotection.fullname" . }}-clickhouse
+  labels:
+    {{- include "pistonprotection.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  serviceName: {{ include "pistonprotection.fullname" . }}-clickhouse
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "pistonprotection.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: clickhouse
+  template:
+    metadata:
+      labels:
+        {{- include "pistonprotection.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: clickhouse
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: clickhouse
+          image: "{{ .Values.clickhouse.image.repository }}:{{ .Values.clickhouse.image.tag }}"
+          imagePullPolicy: {{ .Values.clickhouse.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8123
+              protocol: TCP
+            - name: native
+              containerPort: 9000
+              protocol: TCP
+          {{- with .Values.clickhouse.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/clickhouse-server/config.xml
+              subPath: config.xml
+            - name: data
+              mountPath: /var/lib/clickhouse
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "pistonprotection.fullname" . }}-clickhouse-config
+  {{- if .Values.clickhouse.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- if .Values.clickhouse.persistence.storageClass }}
+        storageClassName: {{ .Values.clickhouse.persistence.storageClass }}
+        {{- else if .Values.global.storageClass }}
+        storageClassName: {{ .Values.global.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.clickhouse.persistence.size }}
+  {{- else }}
+      volumes:
+        - name: data
+          emptyDir: {}
+  {{- end }}
+{{- end }}

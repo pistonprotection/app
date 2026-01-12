@@ -1,0 +1,255 @@
+# =============================================================================
+# PistonProtection - Test Values (Using nginx placeholder images)
+# =============================================================================
+# Use this for quick Helm chart testing without building all images
+# Replaces all service images with nginx for connectivity testing
+#
+# Usage:
+#   helm install pp ./charts/pistonprotection -f ./charts/pistonprotection/values-test.yaml
+#
+# =============================================================================
+
+global:
+  imagePullSecrets: []
+  storageClass: standard
+  environment: test
+  logLevel: debug
+
+# Use nginx as placeholder for all services
+# This allows testing Helm chart rendering and basic connectivity
+
+gateway:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: nginx
+    tag: alpine
+    pullPolicy: IfNotPresent
+  service:
+    type: NodePort
+    port: 8080
+    grpcPort: 9090
+    metricsPort: 9091
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
+  podSecurityContext:
+    runAsNonRoot: false
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 80
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 80
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+worker:
+  enabled: false  # Disable worker in test mode
+
+configMgr:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: nginx
+    tag: alpine
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
+  podSecurityContext:
+    runAsNonRoot: false
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+
+metrics:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: nginx
+    tag: alpine
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
+  podSecurityContext:
+    runAsNonRoot: false
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+
+auth:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: nginx
+    tag: alpine
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
+  podSecurityContext:
+    runAsNonRoot: false
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+
+operator:
+  enabled: false  # Disable operator in test mode (requires CRDs)
+
+frontend:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: nginx
+    tag: alpine
+    pullPolicy: IfNotPresent
+  service:
+    type: NodePort
+    port: 3000
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
+  podSecurityContext:
+    runAsNonRoot: false
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+
+ingress:
+  enabled: false
+
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: testpassword
+    username: pistonprotection
+    password: testpassword
+    database: pistonprotection
+  primary:
+    persistence:
+      enabled: true
+      size: 500Mi
+      storageClass: standard
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: true
+      size: 100Mi
+      storageClass: standard
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+
+clickhouse:
+  enabled: false  # Disable ClickHouse in test mode
+
+observability:
+  prometheus:
+    enabled: false
+    serviceMonitor:
+      enabled: false
+    rules:
+      enabled: false
+  grafana:
+    enabled: false
+  loki:
+    enabled: false
+  tracing:
+    enabled: false
+
+geoip:
+  enabled: false
+
+stripe:
+  enabled: false
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+rbac:
+  create: true
+
+networkPolicy:
+  enabled: false
+
+protection:
+  defaultLevel: 1
+  rateLimit:
+    ppsPerIp: 100000
+    burst: 500000
+    globalPps: 10000000
+    connectionsPerIp: 10000
+    newConnectionsPerSecond: 5000
+
+secrets:
+  externalSecrets:
+    enabled: false
+  jwtSigningKey: "test-jwt-key"
+  encryptionKey: "test-encryption-key"

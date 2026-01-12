@@ -122,6 +122,21 @@ pub struct BackendSpec {
     pub metadata: Option<BTreeMap<String, String>>,
 }
 
+impl Default for BackendSpec {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            address: String::new(),
+            protocol: Protocol::Tcp,
+            weight: default_weight(),
+            health_check: None,
+            rate_limit: None,
+            proxy_protocol: None,
+            metadata: None,
+        }
+    }
+}
+
 fn default_weight() -> u32 {
     1
 }
@@ -349,7 +364,7 @@ pub struct DDoSProtectionStatus {
 }
 
 /// Phase of the DDoSProtection resource
-#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema, PartialEq)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, Default, JsonSchema, PartialEq, Eq)]
 pub enum Phase {
     #[default]
     Pending,
@@ -549,7 +564,7 @@ impl FilterAction {
 }
 
 /// Filter rule configuration
-#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, PartialEq)]
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct FilterRuleConfig {
     /// IP addresses or CIDR ranges
@@ -948,6 +963,239 @@ pub struct EndpointStatus {
 }
 
 // ============================================================================
+// IPBlocklist CRD
+// ============================================================================
+
+/// IPBlocklist Custom Resource Definition
+///
+/// Manages IP blocklists that can be applied to filter traffic.
+#[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[kube(
+    group = "pistonprotection.io",
+    version = "v1alpha1",
+    kind = "IPBlocklist",
+    namespaced,
+    status = "IPBlocklistStatus",
+    shortname = "ipbl",
+    printcolumn = r#"{"name":"Entries", "type":"integer", "jsonPath":".status.entryCount"}"#,
+    printcolumn = r#"{"name":"Source", "type":"string", "jsonPath":".spec.source"}"#,
+    printcolumn = r#"{"name":"Synced", "type":"boolean", "jsonPath":".status.gatewaySynced"}"#,
+    printcolumn = r#"{"name":"Age", "type":"date", "jsonPath":".metadata.creationTimestamp"}"#
+)]
+#[serde(rename_all = "camelCase")]
+pub struct IPBlocklistSpec {
+    /// Display name for the blocklist
+    pub name: String,
+
+    /// Optional description
+    #[serde(default)]
+    pub description: Option<String>,
+
+    /// Source of the blocklist
+    #[serde(default)]
+    pub source: BlocklistSource,
+
+    /// Static IP addresses or CIDR ranges
+    #[serde(default)]
+    pub entries: Vec<BlocklistEntry>,
+
+    /// External URL to fetch blocklist from (for external source)
+    #[serde(default)]
+    pub external_url: Option<String>,
+
+    /// Refresh interval for external sources (in seconds)
+    #[serde(default = "default_refresh_interval")]
+    pub refresh_interval_seconds: u32,
+
+    /// Whether the blocklist is enabled
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    /// Default action for matched IPs
+    #[serde(default)]
+    pub action: BlocklistAction,
+
+    /// Selector for DDoSProtection resources this blocklist applies to
+    #[serde(default)]
+    pub selector: Option<LabelSelector>,
+
+    /// Priority (higher = processed first)
+    #[serde(default = "default_blocklist_priority")]
+    pub priority: i32,
+
+    /// Tags for categorization
+    #[serde(default)]
+    pub tags: Vec<String>,
+
+    /// Expiration time for entries (0 = never expire)
+    #[serde(default)]
+    pub default_ttl_seconds: u32,
+}
+
+fn default_refresh_interval() -> u32 {
+    3600 // 1 hour
+}
+
+fn default_blocklist_priority() -> i32 {
+    100
+}
+
+/// Blocklist source type
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum BlocklistSource {
+    /// Manually managed entries
+    #[default]
+    Static,
+    /// Fetched from external URL
+    External,
+    /// Automatically populated by attack detection
+    Automatic,
+    /// Aggregated from multiple sources
+    Aggregated,
+}
+
+impl std::fmt::Display for BlocklistSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BlocklistSource::Static => write!(f, "static"),
+            BlocklistSource::External => write!(f, "external"),
+            BlocklistSource::Automatic => write!(f, "automatic"),
+            BlocklistSource::Aggregated => write!(f, "aggregated"),
+        }
+    }
+}
+
+/// Action to take for blocked IPs
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum BlocklistAction {
+    /// Drop packets silently
+    #[default]
+    Drop,
+    /// Reject with ICMP/TCP RST
+    Reject,
+    /// Rate limit traffic
+    RateLimit,
+    /// Redirect to tarpit/honeypot
+    Tarpit,
+    /// Log only (monitor mode)
+    Log,
+}
+
+impl BlocklistAction {
+    /// Convert to gRPC action value
+    pub fn to_grpc_action(&self) -> i32 {
+        match self {
+            BlocklistAction::Drop => 2,
+            BlocklistAction::Reject => 7,
+            BlocklistAction::RateLimit => 3,
+            BlocklistAction::Tarpit => 8,
+            BlocklistAction::Log => 5,
+        }
+    }
+}
+
+/// Individual blocklist entry
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BlocklistEntry {
+    /// IP address or CIDR range
+    pub ip: String,
+
+    /// Reason for blocking
+    #[serde(default)]
+    pub reason: Option<String>,
+
+    /// When this entry was added (ISO 8601)
+    #[serde(default)]
+    pub added_at: Option<String>,
+
+    /// When this entry expires (ISO 8601, None = never)
+    #[serde(default)]
+    pub expires_at: Option<String>,
+
+    /// Source that added this entry
+    #[serde(default)]
+    pub source: Option<String>,
+
+    /// Custom action for this entry (overrides blocklist default)
+    #[serde(default)]
+    pub action: Option<BlocklistAction>,
+
+    /// Additional metadata
+    #[serde(default)]
+    pub metadata: Option<BTreeMap<String, String>>,
+}
+
+impl Default for BlocklistEntry {
+    fn default() -> Self {
+        Self {
+            ip: String::new(),
+            reason: None,
+            added_at: Some(chrono::Utc::now().to_rfc3339()),
+            expires_at: None,
+            source: None,
+            action: None,
+            metadata: None,
+        }
+    }
+}
+
+/// Status of the IPBlocklist resource
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct IPBlocklistStatus {
+    /// Number of entries in the blocklist
+    #[serde(default)]
+    pub entry_count: i32,
+
+    /// Number of active (non-expired) entries
+    #[serde(default)]
+    pub active_entries: i32,
+
+    /// Gateway sync status
+    #[serde(default)]
+    pub gateway_synced: bool,
+
+    /// Last sync time
+    #[serde(default)]
+    pub last_synced: Option<String>,
+
+    /// Last refresh time (for external sources)
+    #[serde(default)]
+    pub last_refreshed: Option<String>,
+
+    /// Next scheduled refresh (for external sources)
+    #[serde(default)]
+    pub next_refresh: Option<String>,
+
+    /// Observed generation
+    #[serde(default)]
+    pub observed_generation: Option<i64>,
+
+    /// Total blocks performed
+    #[serde(default)]
+    pub total_blocks: u64,
+
+    /// Blocks in the last hour
+    #[serde(default)]
+    pub blocks_last_hour: u64,
+
+    /// Number of DDoSProtection resources this blocklist applies to
+    #[serde(default)]
+    pub applied_to_count: i32,
+
+    /// Last error message
+    #[serde(default)]
+    pub last_error: Option<String>,
+
+    /// Status conditions
+    #[serde(default)]
+    pub conditions: Vec<Condition>,
+}
+
+// ============================================================================
 // Constants
 // ============================================================================
 
@@ -989,5 +1237,28 @@ mod tests {
         let condition = Condition::new("Ready", true, "Reconciled", "Resource is ready");
         assert_eq!(condition.condition_type, "Ready");
         assert_eq!(condition.status, "True");
+    }
+
+    #[test]
+    fn test_blocklist_source_display() {
+        assert_eq!(BlocklistSource::Static.to_string(), "static");
+        assert_eq!(BlocklistSource::External.to_string(), "external");
+        assert_eq!(BlocklistSource::Automatic.to_string(), "automatic");
+        assert_eq!(BlocklistSource::Aggregated.to_string(), "aggregated");
+    }
+
+    #[test]
+    fn test_blocklist_action_conversion() {
+        assert_eq!(BlocklistAction::Drop.to_grpc_action(), 2);
+        assert_eq!(BlocklistAction::RateLimit.to_grpc_action(), 3);
+        assert_eq!(BlocklistAction::Log.to_grpc_action(), 5);
+    }
+
+    #[test]
+    fn test_blocklist_entry_default() {
+        let entry = BlocklistEntry::default();
+        assert!(entry.ip.is_empty());
+        assert!(entry.added_at.is_some());
+        assert!(entry.expires_at.is_none());
     }
 }

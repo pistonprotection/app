@@ -1,0 +1,303 @@
+---
+title: Architecture
+description: System architecture and component overview
+---
+
+# Architecture Overview
+
+PistonProtection is a distributed system designed for high-performance DDoS mitigation at the network edge.
+
+## System Components
+
+```
+                                    ┌─────────────────┐
+                                    │   Frontend UI   │
+                                    │  (TanStack)     │
+                                    └────────┬────────┘
+                                             │
+                                    ┌────────▼────────┐
+                                    │    Gateway      │
+                                    │   (Rust/gRPC)   │
+                                    └────────┬────────┘
+                                             │
+            ┌────────────────────────────────┼────────────────────────────────┐
+            │                                │                                │
+   ┌────────▼────────┐            ┌──────────▼──────────┐          ┌─────────▼─────────┐
+   │  Auth Service   │            │   Config Manager    │          │  Metrics Service  │
+   │  (Better Auth)  │            │      (Rust)         │          │     (Rust)        │
+   └────────┬────────┘            └──────────┬──────────┘          └─────────┬─────────┘
+            │                                │                                │
+            │                     ┌──────────▼──────────┐                    │
+            │                     │  K8s Operator       │                    │
+            │                     │    (Rust/kube-rs)   │                    │
+            │                     └──────────┬──────────┘                    │
+            │                                │                                │
+            └────────────────────────────────┼────────────────────────────────┘
+                                             │
+                      ┌──────────────────────┼──────────────────────┐
+                      │                      │                      │
+            ┌─────────▼─────────┐  ┌─────────▼─────────┐  ┌─────────▼─────────┐
+            │   Worker Node 1   │  │   Worker Node 2   │  │   Worker Node N   │
+            │  (eBPF/XDP)       │  │  (eBPF/XDP)       │  │  (eBPF/XDP)       │
+            └───────────────────┘  └───────────────────┘  └───────────────────┘
+                      │                      │                      │
+                      └──────────────────────┼──────────────────────┘
+                                             │
+                                    ┌────────▼────────┐
+                                    │  Network Traffic │
+                                    └─────────────────┘
+```
+
+## Component Details
+
+### Worker Nodes
+
+Workers run eBPF/XDP programs that filter traffic at the network interface level:
+
+- **XDP Layer**: Processes packets before the kernel network stack
+- **Per-CPU Maps**: Lock-free data structures for high throughput
+- **Protocol Parsers**: TCP, UDP, QUIC, HTTP, Minecraft protocol inspection
+- **Hot Updates**: Filter rules can be updated without reloading
+
+```rust
+// XDP return codes
+XDP_DROP    // Drop the packet
+XDP_PASS    // Pass to kernel stack
+XDP_TX      // Transmit back on same interface
+XDP_REDIRECT // Redirect to another interface
+```
+
+### Gateway Service
+
+Central API gateway handling all management operations:
+
+- **REST API**: Frontend and external integrations
+- **gRPC API**: High-performance internal communication
+- **WebSocket**: Real-time updates and streaming metrics
+- **Circuit Breaker**: Resilient backend connections
+- **Load Balancing**: Distribute requests to backend workers
+
+### Auth Service
+
+Authentication and authorization using Better Auth:
+
+- **OAuth2/OIDC**: Support for Google, GitHub, etc.
+- **JWT Tokens**: Stateless authentication
+- **MFA/2FA**: TOTP-based multi-factor auth
+- **API Keys**: Machine-to-machine authentication
+- **Organizations**: Multi-tenant support with RBAC
+
+### Config Manager
+
+Distributes configuration to worker nodes:
+
+- **Configuration Store**: PostgreSQL-backed config storage
+- **Change Detection**: Efficient config diff and push
+- **Versioning**: Track config versions for rollback
+- **Validation**: Schema validation before distribution
+
+### Metrics Service
+
+Collects and aggregates metrics from all workers:
+
+- **Time Series**: Store metrics in Redis and PostgreSQL
+- **ClickHouse**: High-volume event analytics
+- **Real-time Streaming**: WebSocket streams for dashboards
+- **Alert Manager**: Configurable alert rules
+
+### Kubernetes Operator
+
+Manages PistonProtection resources in Kubernetes:
+
+- **Backend CRD**: Define protected backends
+- **FilterRule CRD**: Configure filter rules
+- **DDoSProtection CRD**: Set protection policies
+- **IPBlocklist CRD**: Manage IP blocklists
+- **Reconciliation**: Continuously sync desired state
+
+## Data Flow
+
+### Request Path (Normal Traffic)
+
+```
+1. Packet arrives at NIC
+2. XDP program inspects packet headers
+3. Protocol-specific parsing (TCP/UDP/HTTP/etc.)
+4. Check against filter rules
+5. Evaluate rate limits
+6. Pass to kernel or drop
+7. Kernel routes to backend
+```
+
+### Configuration Updates
+
+```
+1. Admin creates/updates FilterRule CRD
+2. Operator detects change
+3. Operator validates configuration
+4. Config Manager receives update via gRPC
+5. Config Manager pushes to Redis
+6. Workers poll for config changes
+7. Workers update eBPF maps atomically
+```
+
+### Metrics Collection
+
+```
+1. Worker eBPF programs update per-CPU counters
+2. Worker userspace reads counters periodically
+3. Metrics sent to Metrics Service via gRPC stream
+4. Metrics Service aggregates and stores
+5. ClickHouse receives event stream
+6. Dashboard queries aggregated metrics
+```
+
+## Deployment Architecture
+
+### Single Cluster
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Kubernetes Cluster                    │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
+│  │ Control Plane                                  │     │
+│  │  - Gateway   - Config Mgr   - Operator        │     │
+│  │  - Auth      - Metrics      - Frontend        │     │
+│  └─────────────┴─────────────┴─────────────────┘     │
+│                                                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
+│  │ Worker Pool (DaemonSet on dedicated nodes)    │     │
+│  │  Node 1      Node 2          Node 3           │     │
+│  └─────────────┴─────────────┴─────────────────┘     │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Data Stores                                      │   │
+│  │  PostgreSQL │ Redis │ ClickHouse                │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Multi-Region (HA)
+
+```
+         ┌─────────────────┐
+         │   Global LB     │
+         │   (Anycast)     │
+         └────────┬────────┘
+                  │
+    ┌─────────────┼─────────────┐
+    │             │             │
+┌───▼───┐     ┌───▼───┐     ┌───▼───┐
+│ US-E  │     │ EU-W  │     │ APAC  │
+│Cluster│     │Cluster│     │Cluster│
+└───┬───┘     └───┬───┘     └───┬───┘
+    │             │             │
+    └─────────────┼─────────────┘
+                  │
+         ┌────────▼────────┐
+         │ Global Control  │
+         │ Plane (Optional)│
+         └─────────────────┘
+```
+
+## Network Architecture
+
+### Cilium CNI Integration
+
+PistonProtection works with Cilium for advanced networking:
+
+```yaml
+# CiliumNetworkPolicy for PistonProtection
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: pistonprotection-workers
+spec:
+  endpointSelector:
+    matchLabels:
+      app: pistonprotection-worker
+  ingress:
+    - fromEntities:
+        - world
+  egress:
+    - toEntities:
+        - cluster
+```
+
+### XDP Modes
+
+| Mode | Performance | Hardware Support |
+|------|-------------|------------------|
+| Native | Highest | Required NIC driver support |
+| Offload | Maximum | Requires smart NIC |
+| Generic | Good | Works everywhere (fallback) |
+
+## Storage Architecture
+
+### PostgreSQL
+
+Primary database for:
+- User accounts and organizations
+- Backend configurations
+- Filter rules
+- Audit logs
+
+### Redis
+
+Caching and real-time data:
+- Session storage
+- Rate limit counters
+- Configuration cache
+- Real-time metrics
+
+### ClickHouse
+
+High-volume analytics:
+- Request events
+- Attack events
+- Traffic time series
+- Long-term aggregations
+
+## Security Architecture
+
+### Defense in Depth
+
+```
+┌─────────────────────────────────────────┐
+│            Network Security              │
+│  - NetworkPolicy (Cilium/Kubernetes)    │
+│  - XDP rate limiting                     │
+└────────────────┬────────────────────────┘
+                 │
+┌────────────────▼────────────────────────┐
+│          Application Security            │
+│  - JWT authentication                    │
+│  - RBAC authorization                    │
+│  - Input validation                      │
+└────────────────┬────────────────────────┘
+                 │
+┌────────────────▼────────────────────────┐
+│            Data Security                 │
+│  - Encryption at rest                    │
+│  - Encryption in transit (mTLS)         │
+│  - Secret management                     │
+└─────────────────────────────────────────┘
+```
+
+### Service Mesh (Optional)
+
+When using Istio or Linkerd:
+
+```yaml
+# mTLS between services
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: pistonprotection-mtls
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: pistonprotection
+  mtls:
+    mode: STRICT
+```

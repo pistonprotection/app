@@ -70,10 +70,6 @@ pretty_assertions = "1.4"
 fake = { version = "2.9", features = ["derive"] }
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 
-[[test]]
-name = "integration"
-path = "src/tests/mod.rs"
-
 [[bench]]
 name = "operator_benchmarks"
 harness = false

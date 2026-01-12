@@ -9,6 +9,7 @@ pub mod geoip;
 pub mod metrics;
 pub mod ratelimit;
 pub mod redis;
+pub mod scoring;
 pub mod telemetry;
 
 pub use config::Config;

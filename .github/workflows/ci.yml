@@ -1,3 +1,10 @@
+# =============================================================================
+# PistonProtection - Main CI Workflow
+# =============================================================================
+# This workflow runs on every push to main and pull requests.
+# It handles testing, linting, and building of all components.
+# =============================================================================
+
 name: CI
 
 on:
@@ -20,7 +27,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Detect changes to optimize CI runs
+  # ===========================================================================
+  # Change Detection
+  # ===========================================================================
   changes:
     name: Detect Changes
     runs-on: ubuntu-latest
@@ -40,8 +49,6 @@ jobs:
             rust:
               - 'services/**'
               - 'proto/**'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
             frontend:
               - 'frontend/**'
             ebpf:
@@ -53,9 +60,11 @@ jobs:
             docker:
               - 'docker/**'
 
-  # Rust services build and test
-  rust-build:
-    name: Rust Build
+  # ===========================================================================
+  # Rust Services - Format Check
+  # ===========================================================================
+  rust-format:
+    name: Rust Format
     runs-on: ubuntu-latest
     needs: changes
     if: ${{ needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch' }}
@@ -65,7 +74,31 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-action@stable
         with:
-          components: rustfmt, clippy
+          components: rustfmt
+
+      - name: Check formatting (services)
+        run: cargo fmt --all -- --check
+        working-directory: services
+
+      - name: Check formatting (operator)
+        run: cargo fmt --all -- --check
+        working-directory: operator
+
+  # ===========================================================================
+  # Rust Services - Lint
+  # ===========================================================================
+  rust-lint:
+    name: Rust Lint
+    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          components: clippy
 
       - name: Install protobuf compiler
         run: |
@@ -84,31 +117,26 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-registry-
 
-      - name: Cache cargo build
+      - name: Cache cargo build (services)
         uses: actions/cache@v4
         with:
           path: services/target
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('services/**/*.rs') }}
+          key: ${{ runner.os }}-cargo-services-lint-${{ hashFiles('services/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-
-            ${{ runner.os }}-cargo-build-
+            ${{ runner.os }}-cargo-services-lint-
 
-      - name: Build services
-        run: cargo build --all-features
+      - name: Run clippy (services)
+        run: cargo clippy --all-targets --all-features -- -D warnings
         working-directory: services
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: rust-binaries
-          path: |
-            services/target/debug/pistonprotection-*
-          retention-days: 1
-
+  # ===========================================================================
+  # Rust Services - Tests
+  # ===========================================================================
   rust-test:
     name: Rust Tests
     runs-on: ubuntu-latest
-    needs: rust-build
+    needs: [changes, rust-format]
+    if: ${{ needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch' }}
     services:
       postgres:
         image: postgres:16
@@ -146,7 +174,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler libprotobuf-dev
 
-      - name: Cache cargo
+      - name: Cache cargo registry
         uses: actions/cache@v4
         with:
           path: |
@@ -154,8 +182,18 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            services/target
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo build (services)
+        uses: actions/cache@v4
+        with:
+          path: services/target
+          key: ${{ runner.os }}-cargo-services-test-${{ hashFiles('services/Cargo.lock') }}-${{ hashFiles('services/**/*.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-services-test-${{ hashFiles('services/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-services-test-
 
       - name: Run unit tests
         run: cargo test --lib --all-features
@@ -169,49 +207,26 @@ jobs:
         run: cargo test --doc --all-features
         working-directory: services
 
-  rust-coverage:
-    name: Code Coverage
+  # ===========================================================================
+  # Rust Services - Build
+  # ===========================================================================
+  rust-build:
+    name: Rust Build
     runs-on: ubuntu-latest
-    needs: rust-build
-    if: github.event_name == 'pull_request'
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: pistonprotection_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
-    env:
-      DATABASE_URL: postgres://test:test@localhost:5432/pistonprotection_test
-      REDIS_URL: redis://localhost:6379
+    needs: [changes, rust-test]
+    if: ${{ needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-action@stable
-        with:
-          components: llvm-tools-preview
 
       - name: Install protobuf compiler
         run: |
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler libprotobuf-dev
 
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Cache cargo
+      - name: Cache cargo registry
         uses: actions/cache@v4
         with:
           path: |
@@ -219,21 +234,102 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            services/target
-          key: ${{ runner.os }}-cargo-cov-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
 
-      - name: Generate coverage report
-        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+      - name: Cache cargo build (services)
+        uses: actions/cache@v4
+        with:
+          path: services/target
+          key: ${{ runner.os }}-cargo-services-build-${{ hashFiles('services/Cargo.lock') }}-${{ hashFiles('services/**/*.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-services-build-
+
+      - name: Build services (release)
+        run: cargo build --release --all-features
         working-directory: services
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
         with:
-          files: services/lcov.info
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+          name: rust-binaries
+          path: |
+            services/target/release/pistonprotection-*
+          retention-days: 7
 
-  # eBPF programs build
+  # ===========================================================================
+  # Operator - Lint and Test
+  # ===========================================================================
+  operator-lint:
+    name: Operator Lint
+    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ needs.changes.outputs.operator == 'true' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo (operator)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            operator/target
+          key: ${{ runner.os }}-cargo-operator-${{ hashFiles('operator/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-operator-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+        working-directory: operator
+
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: operator
+
+  operator-test:
+    name: Operator Tests
+    runs-on: ubuntu-latest
+    needs: [changes, operator-lint]
+    if: ${{ needs.changes.outputs.operator == 'true' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo (operator)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            operator/target
+          key: ${{ runner.os }}-cargo-operator-test-${{ hashFiles('operator/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-operator-
+
+      - name: Run operator tests
+        run: cargo test --all-features
+        working-directory: operator
+
+      - name: Build operator (release)
+        run: cargo build --release
+        working-directory: operator
+
+  # ===========================================================================
+  # eBPF Programs - Build
+  # ===========================================================================
   ebpf-build:
     name: eBPF Build
     runs-on: ubuntu-latest
@@ -257,13 +353,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/bpf-linker
-          key: ${{ runner.os }}-bpf-linker-0.9
+          key: ${{ runner.os }}-bpf-linker-v0.9
 
       - name: Install bpf-linker
         if: steps.cache-bpf-linker.outputs.cache-hit != 'true'
-        run: cargo +nightly install bpf-linker
+        run: cargo +nightly install bpf-linker --locked
 
-      - name: Cache cargo
+      - name: Cache cargo (eBPF)
         uses: actions/cache@v4
         with:
           path: |
@@ -272,6 +368,8 @@ jobs:
             ~/.cargo/git/db/
             ebpf/target
           key: ${{ runner.os }}-cargo-ebpf-${{ hashFiles('ebpf/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-ebpf-
 
       - name: Build eBPF programs (debug)
         run: cargo +nightly build --target bpfel-unknown-none -Z build-std=core
@@ -286,45 +384,14 @@ jobs:
         with:
           name: ebpf-programs
           path: |
-            ebpf/target/bpfel-unknown-none/release/*.o
+            ebpf/target/bpfel-unknown-none/release/*
           retention-days: 7
 
-  # Kubernetes operator tests
-  operator-build:
-    name: Operator Build
-    runs-on: ubuntu-latest
-    needs: changes
-    if: ${{ needs.changes.outputs.operator == 'true' || github.event_name == 'workflow_dispatch' }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
-        with:
-          components: clippy
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            operator/target
-          key: ${{ runner.os }}-cargo-operator-${{ hashFiles('operator/Cargo.lock') }}
-
-      - name: Build operator
-        run: cargo build --release
-        working-directory: operator
-
-      - name: Run operator tests
-        run: cargo test
-        working-directory: operator
-
-  # Frontend build and test
-  frontend-build:
-    name: Frontend Build
+  # ===========================================================================
+  # Frontend - Lint
+  # ===========================================================================
+  frontend-lint:
+    name: Frontend Lint
     runs-on: ubuntu-latest
     needs: changes
     if: ${{ needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' }}
@@ -347,11 +414,69 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: frontend
 
-      - name: Type check
-        run: pnpm typecheck
+      - name: Run Biome check
+        run: pnpm check
         working-directory: frontend
 
-      - name: Build
+  # ===========================================================================
+  # Frontend - Test
+  # ===========================================================================
+  frontend-test:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    needs: [changes, frontend-lint]
+    if: ${{ needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: frontend
+
+      - name: Run tests
+        run: pnpm test
+        working-directory: frontend
+
+  # ===========================================================================
+  # Frontend - Build
+  # ===========================================================================
+  frontend-build:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    needs: [changes, frontend-test]
+    if: ${{ needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: frontend
+
+      - name: Build frontend
         run: pnpm build
         working-directory: frontend
         env:
@@ -364,7 +489,9 @@ jobs:
           path: frontend/.output
           retention-days: 7
 
-  # Helm chart validation
+  # ===========================================================================
+  # Helm Chart - Validation
+  # ===========================================================================
   helm-validate:
     name: Helm Validate
     runs-on: ubuntu-latest
@@ -397,19 +524,17 @@ jobs:
             --set postgresql.enabled=false \
             --set redis.enabled=false
 
-      - name: Install helm-unittest
-        run: helm plugin install https://github.com/helm-unittest/helm-unittest.git
-
-      - name: Run Helm unit tests
-        run: helm unittest charts/pistonprotection
-        continue-on-error: true
-
-  # Build Docker images (for PR validation only, no push)
-  docker-build:
-    name: Docker Build
+  # ===========================================================================
+  # Docker Build Validation (PR only - no push)
+  # ===========================================================================
+  docker-build-check:
+    name: Docker Build Check
     runs-on: ubuntu-latest
-    needs: [rust-build, frontend-build, ebpf-build, operator-build]
-    if: always() && !cancelled()
+    needs: [rust-build, frontend-build, ebpf-build, operator-test]
+    if: |
+      always() &&
+      !cancelled() &&
+      github.event_name == 'pull_request'
     strategy:
       fail-fast: false
       matrix:
@@ -427,39 +552,99 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
+      - name: Build Docker image (no push)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./docker/${{ matrix.component }}/Dockerfile
           push: false
-          tags: pistonprotection/${{ matrix.component }}:test
+          tags: pistonprotection/${{ matrix.component }}:pr-${{ github.event.pull_request.number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
-  # Summary job for branch protection
+  # ===========================================================================
+  # CI Summary - Status Check for Branch Protection
+  # ===========================================================================
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
     needs:
+      - rust-format
+      - rust-lint
       - rust-test
+      - rust-build
+      - operator-lint
+      - operator-test
       - ebpf-build
-      - operator-build
+      - frontend-lint
+      - frontend-test
       - frontend-build
       - helm-validate
-      - docker-build
     if: always()
     steps:
-      - name: Check all jobs
+      - name: Generate CI Summary
         run: |
-          if [[ "${{ needs.rust-test.result }}" == "failure" ]] || \
-             [[ "${{ needs.ebpf-build.result }}" == "failure" ]] || \
-             [[ "${{ needs.operator-build.result }}" == "failure" ]] || \
-             [[ "${{ needs.frontend-build.result }}" == "failure" ]] || \
-             [[ "${{ needs.helm-validate.result }}" == "failure" ]] || \
-             [[ "${{ needs.docker-build.result }}" == "failure" ]]; then
+          echo "# CI Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust Format | ${{ needs.rust-format.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust Lint | ${{ needs.rust-lint.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust Tests | ${{ needs.rust-test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust Build | ${{ needs.rust-build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Operator Lint | ${{ needs.operator-lint.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Operator Tests | ${{ needs.operator-test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| eBPF Build | ${{ needs.ebpf-build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend Lint | ${{ needs.frontend-lint.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend Tests | ${{ needs.frontend-test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend Build | ${{ needs.frontend-build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Helm Validate | ${{ needs.helm-validate.result }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check all required jobs
+        run: |
+          # Check if any critical job failed
+          failed=false
+
+          # Rust jobs (only fail if changes were detected and job failed)
+          if [[ "${{ needs.rust-format.result }}" == "failure" ]] || \
+             [[ "${{ needs.rust-lint.result }}" == "failure" ]] || \
+             [[ "${{ needs.rust-test.result }}" == "failure" ]] || \
+             [[ "${{ needs.rust-build.result }}" == "failure" ]]; then
+            echo "Rust jobs failed"
+            failed=true
+          fi
+
+          # Operator jobs
+          if [[ "${{ needs.operator-lint.result }}" == "failure" ]] || \
+             [[ "${{ needs.operator-test.result }}" == "failure" ]]; then
+            echo "Operator jobs failed"
+            failed=true
+          fi
+
+          # eBPF jobs
+          if [[ "${{ needs.ebpf-build.result }}" == "failure" ]]; then
+            echo "eBPF build failed"
+            failed=true
+          fi
+
+          # Frontend jobs
+          if [[ "${{ needs.frontend-lint.result }}" == "failure" ]] || \
+             [[ "${{ needs.frontend-test.result }}" == "failure" ]] || \
+             [[ "${{ needs.frontend-build.result }}" == "failure" ]]; then
+            echo "Frontend jobs failed"
+            failed=true
+          fi
+
+          # Helm jobs
+          if [[ "${{ needs.helm-validate.result }}" == "failure" ]]; then
+            echo "Helm validation failed"
+            failed=true
+          fi
+
+          if $failed; then
             echo "One or more jobs failed"
             exit 1
           fi
-          echo "All required jobs passed!"
+
+          echo "All required jobs passed or were skipped!"

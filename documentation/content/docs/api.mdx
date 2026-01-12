@@ -1,0 +1,237 @@
+---
+title: API Reference
+description: PistonProtection REST and gRPC API documentation
+---
+
+# API Reference
+
+PistonProtection provides both REST and gRPC APIs for management and configuration.
+
+## Authentication
+
+All API requests require authentication using either:
+
+- **API Key**: `Authorization: Bearer pp_live_xxxxx`
+- **Session Token**: `Cookie: session=xxxxx`
+
+## REST API
+
+Base URL: `https://api.pistonprotection.io/v1`
+
+### Backends
+
+#### List Backends
+
+```http
+GET /v1/backends
+```
+
+Response:
+```json
+{
+  "data": [
+    {
+      "id": "backend_123",
+      "name": "Main API Server",
+      "address": "api.example.com",
+      "port": 443,
+      "protocol": "https",
+      "status": "healthy",
+      "createdAt": "2025-01-12T00:00:00Z"
+    }
+  ]
+}
+```
+
+#### Create Backend
+
+```http
+POST /v1/backends
+Content-Type: application/json
+
+{
+  "name": "Game Server",
+  "address": "192.168.1.100",
+  "port": 25565,
+  "protocol": "minecraft_java"
+}
+```
+
+#### Update Backend
+
+```http
+PUT /v1/backends/:id
+Content-Type: application/json
+
+{
+  "name": "Game Server (Updated)"
+}
+```
+
+#### Delete Backend
+
+```http
+DELETE /v1/backends/:id
+```
+
+### Filters
+
+#### List Filters
+
+```http
+GET /v1/filters
+```
+
+#### Create Filter
+
+```http
+POST /v1/filters
+Content-Type: application/json
+
+{
+  "name": "Rate Limit UDP",
+  "type": "udp",
+  "action": "rate_limit",
+  "priority": 90,
+  "conditions": {
+    "packetsPerSecond": { "gt": 5000 }
+  },
+  "enabled": true
+}
+```
+
+#### Toggle Filter
+
+```http
+PATCH /v1/filters/:id/toggle
+```
+
+### Analytics
+
+#### Get Traffic Metrics
+
+```http
+GET /v1/analytics/traffic?timeRange=24h
+```
+
+Response:
+```json
+{
+  "data": {
+    "totalRequests": 158400000,
+    "blockedAttacks": 16382,
+    "peakTraffic": 89200,
+    "uptime": 99.99
+  }
+}
+```
+
+#### Get Attack Events
+
+```http
+GET /v1/analytics/attacks?limit=100
+```
+
+### IP Management
+
+#### Block IP
+
+```http
+POST /v1/ips/block
+Content-Type: application/json
+
+{
+  "ip": "192.168.1.1",
+  "reason": "manual",
+  "duration": 3600
+}
+```
+
+#### Unblock IP
+
+```http
+DELETE /v1/ips/block/:ip
+```
+
+#### Allowlist IP
+
+```http
+POST /v1/ips/allowlist
+Content-Type: application/json
+
+{
+  "ip": "10.0.0.0/8",
+  "description": "Internal network"
+}
+```
+
+## gRPC API
+
+The gRPC API is available on port 9090 for high-performance integrations.
+
+### Proto Definition
+
+```protobuf
+service ProtectionService {
+  rpc GetStats(GetStatsRequest) returns (GetStatsResponse);
+  rpc BlockIP(BlockIPRequest) returns (BlockIPResponse);
+  rpc UnblockIP(UnblockIPRequest) returns (UnblockIPResponse);
+  rpc UpdateFilter(UpdateFilterRequest) returns (UpdateFilterResponse);
+  rpc StreamMetrics(StreamMetricsRequest) returns (stream MetricsResponse);
+}
+```
+
+### Streaming Metrics
+
+```go
+client := pb.NewProtectionServiceClient(conn)
+stream, _ := client.StreamMetrics(ctx, &pb.StreamMetricsRequest{
+  Interval: 1000, // ms
+})
+
+for {
+  metrics, _ := stream.Recv()
+  fmt.Printf("PPS: %d, Blocked: %d\n", metrics.PacketsPerSecond, metrics.BlockedPackets)
+}
+```
+
+## Webhooks
+
+Configure webhooks to receive real-time notifications:
+
+```http
+POST /v1/webhooks
+Content-Type: application/json
+
+{
+  "url": "https://your-server.com/webhook",
+  "events": ["attack.detected", "backend.down", "filter.triggered"],
+  "secret": "your-webhook-secret"
+}
+```
+
+### Event Types
+
+| Event | Description |
+|-------|-------------|
+| `attack.detected` | DDoS attack detected |
+| `attack.mitigated` | Attack successfully mitigated |
+| `backend.down` | Backend server is down |
+| `backend.up` | Backend server recovered |
+| `filter.triggered` | Filter rule triggered |
+| `rate_limit.exceeded` | Rate limit exceeded |
+
+## Rate Limits
+
+API rate limits:
+
+| Endpoint | Limit |
+|----------|-------|
+| General | 100 req/min |
+| Analytics | 30 req/min |
+| Webhooks | 10 req/min |
+
+Rate limit headers:
+- `X-RateLimit-Limit`
+- `X-RateLimit-Remaining`
+- `X-RateLimit-Reset`

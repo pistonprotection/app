@@ -1,0 +1,46 @@
+---
+title: Introduction
+description: Welcome to PistonProtection - Enterprise DDoS Protection Platform
+---
+
+# Welcome to PistonProtection
+
+PistonProtection is an enterprise-grade DDoS protection platform powered by eBPF/XDP technology. It provides sub-millisecond packet filtering at line rate, protecting your infrastructure from volumetric attacks.
+
+## Key Features
+
+- **High Performance**: XDP filters process packets at the NIC level before they reach the kernel network stack
+- **Protocol Aware**: Deep packet inspection for TCP, UDP, QUIC, HTTP, and Minecraft protocols
+- **Kubernetes Native**: Deploy with Helm, scale with operators, and integrate with Cilium
+- **Real-time Analytics**: Grafana dashboards and Prometheus metrics for complete visibility
+- **Multi-tenant**: Organization support with role-based access control
+
+## Quick Start
+
+```bash
+# Add the Helm repository
+helm repo add pistonprotection https://charts.pistonprotection.io
+
+# Install PistonProtection
+helm install pistonprotection pistonprotection/pistonprotection \
+  --namespace pistonprotection \
+  --create-namespace
+```
+
+## Architecture Overview
+
+PistonProtection consists of several components:
+
+1. **Worker Nodes**: Run eBPF/XDP programs for packet filtering
+2. **Gateway**: API gateway for management and configuration
+3. **Auth Service**: Authentication and authorization with better-auth
+4. **Metrics Service**: Collect and aggregate metrics from workers
+5. **Config Manager**: Distribute configuration to workers
+6. **Kubernetes Operator**: Manage custom resources
+
+## Next Steps
+
+- [Installation Guide](/docs/installation) - Detailed installation instructions
+- [Configuration](/docs/configuration) - Configure protection rules
+- [API Reference](/docs/api) - REST and gRPC API documentation
+- [Filters](/docs/filters) - Learn about filter rules and protocols

@@ -955,6 +955,8 @@ podSecurityPolicy:
 networkPolicy:
   # -- Enable network policies
   enabled: false
+  # -- Network policy type (kubernetes or cilium)
+  type: kubernetes
   # -- Allow ingress from these namespaces
   allowedNamespaces: []
   # -- Allow ingress from these CIDR blocks
@@ -1035,6 +1037,83 @@ protection:
     autoBlacklistThreshold: 10
     # -- Auto-blacklist duration in seconds
     autoBlacklistDuration: 3600
+
+# ============================================================================
+# ClickHouse Configuration (Event Analytics)
+# ============================================================================
+clickhouse:
+  # -- Enable bundled ClickHouse
+  enabled: true
+  # -- ClickHouse architecture (standalone or cluster)
+  architecture: standalone
+  image:
+    # -- ClickHouse image repository
+    repository: clickhouse/clickhouse-server
+    # -- ClickHouse image tag
+    tag: "24.3"
+    # -- Image pull policy
+    pullPolicy: IfNotPresent
+  auth:
+    # -- ClickHouse admin username
+    username: default
+    # -- ClickHouse admin password
+    password: ""
+    # -- Existing secret for ClickHouse password
+    existingSecret: ""
+    # -- Key in existing secret
+    existingSecretKey: password
+  # -- ClickHouse database name
+  database: pistonprotection
+  persistence:
+    # -- Enable persistence
+    enabled: true
+    # -- Storage size
+    size: 50Gi
+    # -- Storage class
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  # -- ClickHouse configuration
+  config:
+    # -- Max server memory usage
+    maxServerMemoryUsage: 3000000000
+    # -- Max concurrent queries
+    maxConcurrentQueries: 100
+    # -- Max memory usage for user
+    maxMemoryUsage: 2000000000
+    # -- Background pool size
+    backgroundPoolSize: 16
+    # -- Log level
+    logLevel: information
+  # -- Data retention configuration
+  retention:
+    # -- Raw events retention in days
+    rawEvents: 7
+    # -- Aggregated data retention in days
+    aggregatedData: 365
+  # -- External ClickHouse (when clickhouse.enabled=false)
+  external:
+    # -- External ClickHouse host
+    host: ""
+    # -- External ClickHouse port
+    port: 8123
+    # -- Native protocol port
+    nativePort: 9000
+    # -- Database name
+    database: pistonprotection
+    # -- Username
+    username: ""
+    # -- Password
+    password: ""
+    # -- Existing secret
+    existingSecret: ""
+    # -- Enable TLS
+    tls: false
 
 # ============================================================================
 # Secrets Configuration

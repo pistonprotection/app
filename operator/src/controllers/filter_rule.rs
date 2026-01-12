@@ -6,6 +6,8 @@
 //! - Selector matching with DDoSProtection resources
 //! - Status updates
 
+use chrono::Datelike;
+
 use crate::client::GatewayClient;
 use crate::crd::{
     Condition, DDoSProtection, FilterRule, FilterRuleStatus, FilterRuleType, FINALIZER,
@@ -13,14 +15,15 @@ use crate::crd::{
 use crate::error::{Error, Result};
 use crate::metrics::{Metrics, ReconciliationTimer};
 
+use k8s_openapi::api::core::v1::ObjectReference;
 use kube::{
     api::{Api, ListParams, ObjectMeta, Patch, PatchParams},
     runtime::{
         controller::Action,
-        events::{Event, EventType, Recorder},
+        events::{Event, EventType, Recorder, Reporter},
         finalizer::{finalizer, Event as FinalizerEvent},
     },
-    Client, ResourceExt,
+    Client, Resource, ResourceExt,
 };
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -35,8 +38,8 @@ pub struct Context {
     pub gateway_client: GatewayClient,
     /// Metrics collector
     pub metrics: Arc<Metrics>,
-    /// Event recorder
-    pub recorder: Recorder,
+    /// Event reporter
+    pub reporter: Reporter,
 }
 
 impl Context {
@@ -45,14 +48,19 @@ impl Context {
         client: Client,
         gateway_client: GatewayClient,
         metrics: Arc<Metrics>,
-        recorder: Recorder,
+        reporter: Reporter,
     ) -> Self {
         Self {
             client,
             gateway_client,
             metrics,
-            recorder,
+            reporter,
         }
+    }
+
+    /// Create a recorder for a specific object
+    fn recorder(&self, obj_ref: ObjectReference) -> Recorder {
+        Recorder::new(self.client.clone(), self.reporter.clone(), obj_ref)
     }
 }
 
@@ -73,15 +81,28 @@ pub async fn reconcile(
 
     let timer = ReconciliationTimer::new(&ctx.metrics, "FilterRule", &namespace);
 
+    // Create object reference for events
+    let obj_ref = ObjectReference {
+        api_version: Some(FilterRule::api_version(&()).to_string()),
+        kind: Some(FilterRule::kind(&()).to_string()),
+        name: Some(name.clone()),
+        namespace: Some(namespace.clone()),
+        uid: rule.metadata.uid.clone(),
+        ..Default::default()
+    };
+    let recorder = ctx.recorder(obj_ref);
+
     // Get API for this namespace
     let rule_api: Api<FilterRule> = Api::namespaced(ctx.client.clone(), &namespace);
 
     // Handle finalizer
     let result = finalizer(&rule_api, FINALIZER, rule, |event| async {
         match event {
-            FinalizerEvent::Apply(rule) => reconcile_apply(&rule, &ctx, &namespace, &name).await,
+            FinalizerEvent::Apply(rule) => {
+                reconcile_apply(&rule, &ctx, &recorder, &namespace, &name).await
+            }
             FinalizerEvent::Cleanup(rule) => {
-                reconcile_cleanup(&rule, &ctx, &namespace, &name).await
+                reconcile_cleanup(&rule, &ctx, &recorder, &namespace, &name).await
             }
         }
     })
@@ -93,8 +114,20 @@ pub async fn reconcile(
             Ok(action)
         }
         Err(e) => {
-            timer.error(e.category());
-            Err(e)
+            let error = match e {
+                kube::runtime::finalizer::Error::ApplyFailed(e) => e,
+                kube::runtime::finalizer::Error::CleanupFailed(e) => e,
+                kube::runtime::finalizer::Error::AddFinalizer(e) => Error::KubeError(e),
+                kube::runtime::finalizer::Error::RemoveFinalizer(e) => Error::KubeError(e),
+                kube::runtime::finalizer::Error::UnnamedObject => {
+                    Error::Permanent("Resource has no name".to_string())
+                }
+                kube::runtime::finalizer::Error::InvalidFinalizer => {
+                    Error::Permanent("Invalid finalizer".to_string())
+                }
+            };
+            timer.error(error.category());
+            Err(error)
         }
     }
 }
@@ -103,6 +136,7 @@ pub async fn reconcile(
 async fn reconcile_apply(
     rule: &FilterRule,
     ctx: &Context,
+    recorder: &Recorder,
     namespace: &str,
     name: &str,
 ) -> Result<Action> {
@@ -123,7 +157,7 @@ async fn reconcile_apply(
     let should_be_active = rule.spec.enabled && is_rule_scheduled_active(rule);
 
     // Record event
-    ctx.recorder
+    recorder
         .publish(Event {
             type_: EventType::Normal,
             reason: "Reconciling".to_string(),
@@ -200,7 +234,7 @@ async fn reconcile_apply(
     update_status(&ctx.client, namespace, name, status).await?;
 
     // Record success event
-    ctx.recorder
+    recorder
         .publish(Event {
             type_: EventType::Normal,
             reason: "Reconciled".to_string(),
@@ -233,15 +267,16 @@ async fn reconcile_apply(
 
 /// Cleanup reconciliation - handle delete
 async fn reconcile_cleanup(
-    rule: &FilterRule,
+    _rule: &FilterRule,
     ctx: &Context,
+    recorder: &Recorder,
     namespace: &str,
     name: &str,
 ) -> Result<Action> {
     info!("Cleaning up FilterRule {}/{}", namespace, name);
 
     // Record event
-    ctx.recorder
+    recorder
         .publish(Event {
             type_: EventType::Normal,
             reason: "Deleting".to_string(),
@@ -337,10 +372,22 @@ fn is_valid_ip_or_cidr(s: &str) -> bool {
             return false;
         }
 
-        let ip_valid = parts[0].parse::<IpAddr>().is_ok();
-        let prefix_valid = parts[1].parse::<u8>().map(|p| p <= 128).unwrap_or(false);
+        let ip = match parts[0].parse::<IpAddr>() {
+            Ok(ip) => ip,
+            Err(_) => return false,
+        };
 
-        ip_valid && prefix_valid
+        let max_prefix = match ip {
+            IpAddr::V4(_) => 32,
+            IpAddr::V6(_) => 128,
+        };
+
+        let prefix_valid = parts[1]
+            .parse::<u8>()
+            .map(|p| p <= max_prefix)
+            .unwrap_or(false);
+
+        prefix_valid
     } else {
         s.parse::<IpAddr>().is_ok()
     }

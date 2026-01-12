@@ -211,9 +211,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let http_addr: SocketAddr = config.http_addr().parse()?;
     let http_server = handlers::http::create_router(worker_state.clone());
     let http_handle = tokio::spawn(async move {
-        info!("HTTP server listening on {}", http_addr);
-        let listener = tokio::net::TcpListener::bind(http_addr).await.unwrap();
-        axum::serve(listener, http_server).await.unwrap();
+        info!(addr = %http_addr, "Starting HTTP server");
+        match tokio::net::TcpListener::bind(http_addr).await {
+            Ok(listener) => {
+                info!(addr = %http_addr, "HTTP server listening");
+                if let Err(e) = axum::serve(listener, http_server).await {
+                    error!(error = %e, "HTTP server error");
+                }
+            }
+            Err(e) => {
+                error!(error = %e, addr = %http_addr, "Failed to bind HTTP server");
+            }
+        }
     });
 
     // Start control plane connection (unless in standalone mode)
@@ -442,28 +451,28 @@ fn update_prometheus_metrics(runtime: &WorkerRuntime) {
 
 async fn shutdown_signal() {
     let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("Failed to install Ctrl+C handler");
+        match signal::ctrl_c().await {
+            Ok(()) => info!("Received Ctrl+C signal"),
+            Err(e) => error!(error = %e, "Failed to listen for Ctrl+C signal"),
+        }
     };
 
     #[cfg(unix)]
     let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("Failed to install signal handler")
-            .recv()
-            .await;
+        match signal::unix::signal(signal::unix::SignalKind::terminate()) {
+            Ok(mut signal) => {
+                signal.recv().await;
+                info!("Received SIGTERM signal");
+            }
+            Err(e) => error!(error = %e, "Failed to listen for SIGTERM signal"),
+        }
     };
 
     #[cfg(not(unix))]
     let terminate = std::future::pending::<()>();
 
     tokio::select! {
-        _ = ctrl_c => {
-            info!("Received Ctrl+C signal");
-        },
-        _ = terminate => {
-            info!("Received SIGTERM signal");
-        },
+        _ = ctrl_c => {},
+        _ = terminate => {},
     }
 }

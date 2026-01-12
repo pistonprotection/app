@@ -1,0 +1,360 @@
+---
+title: Operations Guide
+description: Operating and maintaining PistonProtection in production
+---
+
+# Operations Guide
+
+This guide covers day-to-day operations, monitoring, and maintenance of PistonProtection.
+
+## Monitoring
+
+### Prometheus Metrics
+
+PistonProtection exports comprehensive Prometheus metrics:
+
+```yaml
+# ServiceMonitor for Prometheus Operator
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pistonprotection
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: pistonprotection
+  endpoints:
+    - port: metrics
+      interval: 15s
+```
+
+### Key Metrics
+
+| Metric | Description | Alert Threshold |
+|--------|-------------|-----------------|
+| `piston_requests_total` | Total requests processed | - |
+| `piston_requests_blocked_total` | Blocked requests | Spike detection |
+| `piston_packets_per_second` | Current PPS | > 1M sustained |
+| `piston_bytes_per_second` | Current BPS | > 10 Gbps |
+| `piston_attack_active` | Attack in progress | = 1 |
+| `piston_worker_cpu_percent` | Worker CPU usage | > 80% |
+| `piston_xdp_latency_ns` | XDP processing latency | > 1000ns |
+
+### Grafana Dashboards
+
+Import pre-built dashboards:
+
+1. **Overview Dashboard**: High-level traffic and attack status
+2. **Worker Dashboard**: Per-worker performance metrics
+3. **Backend Dashboard**: Per-backend traffic analysis
+4. **Attack Dashboard**: Attack details and mitigation stats
+
+### Alerts
+
+Example AlertManager rules:
+
+```yaml
+groups:
+  - name: pistonprotection
+    rules:
+      - alert: PistonProtectionAttackDetected
+        expr: piston_attack_active == 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DDoS attack detected on {{ $labels.backend }}"
+
+      - alert: PistonProtectionHighBlockRate
+        expr: rate(piston_requests_blocked_total[5m]) > 10000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High block rate on {{ $labels.backend }}"
+
+      - alert: PistonProtectionWorkerCPUHigh
+        expr: piston_worker_cpu_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker {{ $labels.worker }} CPU high"
+```
+
+## Scaling
+
+### Horizontal Scaling
+
+#### Gateway Scaling
+
+```bash
+kubectl scale deployment pistonprotection-gateway --replicas=5
+```
+
+Or use HPA:
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pistonprotection-gateway
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: pistonprotection-gateway
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+```
+
+#### Worker Scaling
+
+Workers run as DaemonSet on dedicated nodes. Scale by adding nodes:
+
+```bash
+# Add a new worker node
+kubectl label node new-node-1 pistonprotection.io/worker=true
+
+# Remove a worker node
+kubectl label node old-node-1 pistonprotection.io/worker-
+```
+
+### Vertical Scaling
+
+Increase resource limits for workers handling high traffic:
+
+```yaml
+resources:
+  requests:
+    cpu: 2000m
+    memory: 2Gi
+  limits:
+    cpu: 4000m
+    memory: 4Gi
+```
+
+## Backup and Restore
+
+### Database Backup
+
+PostgreSQL backup with pg_dump:
+
+```bash
+# Create backup
+kubectl exec -it pistonprotection-postgresql-0 -- \
+  pg_dump -U postgres pistonprotection > backup.sql
+
+# Restore backup
+kubectl exec -i pistonprotection-postgresql-0 -- \
+  psql -U postgres pistonprotection < backup.sql
+```
+
+### Configuration Export
+
+Export all custom resources:
+
+```bash
+# Export all PistonProtection CRDs
+kubectl get backends,filterrules,ddosprotections,ipblocklists -A -o yaml > config-backup.yaml
+```
+
+### ClickHouse Backup
+
+```bash
+# Create backup partition
+kubectl exec pistonprotection-clickhouse-0 -- \
+  clickhouse-client --query "ALTER TABLE request_events FREEZE PARTITION 202501"
+```
+
+## Upgrades
+
+### Rolling Upgrade
+
+```bash
+# Update Helm chart
+helm upgrade pistonprotection pistonprotection/pistonprotection \
+  --reuse-values \
+  --set image.tag=v1.2.0
+```
+
+### Zero-Downtime Upgrade Strategy
+
+1. **Canary Deployment**: Roll out to one worker first
+2. **Monitor**: Watch for errors or performance degradation
+3. **Progressive Rollout**: Update remaining workers
+4. **Rollback if needed**: Helm rollback capability
+
+```bash
+# Rollback if issues
+helm rollback pistonprotection 1
+```
+
+### eBPF Program Updates
+
+XDP programs are updated atomically:
+
+```bash
+# Check current eBPF program version
+kubectl exec -it pistonprotection-worker-xxx -- cat /sys/fs/bpf/xdp_version
+
+# Force program reload
+kubectl rollout restart daemonset/pistonprotection-worker
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### Workers Not Processing Traffic
+
+```bash
+# Check XDP attachment
+kubectl exec -it pistonprotection-worker-xxx -- ip link show eth0
+
+# Look for "xdp" in output
+# 2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 xdp qdisc fq_codel state UP
+
+# Check eBPF maps
+kubectl exec -it pistonprotection-worker-xxx -- bpftool map list
+```
+
+#### High Latency
+
+```bash
+# Check XDP processing latency
+kubectl exec -it pistonprotection-worker-xxx -- \
+  cat /sys/fs/bpf/piston_stats | grep latency
+
+# Check for CPU saturation
+kubectl top pods -l app=pistonprotection-worker
+```
+
+#### Configuration Not Syncing
+
+```bash
+# Check config manager logs
+kubectl logs -l app=pistonprotection-config-mgr
+
+# Force config refresh
+kubectl annotate backend my-backend pistonprotection.io/refresh=true --overwrite
+```
+
+### Debug Commands
+
+```bash
+# Worker eBPF stats
+kubectl exec -it pistonprotection-worker-xxx -- cat /proc/net/xdp
+
+# Check BPF map contents
+kubectl exec -it pistonprotection-worker-xxx -- bpftool map dump name piston_blocklist
+
+# View kernel trace logs
+kubectl exec -it pistonprotection-worker-xxx -- cat /sys/kernel/debug/tracing/trace_pipe
+
+# Gateway gRPC health
+grpcurl -plaintext pistonprotection-gateway:9090 grpc.health.v1.Health/Check
+```
+
+### Log Analysis
+
+```bash
+# Gateway logs with error filtering
+kubectl logs -l app=pistonprotection-gateway --tail=100 | grep -i error
+
+# Worker logs during attack
+kubectl logs -l app=pistonprotection-worker --since=5m | grep -E "(attack|blocked|drop)"
+
+# Metrics service errors
+kubectl logs -l app=pistonprotection-metrics | jq 'select(.level=="error")'
+```
+
+## Maintenance
+
+### Database Maintenance
+
+```bash
+# PostgreSQL vacuum
+kubectl exec -it pistonprotection-postgresql-0 -- \
+  psql -U postgres -c "VACUUM ANALYZE;"
+
+# Reindex
+kubectl exec -it pistonprotection-postgresql-0 -- \
+  psql -U postgres -c "REINDEX DATABASE pistonprotection;"
+```
+
+### ClickHouse Maintenance
+
+```bash
+# Optimize tables
+kubectl exec pistonprotection-clickhouse-0 -- \
+  clickhouse-client --query "OPTIMIZE TABLE request_events FINAL"
+
+# Check table sizes
+kubectl exec pistonprotection-clickhouse-0 -- \
+  clickhouse-client --query "SELECT table, sum(bytes_on_disk) FROM system.parts GROUP BY table"
+```
+
+### Certificate Rotation
+
+```bash
+# Rotate TLS certificates
+kubectl create secret tls pistonprotection-tls \
+  --cert=new-cert.pem \
+  --key=new-key.pem \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Restart services to pick up new certs
+kubectl rollout restart deployment/pistonprotection-gateway
+```
+
+## Disaster Recovery
+
+### Recovery Procedures
+
+1. **Service Outage**
+   ```bash
+   # Check all pods
+   kubectl get pods -n pistonprotection
+
+   # Restart failed pods
+   kubectl delete pod pistonprotection-gateway-xxx
+   ```
+
+2. **Database Corruption**
+   ```bash
+   # Restore from backup
+   helm upgrade pistonprotection pistonprotection/pistonprotection \
+     --set postgresql.primary.initdb.scriptsConfigMap=restore-backup
+   ```
+
+3. **Worker Node Failure**
+   ```bash
+   # Cordon and drain
+   kubectl cordon failed-node
+   kubectl drain failed-node --ignore-daemonsets
+
+   # Replace node
+   # ... cloud provider specific ...
+
+   # Uncordon new node
+   kubectl label node new-node pistonprotection.io/worker=true
+   ```
+
+### Health Checks
+
+```bash
+# Overall system health
+kubectl get pods -n pistonprotection -o wide
+kubectl get events -n pistonprotection --sort-by='.lastTimestamp'
+
+# Check CRD status
+kubectl get backends,ddosprotections -A
+```

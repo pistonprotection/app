@@ -111,14 +111,15 @@ impl MockGatewayClient {
 
         let mut rule = rule.clone();
         rule.backend_id = backend_id.to_string();
+        let rule_id = rule.id.clone();
 
         if let Some(existing) = self.filter_rules.iter_mut().find(|r| r.id == rule.id) {
             *existing = rule;
         } else {
-            self.filter_rules.push(rule.clone());
+            self.filter_rules.push(rule);
         }
 
-        Ok(rule.id.clone())
+        Ok(rule_id)
     }
 
     async fn delete_filter_rule(&mut self, rule_id: &str) -> Result<(), String> {

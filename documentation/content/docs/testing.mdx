@@ -1,0 +1,423 @@
+---
+title: Testing Guide
+description: Testing PistonProtection locally with Minikube and Docker Compose
+---
+
+# Testing Guide
+
+This guide covers how to test PistonProtection locally using either Docker Compose or Minikube.
+
+## Prerequisites
+
+### Docker Compose Testing
+
+- Docker Engine 20.10+
+- Docker Compose 2.0+
+- 8GB RAM minimum
+- 20GB disk space
+
+### Minikube Testing
+
+- Minikube 1.32+
+- kubectl 1.28+
+- Helm 3.12+
+- Docker Engine 20.10+
+- 8GB RAM minimum (16GB recommended)
+- 40GB disk space
+
+## Quick Start
+
+### Docker Compose (Development)
+
+```bash
+# Start development environment
+./scripts/local-dev.sh up
+
+# View logs
+./scripts/local-dev.sh logs -f
+
+# Run integration tests
+./scripts/integration-test.sh --docker
+
+# Stop environment
+./scripts/local-dev.sh down
+```
+
+### Minikube (Kubernetes Testing)
+
+```bash
+# Setup minikube cluster
+./scripts/minikube-deploy.sh setup
+
+# Build images in minikube
+./scripts/minikube-deploy.sh build-images
+
+# Deploy PistonProtection
+./scripts/minikube-deploy.sh deploy
+
+# Run integration tests
+./scripts/minikube-deploy.sh test
+
+# Or use the comprehensive test suite
+./scripts/integration-test.sh --minikube
+
+# Cleanup
+./scripts/minikube-deploy.sh teardown
+```
+
+## Docker Compose Environment
+
+### Architecture
+
+The Docker Compose environment includes:
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Frontend | 3000 | React dashboard |
+| Gateway | 8080 | API Gateway |
+| Auth | 8081 | Authentication service |
+| Config Manager | 8082 | Configuration service |
+| Metrics | 8083 | Metrics collector |
+| PostgreSQL | 5432 | Primary database |
+| Redis | 6379 | Cache and session store |
+| ClickHouse | 8123 | Analytics database |
+| Grafana | 3001 | Metrics dashboards |
+| Prometheus | 9099 | Metrics collection |
+
+### Commands
+
+```bash
+# Start all services
+./scripts/local-dev.sh up
+
+# Start with rebuild
+./scripts/local-dev.sh up --build
+
+# Include development tools (pgAdmin, Redis Commander)
+./scripts/local-dev.sh up --tools
+
+# View specific service logs
+./scripts/local-dev.sh logs -f gateway
+
+# Restart specific services
+./scripts/local-dev.sh restart gateway worker
+
+# Open shell in container
+./scripts/local-dev.sh shell postgres
+
+# Check status
+./scripts/local-dev.sh status
+
+# Clean up everything
+./scripts/local-dev.sh clean
+```
+
+### Environment Variables
+
+```bash
+# Override default ports
+GATEWAY_PORT=8080 ./scripts/local-dev.sh up
+
+# Use different compose file
+COMPOSE_FILE=docker-compose.dev.yml ./scripts/local-dev.sh up
+```
+
+## Minikube Environment
+
+### Cluster Setup
+
+The minikube setup script creates a cluster with:
+
+- **Kubernetes**: v1.29.0
+- **CNI**: Cilium for advanced networking
+- **Storage**: Standard storage class
+- **Addons**: Ingress, metrics-server, storage-provisioner
+- **Resources**: 4 CPUs, 8GB RAM by default
+
+### Customization
+
+```bash
+# Custom cluster resources
+MINIKUBE_CPUS=6 MINIKUBE_MEMORY=12288 ./scripts/minikube-deploy.sh setup
+
+# Use different driver
+MINIKUBE_DRIVER=kvm2 ./scripts/minikube-deploy.sh setup
+
+# Use different Kubernetes version
+KUBERNETES_VERSION=1.28.0 ./scripts/minikube-deploy.sh setup
+```
+
+### Port Forwarding
+
+```bash
+# Forward all service ports
+./scripts/minikube-deploy.sh port-forward
+
+# Access services at:
+# - Frontend:    http://localhost:3000
+# - Gateway:     http://localhost:8080
+# - Metrics:     http://localhost:9099
+```
+
+### Debugging
+
+```bash
+# Check deployment status
+./scripts/minikube-deploy.sh status
+
+# View gateway logs
+./scripts/minikube-deploy.sh logs gateway -f
+
+# Shell into gateway pod
+./scripts/minikube-deploy.sh shell gateway
+
+# Open Kubernetes dashboard
+./scripts/minikube-deploy.sh dashboard
+```
+
+## Integration Tests
+
+### Running Tests
+
+```bash
+# Auto-detect environment
+./scripts/integration-test.sh
+
+# Test Docker Compose environment
+./scripts/integration-test.sh --docker
+
+# Test Minikube deployment
+./scripts/integration-test.sh --minikube
+
+# Test specific URL
+./scripts/integration-test.sh --url http://192.168.49.2:30080
+
+# Verbose output
+./scripts/integration-test.sh --verbose
+
+# Skip slow tests
+./scripts/integration-test.sh --skip-slow
+
+# Run specific tests
+./scripts/integration-test.sh --filter health
+```
+
+### Test Categories
+
+1. **Health Tests**: Service health and readiness endpoints
+2. **API Tests**: Core API endpoint functionality
+3. **CRUD Tests**: Backend and filter rule management
+4. **Security Tests**: CORS, rate limiting, input validation
+5. **Performance Tests**: Response times, concurrent requests
+
+### Expected Output
+
+```
+==> Starting Integration Tests
+[INFO] Gateway URL: http://localhost:8080
+[INFO] Frontend URL: http://localhost:3000
+[INFO] Timeout: 10s
+
+==> Health and Readiness Tests
+  Testing: Gateway health endpoint... [PASS] PASSED
+  Testing: Gateway readiness endpoint... [PASS] PASSED
+  Testing: Gateway version endpoint... [PASS] PASSED
+  Testing: Frontend accessibility... [PASS] PASSED
+
+==> API Endpoint Tests
+  Testing: List backends... [PASS] PASSED
+  Testing: List filters... [PASS] PASSED
+  Testing: Get metrics... [PASS] PASSED
+  Testing: Get stats... [PASS] PASSED
+
+==> Test Summary
+
+Passed:  16
+Failed:  0
+Skipped: 0
+
+Pass rate: 100%
+```
+
+## Unit Testing
+
+### Rust Services
+
+```bash
+# Run all service tests
+cd services && cargo test
+
+# Run specific service tests
+cd services/gateway && cargo test
+
+# Run with coverage
+cd services && cargo tarpaulin --out Html
+
+# Run clippy lints
+cd services && cargo clippy --all-targets --all-features -- -D warnings
+```
+
+### Operator Tests
+
+```bash
+# Run operator tests
+cd operator && cargo test
+
+# Run with verbose output
+cd operator && cargo test -- --nocapture
+```
+
+### Frontend Tests
+
+```bash
+# Run frontend tests
+cd frontend && pnpm test
+
+# Run with coverage
+cd frontend && pnpm test:coverage
+
+# Run linter
+cd frontend && pnpm lint
+```
+
+### eBPF Tests
+
+```bash
+# Run eBPF tests (requires root)
+cd ebpf && sudo cargo test
+
+# Test specific program
+cd ebpf && sudo cargo test xdp_tcp
+```
+
+## Load Testing
+
+### Using k6
+
+```javascript
+// load-test.js
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  vus: 100,
+  duration: '30s',
+};
+
+export default function () {
+  const res = http.get('http://localhost:8080/health');
+  check(res, {
+    'status is 200': (r) => r.status === 200,
+    'response time < 200ms': (r) => r.timings.duration < 200,
+  });
+  sleep(0.1);
+}
+```
+
+```bash
+# Install k6
+brew install k6  # macOS
+# or: apt install k6  # Ubuntu
+
+# Run load test
+k6 run load-test.js
+```
+
+### Using wrk
+
+```bash
+# Install wrk
+brew install wrk  # macOS
+# or: apt install wrk  # Ubuntu
+
+# Simple load test
+wrk -t12 -c400 -d30s http://localhost:8080/health
+
+# With Lua script for POST requests
+wrk -t12 -c400 -d30s -s post.lua http://localhost:8080/api/v1/backends
+```
+
+## Troubleshooting
+
+### Docker Compose Issues
+
+```bash
+# View container logs
+docker logs pp-gateway
+
+# Check container health
+docker inspect --format='{{.State.Health.Status}}' pp-gateway
+
+# Restart failed container
+docker restart pp-gateway
+
+# Full cleanup
+./scripts/local-dev.sh clean
+docker system prune -af
+```
+
+### Minikube Issues
+
+```bash
+# Check pod status
+kubectl get pods -n pistonprotection
+
+# View pod events
+kubectl describe pod <pod-name> -n pistonprotection
+
+# Check pod logs
+kubectl logs <pod-name> -n pistonprotection
+
+# Check service endpoints
+kubectl get endpoints -n pistonprotection
+
+# Restart deployment
+kubectl rollout restart deployment/pp-gateway -n pistonprotection
+
+# Check minikube resources
+minikube ssh -p pistonprotection -- df -h
+minikube ssh -p pistonprotection -- free -m
+```
+
+### Common Problems
+
+| Problem | Solution |
+|---------|----------|
+| Pods stuck in Pending | Check node resources: `kubectl describe node` |
+| Image pull errors | Ensure images are built in minikube's docker: `eval $(minikube docker-env)` |
+| Database connection refused | Wait for PostgreSQL to be ready: `kubectl wait --for=condition=ready pod -l app=postgresql` |
+| Gateway not responding | Check gateway logs and ensure dependencies are ready |
+| Tests failing | Increase timeout: `--timeout 30` |
+
+## CI/CD Testing
+
+### GitHub Actions
+
+Tests are automatically run on every push and PR via GitHub Actions:
+
+```yaml
+# .github/workflows/test.yml runs:
+# - Rust unit tests
+# - Frontend tests
+# - Operator tests
+# - Helm chart validation
+# - Integration tests (optional)
+```
+
+### Running CI Locally
+
+```bash
+# Run all checks locally
+make lint
+make test
+
+# Validate Helm chart
+make helm-lint
+make helm-template
+```
+
+## Next Steps
+
+- [Operations Guide](/docs/operations) - Production operations
+- [Architecture](/docs/architecture) - System design
+- [Filters](/docs/filters) - Filter rule configuration

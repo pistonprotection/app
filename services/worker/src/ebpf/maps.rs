@@ -159,8 +159,8 @@ impl MapManager {
     pub fn update_rate_limit(&mut self, ip: IpAddr, tokens: u64, packets: u64, bytes: u64) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
 
         self.rate_limits.insert(
             ip,
@@ -182,8 +182,8 @@ impl MapManager {
     pub fn update_conntrack(&mut self, key: ConnTrackKey, state: ConnTrackState, packets: u64, bytes: u64) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
 
         if let Some(entry) = self.conntrack.get_mut(&key) {
             entry.state = state;

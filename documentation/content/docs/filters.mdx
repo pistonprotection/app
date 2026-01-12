@@ -1,0 +1,260 @@
+---
+title: Filter Rules
+description: Configure L4 and L7 protection filters for your backends
+---
+
+# Filter Rules
+
+PistonProtection uses eBPF/XDP filters to process packets at line rate. This guide covers creating and managing filter rules.
+
+## Filter Types
+
+### TCP Filters
+
+TCP filters inspect connection state and protocol compliance:
+
+```yaml
+apiVersion: pistonprotection.io/v1alpha1
+kind: FilterRule
+metadata:
+  name: tcp-syn-protection
+spec:
+  type: tcp
+  action: rate_limit
+  priority: 100
+  conditions:
+    - field: tcp.flags
+      operator: equals
+      value: "SYN"
+    - field: rate.pps
+      operator: greater_than
+      value: 1000
+  rateLimit:
+    requestsPerSecond: 500
+    burstSize: 1000
+```
+
+### UDP Filters
+
+UDP filters protect against volumetric and amplification attacks:
+
+```yaml
+apiVersion: pistonprotection.io/v1alpha1
+kind: FilterRule
+metadata:
+  name: udp-amplification-protection
+spec:
+  type: udp
+  action: block
+  priority: 90
+  conditions:
+    - field: packet.size
+      operator: greater_than
+      value: 512
+    - field: rate.bps
+      operator: greater_than
+      value: 10000000  # 10 Mbps
+```
+
+### HTTP Filters
+
+Layer 7 HTTP inspection for web applications:
+
+```yaml
+apiVersion: pistonprotection.io/v1alpha1
+kind: FilterRule
+metadata:
+  name: http-slowloris-protection
+spec:
+  type: http
+  action: block
+  priority: 80
+  conditions:
+    - field: http.headers_complete
+      operator: equals
+      value: "false"
+    - field: connection.age
+      operator: greater_than
+      value: 30  # seconds
+```
+
+### QUIC Filters
+
+HTTP/3 and QUIC protocol protection:
+
+```yaml
+apiVersion: pistonprotection.io/v1alpha1
+kind: FilterRule
+metadata:
+  name: quic-flood-protection
+spec:
+  type: quic
+  action: challenge
+  priority: 70
+  conditions:
+    - field: quic.connection_id
+      operator: not_verified
+```
+
+### Minecraft Java Filters
+
+Protection for Minecraft Java servers:
+
+```yaml
+apiVersion: pistonprotection.io/v1alpha1
+kind: FilterRule
+metadata:
+  name: minecraft-handshake-validation
+spec:
+  type: minecraft_java
+  action: block
+  priority: 100
+  conditions:
+    - field: minecraft.protocol_version
+      operator: not_in_range
+      value: "47-769"  # Supported protocol versions
+    - field: minecraft.packet_id
+      operator: equals
+      value: "0x00"  # Handshake packet
+```
+
+### Minecraft Bedrock Filters
+
+Protection for Minecraft Bedrock servers (RakNet protocol):
+
+```yaml
+apiVersion: pistonprotection.io/v1alpha1
+kind: FilterRule
+metadata:
+  name: minecraft-bedrock-protection
+spec:
+  type: minecraft_bedrock
+  action: rate_limit
+  priority: 100
+  conditions:
+    - field: raknet.message_id
+      operator: equals
+      value: "0x05"  # Open connection request
+  rateLimit:
+    requestsPerSecond: 10
+    burstSize: 20
+```
+
+## Filter Actions
+
+| Action | Description |
+|--------|-------------|
+| `allow` | Allow the traffic to pass |
+| `block` | Drop the packet silently |
+| `rate_limit` | Apply rate limiting |
+| `challenge` | Issue a JavaScript or TCP challenge |
+
+## Condition Operators
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `equals` | Exact match | `value: "GET"` |
+| `not_equals` | Not equal | `value: "POST"` |
+| `contains` | Contains substring | `value: "bot"` |
+| `regex` | Regular expression | `value: "^/api/v[0-9]+"` |
+| `greater_than` | Numeric comparison | `value: 1000` |
+| `less_than` | Numeric comparison | `value: 100` |
+| `in_range` | Range check | `value: "80-443"` |
+| `in_list` | List membership | `value: ["US", "CA", "GB"]` |
+| `not_in_list` | Not in list | `value: ["CN", "RU"]` |
+
+## Filter Priority
+
+Filters are evaluated in order of priority (lowest number = highest priority). The first matching filter determines the action taken.
+
+```
+Priority 0-49:    Emergency rules (manual blocks)
+Priority 50-99:   Attack mitigation rules
+Priority 100-199: Protocol validation rules
+Priority 200-299: Rate limiting rules
+Priority 300+:    Default policies
+```
+
+## GeoIP Filtering
+
+Block or rate-limit traffic by country:
+
+```yaml
+apiVersion: pistonprotection.io/v1alpha1
+kind: FilterRule
+metadata:
+  name: geo-block
+spec:
+  type: tcp
+  action: block
+  priority: 150
+  conditions:
+    - field: geoip.country_code
+      operator: in_list
+      value: ["XX", "YY"]  # Country codes to block
+```
+
+## ASN Filtering
+
+Filter by Autonomous System Number:
+
+```yaml
+apiVersion: pistonprotection.io/v1alpha1
+kind: FilterRule
+metadata:
+  name: datacenter-rate-limit
+spec:
+  type: http
+  action: rate_limit
+  priority: 200
+  conditions:
+    - field: geoip.asn_type
+      operator: equals
+      value: "hosting"
+  rateLimit:
+    requestsPerSecond: 100
+```
+
+## IP Reputation Integration
+
+Use threat scores from the IP reputation system:
+
+```yaml
+apiVersion: pistonprotection.io/v1alpha1
+kind: FilterRule
+metadata:
+  name: high-threat-block
+spec:
+  type: tcp
+  action: block
+  priority: 50
+  conditions:
+    - field: reputation.threat_score
+      operator: greater_than
+      value: 80
+```
+
+## Combining Conditions
+
+Use multiple conditions with AND logic:
+
+```yaml
+conditions:
+  - field: http.method
+    operator: equals
+    value: "POST"
+  - field: http.path
+    operator: regex
+    value: "^/api/(login|signup)"
+  - field: rate.rps
+    operator: greater_than
+    value: 10
+```
+
+## Best Practices
+
+1. **Start with monitoring mode**: Set action to `allow` and monitor logs before blocking
+2. **Use appropriate priorities**: Higher priority (lower number) for more critical rules
+3. **Rate limit before blocking**: Give legitimate users a chance with rate limits
+4. **Whitelist known IPs**: Create allow rules for your own infrastructure
+5. **Monitor false positives**: Use analytics to tune filter sensitivity

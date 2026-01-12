@@ -1,0 +1,484 @@
+{{- if and .Values.networkPolicy.enabled (eq .Values.networkPolicy.type "cilium") }}
+# Cilium Network Policies for PistonProtection
+# These provide L7 visibility and enhanced eBPF-based networking
+
+---
+# Gateway Cilium Network Policy with L7 HTTP filtering
+{{- if .Values.gateway.enabled }}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "pistonprotection.fullname" . }}-gateway-cilium
+  labels:
+    {{- include "pistonprotection.gateway.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- include "pistonprotection.gateway.selectorLabels" . | nindent 6 }}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ingress-nginx
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: traefik
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+          rules:
+            http:
+              - method: "GET"
+              - method: "POST"
+              - method: "PUT"
+              - method: "DELETE"
+              - method: "PATCH"
+              - method: "OPTIONS"
+    - fromEndpoints:
+        - matchLabels:
+            {{- include "pistonprotection.frontend.selectorLabels" . | nindent 12 }}
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # gRPC port
+    - fromEndpoints:
+        - matchLabels:
+            {{- include "pistonprotection.worker.selectorLabels" . | nindent 12 }}
+        - matchLabels:
+            {{- include "pistonprotection.configMgr.selectorLabels" . | nindent 12 }}
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+    # Prometheus scraping
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+      toPorts:
+        - ports:
+            - port: "9091"
+              protocol: TCP
+  egress:
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # PostgreSQL
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: postgresql
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # Redis
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: redis
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP
+    # Internal services
+    - toEndpoints:
+        - matchLabels:
+            {{- include "pistonprotection.auth.selectorLabels" . | nindent 12 }}
+        - matchLabels:
+            {{- include "pistonprotection.metrics.selectorLabels" . | nindent 12 }}
+        - matchLabels:
+            {{- include "pistonprotection.worker.selectorLabels" . | nindent 12 }}
+        - matchLabels:
+            {{- include "pistonprotection.configMgr.selectorLabels" . | nindent 12 }}
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+{{- end }}
+
+---
+# Worker Cilium Network Policy - Host networking aware
+{{- if .Values.worker.enabled }}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "pistonprotection.fullname" . }}-worker-cilium
+  labels:
+    {{- include "pistonprotection.worker.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- include "pistonprotection.worker.selectorLabels" . | nindent 6 }}
+  ingress:
+    # Control plane communication
+    - fromEndpoints:
+        - matchLabels:
+            {{- include "pistonprotection.gateway.selectorLabels" . | nindent 12 }}
+        - matchLabels:
+            {{- include "pistonprotection.configMgr.selectorLabels" . | nindent 12 }}
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Prometheus metrics
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+  egress:
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+    # Metrics reporting
+    - toEndpoints:
+        - matchLabels:
+            {{- include "pistonprotection.metrics.selectorLabels" . | nindent 12 }}
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Config sync
+    - toEndpoints:
+        - matchLabels:
+            {{- include "pistonprotection.configMgr.selectorLabels" . | nindent 12 }}
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Redis for real-time config
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: redis
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP
+{{- end }}
+
+---
+# Auth Service Cilium Policy with OAuth/OIDC FQDN egress
+{{- if .Values.auth.enabled }}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "pistonprotection.fullname" . }}-auth-cilium
+  labels:
+    {{- include "pistonprotection.auth.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- include "pistonprotection.auth.selectorLabels" . | nindent 6 }}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            {{- include "pistonprotection.gateway.selectorLabels" . | nindent 12 }}
+        - matchLabels:
+            {{- include "pistonprotection.frontend.selectorLabels" . | nindent 12 }}
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Prometheus
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+      toPorts:
+        - ports:
+            - port: "9091"
+              protocol: TCP
+  egress:
+    # DNS with visibility
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # PostgreSQL
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: postgresql
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # Redis
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: redis
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP
+    # OAuth providers (FQDN-based)
+    - toFQDNs:
+        - matchName: "accounts.google.com"
+        - matchName: "oauth2.googleapis.com"
+        - matchName: "www.googleapis.com"
+        - matchName: "github.com"
+        - matchName: "api.github.com"
+        - matchName: "login.microsoftonline.com"
+        - matchPattern: "*.auth0.com"
+        - matchPattern: "*.okta.com"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # Stripe API
+    - toFQDNs:
+        - matchName: "api.stripe.com"
+        - matchName: "files.stripe.com"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # Resend email API
+    - toFQDNs:
+        - matchName: "api.resend.com"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+{{- end }}
+
+---
+# Metrics Service Cilium Policy
+{{- if .Values.metrics.enabled }}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "pistonprotection.fullname" . }}-metrics-cilium
+  labels:
+    {{- include "pistonprotection.metrics.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- include "pistonprotection.metrics.selectorLabels" . | nindent 6 }}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            {{- include "pistonprotection.gateway.selectorLabels" . | nindent 12 }}
+        - matchLabels:
+            {{- include "pistonprotection.worker.selectorLabels" . | nindent 12 }}
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Prometheus
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+      toPorts:
+        - ports:
+            - port: "9091"
+              protocol: TCP
+  egress:
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+    # PostgreSQL (for storing metrics)
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: postgresql
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # Redis (for caching)
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: redis
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP
+    # ClickHouse (if enabled for metrics storage)
+    {{- if .Values.clickhouse.enabled }}
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: clickhouse
+      toPorts:
+        - ports:
+            - port: "9000"
+              protocol: TCP
+            - port: "8123"
+              protocol: TCP
+    {{- end }}
+{{- end }}
+
+---
+# Frontend Cilium Policy
+{{- if .Values.frontend.enabled }}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "pistonprotection.fullname" . }}-frontend-cilium
+  labels:
+    {{- include "pistonprotection.frontend.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- include "pistonprotection.frontend.selectorLabels" . | nindent 6 }}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ingress-nginx
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: traefik
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+  egress:
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+    # Backend services
+    - toEndpoints:
+        - matchLabels:
+            {{- include "pistonprotection.gateway.selectorLabels" . | nindent 12 }}
+        - matchLabels:
+            {{- include "pistonprotection.auth.selectorLabels" . | nindent 12 }}
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+{{- end }}
+
+---
+# Operator Cilium Policy
+{{- if .Values.operator.enabled }}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "pistonprotection.fullname" . }}-operator-cilium
+  labels:
+    {{- include "pistonprotection.operator.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- include "pistonprotection.operator.selectorLabels" . | nindent 6 }}
+  ingress:
+    # Prometheus
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+    # Kubernetes API server
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+            - port: "6443"
+              protocol: TCP
+{{- end }}
+
+---
+# Config Manager Cilium Policy
+{{- if .Values.configMgr.enabled }}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "pistonprotection.fullname" . }}-config-mgr-cilium
+  labels:
+    {{- include "pistonprotection.configMgr.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- include "pistonprotection.configMgr.selectorLabels" . | nindent 6 }}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            {{- include "pistonprotection.worker.selectorLabels" . | nindent 12 }}
+        - matchLabels:
+            {{- include "pistonprotection.gateway.selectorLabels" . | nindent 12 }}
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Prometheus
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+      toPorts:
+        - ports:
+            - port: "9091"
+              protocol: TCP
+  egress:
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+    # PostgreSQL
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: postgresql
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # Redis
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: redis
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP
+{{- end }}
+{{- end }}

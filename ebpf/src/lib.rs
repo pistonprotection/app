@@ -217,6 +217,133 @@ pub mod protocol {
         pub const ECE: u16 = 0x0040;
         pub const CWR: u16 = 0x0080;
     }
+
+    /// IPv4 fragmentation flags and masks
+    ///
+    /// IP fragmentation can be used to evade packet inspection:
+    /// - Small fragments may not contain complete transport headers
+    /// - Overlapping fragments can cause reassembly ambiguity
+    /// - Tiny fragments are almost never legitimate
+    pub mod ipv4_frag {
+        /// Reserved flag (must be zero)
+        pub const RF: u16 = 0x8000;
+        /// Don't Fragment flag
+        pub const DF: u16 = 0x4000;
+        /// More Fragments flag
+        pub const MF: u16 = 0x2000;
+        /// Fragment offset mask (13 bits, in 8-byte units)
+        pub const OFFSET_MASK: u16 = 0x1FFF;
+
+        /// Minimum fragment size for legitimate traffic (bytes)
+        /// Fragments smaller than this are suspicious (fragment overlap attacks)
+        pub const MIN_FRAG_SIZE: u16 = 68;
+
+        /// Check if the packet is a fragment
+        #[inline(always)]
+        pub fn is_fragment(frag_off: u16) -> bool {
+            // Network byte order already converted
+            (frag_off & MF) != 0 || (frag_off & OFFSET_MASK) != 0
+        }
+
+        /// Check if this is the first fragment (offset == 0 but MF set)
+        #[inline(always)]
+        pub fn is_first_fragment(frag_off: u16) -> bool {
+            (frag_off & MF) != 0 && (frag_off & OFFSET_MASK) == 0
+        }
+
+        /// Check if this is a non-first fragment (offset > 0)
+        #[inline(always)]
+        pub fn is_later_fragment(frag_off: u16) -> bool {
+            (frag_off & OFFSET_MASK) != 0
+        }
+
+        /// Get the fragment offset in bytes
+        #[inline(always)]
+        pub fn get_offset_bytes(frag_off: u16) -> u16 {
+            (frag_off & OFFSET_MASK) * 8
+        }
+
+        /// Check if Don't Fragment is set
+        #[inline(always)]
+        pub fn is_dont_fragment(frag_off: u16) -> bool {
+            (frag_off & DF) != 0
+        }
+    }
+
+    /// IPv6 fragmentation (uses extension header)
+    pub mod ipv6_frag {
+        /// IPv6 Fragment Header next header value
+        pub const NEXTHDR_FRAGMENT: u8 = 44;
+
+        /// More Fragments flag (in frag_off field of Fragment Header)
+        pub const MF: u16 = 0x0001;
+
+        /// Fragment offset mask (13 bits, in 8-byte units)
+        pub const OFFSET_MASK: u16 = 0xFFF8;
+    }
+}
+
+// ============================================================================
+// IP Fragmentation Handling
+// ============================================================================
+
+/// Result of IP fragment analysis
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum FragmentAction {
+    /// Not a fragment - continue normal processing
+    NotFragment = 0,
+    /// First fragment - has transport header but may be truncated
+    FirstFragment = 1,
+    /// Later fragment - no transport header available
+    LaterFragment = 2,
+    /// Invalid/suspicious fragment - should be dropped
+    InvalidFragment = 3,
+}
+
+/// Analyze IPv4 fragmentation status
+///
+/// Returns the appropriate action based on fragmentation state and protection level.
+/// This helps XDP programs decide whether to inspect transport headers.
+///
+/// # Security Considerations
+///
+/// IP fragmentation attacks include:
+/// - Tiny fragments: First fragment too small to contain transport header
+/// - Overlapping fragments: Can confuse reassembly, bypass filters
+/// - Fragment floods: Resource exhaustion attacks
+/// - Teardrop: Overlapping fragments with invalid offsets
+#[inline(always)]
+pub fn analyze_ipv4_fragment(frag_off: u16, tot_len: u16, ihl: u8, protection_level: u32) -> FragmentAction {
+    use protocol::ipv4_frag::*;
+
+    // Check if this is a fragment at all
+    if !is_fragment(frag_off) {
+        return FragmentAction::NotFragment;
+    }
+
+    let ip_header_len = (ihl & 0x0f) as u16 * 4;
+    let payload_len = tot_len.saturating_sub(ip_header_len);
+
+    // Check for later fragment (no transport header)
+    if is_later_fragment(frag_off) {
+        // At aggressive protection levels, consider blocking later fragments
+        // as they often indicate fragmentation attacks
+        if protection_level >= 3 {
+            return FragmentAction::InvalidFragment;
+        }
+        return FragmentAction::LaterFragment;
+    }
+
+    // This is the first fragment (MF set, offset 0)
+    // Check if it's suspiciously small
+    if payload_len < MIN_FRAG_SIZE && protection_level >= 2 {
+        // First fragment too small to contain minimum transport headers
+        // This is a strong indicator of a tiny fragment attack
+        return FragmentAction::InvalidFragment;
+    }
+
+    FragmentAction::FirstFragment
 }
 
 // ============================================================================

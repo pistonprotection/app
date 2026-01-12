@@ -598,6 +598,14 @@ impl Metrics {
         self.health_status.set(1);
     }
 
+    /// Record total discovered worker pod count
+    pub fn record_worker_count(&self, count: usize) {
+        // Use a global namespace for overall worker count
+        self.workers_available
+            .with_label_values(&["_global_", "_all_"])
+            .set(count as i64);
+    }
+
     /// Encode metrics for Prometheus scraping
     pub fn encode(&self) -> String {
         use prometheus::Encoder;

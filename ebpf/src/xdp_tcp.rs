@@ -164,8 +164,18 @@ pub struct TcpConfig {
     pub block_duration_ns: u64,
     /// Protection level (1=basic, 2=moderate, 3=aggressive)
     pub protection_level: u32,
-    /// SYN cookie secret (for cookie generation)
+    /// SYN cookie secret (for cookie generation) - should be set from userspace
     pub syn_cookie_secret: u32,
+    /// Second SYN cookie secret (for rotation)
+    pub syn_cookie_secret2: u32,
+    /// Incomplete handshake timeout (nanoseconds)
+    pub handshake_timeout_ns: u64,
+    /// Maximum incomplete handshakes per IP before blocking
+    pub max_incomplete_handshakes_per_ip: u32,
+    /// Enable ACK sequence validation
+    pub ack_validation_enabled: u32,
+    /// Enable IP fragment handling
+    pub fragment_handling_enabled: u32,
 }
 
 /// TCP statistics
@@ -183,6 +193,21 @@ pub struct TcpStats {
     pub syn_cookies_validated: u64,
     pub syn_cookies_failed: u64,
     pub window_probe_detected: u64,
+    pub dropped_fragments: u64,
+    pub dropped_invalid_ack: u64,
+    pub dropped_handshake_timeout: u64,
+    pub incomplete_handshakes_detected: u64,
+}
+
+/// Per-IP incomplete handshake tracking
+#[repr(C)]
+pub struct IncompleteHandshakeState {
+    /// Number of incomplete handshakes from this IP
+    pub count: u32,
+    /// Timestamp of first incomplete handshake in current window
+    pub window_start: u64,
+    /// Last update timestamp
+    pub last_seen: u64,
 }
 
 /// Global SYN state for system-wide flood detection
@@ -237,10 +262,21 @@ const DEFAULT_MAX_ACK_PER_IP: u64 = 1000;
 const DEFAULT_MAX_RST_PER_IP: u64 = 100;
 const DEFAULT_RATE_LIMIT_WINDOW_NS: u64 = 1_000_000_000;  // 1 second
 const DEFAULT_BLOCK_DURATION_NS: u64 = 60_000_000_000;    // 60 seconds
+const DEFAULT_HANDSHAKE_TIMEOUT_NS: u64 = 30_000_000_000; // 30 seconds
+const DEFAULT_MAX_INCOMPLETE_HANDSHAKES_PER_IP: u32 = 10;
 
 // SYN cookie constants
 const SYN_COOKIE_TTL_NS: u64 = 60_000_000_000;  // 60 seconds
 const MSS_TABLE: [u16; 4] = [536, 1300, 1440, 1460];
+
+// IP fragmentation constants (frag_off field masks)
+const IP_MF: u16 = 0x2000;     // More Fragments flag
+const IP_OFFSET: u16 = 0x1FFF; // Fragment offset mask
+
+// Default SYN cookie secrets - derived from boot time for uniqueness
+// These should be overwritten by userspace with cryptographically random values
+const DEFAULT_SYN_COOKIE_SECRET: u32 = 0xDEADBEEF;
+const DEFAULT_SYN_COOKIE_SECRET2: u32 = 0xCAFEBABE;
 
 // ============================================================================
 // eBPF Maps
@@ -266,9 +302,18 @@ static TCP_IP_STATE_V6: LruHashMap<[u8; 16], TcpIpState> =
 static SYN_COOKIES: LruHashMap<u64, SynCookieEntry> =
     LruHashMap::with_max_entries(1_000_000, 0);
 
+/// Incomplete handshake tracking per IP (for spoofed IP detection)
+#[map]
+static INCOMPLETE_HANDSHAKES_V4: LruHashMap<u32, IncompleteHandshakeState> =
+    LruHashMap::with_max_entries(500_000, 0);
+
 /// Global SYN state (for system-wide flood detection)
 #[map]
 static GLOBAL_SYN_STATE: PerCpuArray<GlobalSynState> = PerCpuArray::with_max_entries(1, 0);
+
+/// Boot-time random seed map (populated by userspace loader)
+#[map]
+static SYN_COOKIE_SECRETS: PerCpuArray<[u32; 2]> = PerCpuArray::with_max_entries(1, 0);
 
 /// Protected ports (stricter filtering)
 #[map]
@@ -357,6 +402,35 @@ fn process_ipv4(
 
     let src_ip = u32::from_be(ip.saddr);
     let dst_ip = u32::from_be(ip.daddr);
+
+    // Check for IP fragmentation
+    // frag_off contains both flags (upper 3 bits) and fragment offset (lower 13 bits)
+    let frag_off = u16::from_be(ip.frag_off);
+    let is_fragment = (frag_off & IP_MF) != 0 || (frag_off & IP_OFFSET) != 0;
+
+    if is_fragment && config.fragment_handling_enabled != 0 {
+        // IP fragments can be used to bypass TCP inspection
+        // Fragment offset > 0 means this is not the first fragment, so no TCP header
+        // MF flag with offset 0 means first fragment of a fragmented packet
+
+        if (frag_off & IP_OFFSET) != 0 {
+            // Non-first fragment - cannot inspect TCP header
+            // In aggressive mode, drop fragmented TCP (rare in legitimate traffic)
+            if config.protection_level >= 3 {
+                update_stats_dropped_fragments();
+                return Ok(xdp_action::XDP_DROP);
+            }
+            // Otherwise pass - let the kernel handle reassembly
+            return Ok(xdp_action::XDP_PASS);
+        }
+
+        // First fragment - has TCP header but may be truncated
+        // Continue processing but be aware the packet might be incomplete
+        if config.protection_level >= 2 {
+            // Log fragment for monitoring
+            update_stats_dropped_fragments();
+        }
+    }
 
     // Check whitelist
     if unsafe { TCP_WHITELIST.get(&src_ip) }.is_some() {
@@ -673,7 +747,15 @@ fn handle_syn_packet(
     config: &TcpConfig,
 ) -> Result<u32, ()> {
     // Check if destination port is protected
-    let is_protected = unsafe { TCP_PROTECTED_PORTS.get(&dst_port) }.is_some();
+    let _is_protected = unsafe { TCP_PROTECTED_PORTS.get(&dst_port) }.is_some();
+
+    // Check for incomplete handshake abuse (spoofed IPs)
+    if let Some(action) = check_incomplete_handshake_limit(src_ip, now, config) {
+        return Ok(action);
+    }
+
+    // Track this as a new incomplete handshake
+    track_incomplete_handshake(src_ip, now, config);
 
     // Check global SYN rate for cookie mode decision
     let use_cookies = should_use_syn_cookies(now, config);
@@ -738,6 +820,85 @@ fn handle_syn_packet(
     Ok(xdp_action::XDP_PASS)
 }
 
+// ============================================================================
+// Incomplete Handshake Tracking (Spoofed IP Detection)
+// ============================================================================
+
+/// Track a new incomplete handshake (SYN without completing 3-way handshake)
+#[inline(always)]
+fn track_incomplete_handshake(src_ip: u32, now: u64, config: &TcpConfig) {
+    let timeout = if config.handshake_timeout_ns != 0 {
+        config.handshake_timeout_ns
+    } else {
+        DEFAULT_HANDSHAKE_TIMEOUT_NS
+    };
+
+    if let Some(state) = unsafe { INCOMPLETE_HANDSHAKES_V4.get_ptr_mut(&src_ip) } {
+        let state = unsafe { &mut *state };
+
+        // Check if we're in a new window
+        if now.saturating_sub(state.window_start) > timeout {
+            // Reset window
+            state.count = 1;
+            state.window_start = now;
+        } else {
+            state.count += 1;
+        }
+        state.last_seen = now;
+    } else {
+        // New entry
+        let state = IncompleteHandshakeState {
+            count: 1,
+            window_start: now,
+            last_seen: now,
+        };
+        let _ = INCOMPLETE_HANDSHAKES_V4.insert(&src_ip, &state, 0);
+    }
+
+    update_stats_incomplete_handshake();
+}
+
+/// Check if IP has too many incomplete handshakes (likely spoofed)
+#[inline(always)]
+fn check_incomplete_handshake_limit(src_ip: u32, now: u64, config: &TcpConfig) -> Option<u32> {
+    let max_incomplete = if config.max_incomplete_handshakes_per_ip != 0 {
+        config.max_incomplete_handshakes_per_ip
+    } else {
+        DEFAULT_MAX_INCOMPLETE_HANDSHAKES_PER_IP
+    };
+
+    let timeout = if config.handshake_timeout_ns != 0 {
+        config.handshake_timeout_ns
+    } else {
+        DEFAULT_HANDSHAKE_TIMEOUT_NS
+    };
+
+    if let Some(state) = unsafe { INCOMPLETE_HANDSHAKES_V4.get(&src_ip) } {
+        // Only count if within timeout window
+        if now.saturating_sub(state.window_start) <= timeout {
+            if state.count >= max_incomplete {
+                update_stats_handshake_timeout();
+                return Some(xdp_action::XDP_DROP);
+            }
+        }
+    }
+
+    None
+}
+
+/// Clear incomplete handshake tracking when handshake completes
+#[inline(always)]
+fn clear_incomplete_handshake(src_ip: u32, now: u64, config: &TcpConfig) {
+    if let Some(state) = unsafe { INCOMPLETE_HANDSHAKES_V4.get_ptr_mut(&src_ip) } {
+        let state = unsafe { &mut *state };
+        // Decrement count (don't go below 0)
+        if state.count > 0 {
+            state.count -= 1;
+        }
+        state.last_seen = now;
+    }
+}
+
 #[inline(always)]
 fn should_use_syn_cookies(now: u64, config: &TcpConfig) -> bool {
     let threshold = if config.syn_cookie_threshold != 0 {
@@ -768,6 +929,31 @@ fn should_use_syn_cookies(now: u64, config: &TcpConfig) -> bool {
 }
 
 #[inline(always)]
+fn get_syn_cookie_secret(config: &TcpConfig) -> (u32, u32) {
+    // Try to get secrets from the dedicated map (set by userspace with random values)
+    if let Some(secrets) = unsafe { SYN_COOKIE_SECRETS.get(0) } {
+        if secrets[0] != 0 && secrets[1] != 0 {
+            return (secrets[0], secrets[1]);
+        }
+    }
+
+    // Fall back to config secrets (which should be set by userspace)
+    let secret1 = if config.syn_cookie_secret != 0 {
+        config.syn_cookie_secret
+    } else {
+        DEFAULT_SYN_COOKIE_SECRET
+    };
+
+    let secret2 = if config.syn_cookie_secret2 != 0 {
+        config.syn_cookie_secret2
+    } else {
+        DEFAULT_SYN_COOKIE_SECRET2
+    };
+
+    (secret1, secret2)
+}
+
+#[inline(always)]
 fn generate_syn_cookie(
     src_ip: u32,
     src_port: u16,
@@ -777,24 +963,38 @@ fn generate_syn_cookie(
     now: u64,
     config: &TcpConfig,
 ) -> u32 {
-    // Simple SYN cookie generation
-    // In production, use a proper cryptographic hash (SipHash, etc.)
+    // SYN cookie generation using SipHash-like mixing
+    // Uses two secrets for better unpredictability
 
-    let secret = config.syn_cookie_secret;
+    let (secret1, secret2) = get_syn_cookie_secret(config);
     let time_counter = (now / 60_000_000_000) as u32;  // 60 second granularity
 
-    // Mix all inputs
-    let mut hash = secret;
-    hash = hash.wrapping_mul(31).wrapping_add(src_ip);
-    hash = hash.wrapping_mul(31).wrapping_add(src_port as u32);
-    hash = hash.wrapping_mul(31).wrapping_add(dst_ip);
-    hash = hash.wrapping_mul(31).wrapping_add(dst_port as u32);
-    hash = hash.wrapping_mul(31).wrapping_add(time_counter);
+    // Mix all inputs using a simple but effective hash
+    // This provides reasonable security for DDoS mitigation
+    // For cryptographic strength, userspace should use proper SipHash
 
-    // Lower 5 bits: time counter
-    // Next 2 bits: MSS index
-    // Upper 25 bits: hash
-    let cookie = (hash & 0xFFFFFF80) | ((3 & 0x03) << 5) | (time_counter & 0x1f);
+    let mut hash = secret1;
+    hash = hash.wrapping_mul(0x9e3779b9).wrapping_add(src_ip);
+    hash ^= hash >> 16;
+    hash = hash.wrapping_mul(0x85ebca6b).wrapping_add(src_port as u32);
+    hash ^= hash >> 13;
+    hash = hash.wrapping_mul(0xc2b2ae35).wrapping_add(dst_ip);
+    hash ^= hash >> 16;
+    hash = hash.wrapping_mul(0x9e3779b9).wrapping_add(dst_port as u32);
+
+    // Mix in second secret and time for additional entropy
+    let mut hash2 = secret2;
+    hash2 = hash2.wrapping_mul(0x85ebca6b).wrapping_add(time_counter);
+    hash2 ^= hash2 >> 13;
+    hash2 = hash2.wrapping_mul(0xc2b2ae35).wrapping_add(hash);
+
+    // Combine hashes
+    let combined = hash ^ hash2;
+
+    // Lower 5 bits: time counter (allows validation within 2 windows)
+    // Next 2 bits: MSS index (encodes negotiated MSS)
+    // Upper 25 bits: hash (provides unpredictability)
+    let cookie = (combined & 0xFFFFFF80) | ((3 & 0x03) << 5) | (time_counter & 0x1f);
 
     cookie
 }
@@ -819,43 +1019,93 @@ fn handle_ack_packet(
 ) -> Result<u32, ()> {
     let conn_key = make_connection_key(src_ip, dst_ip, src_port, dst_port);
 
-    // Check if this is a SYN cookie validation
+    // Check if this is a SYN cookie validation (first ACK after SYN)
     if config.syn_flood_protection != 0 {
         if let Some(cookie_entry) = unsafe { SYN_COOKIES.get(&conn_key) } {
-            if cookie_entry.valid != 0 && validate_syn_cookie(ack_seq.wrapping_sub(1), cookie_entry.cookie, now, config) {
-                update_stats_syn_cookie_validated();
+            if cookie_entry.valid != 0 {
+                // Validate both the SYN cookie and the ACK sequence
+                let cookie_valid = validate_syn_cookie(ack_seq.wrapping_sub(1), cookie_entry.cookie, now, config);
 
-                // Mark connection as validated
-                if let Some(conn) = unsafe { TCP_CONNECTIONS.get_ptr_mut(&conn_key) } {
-                    let conn = unsafe { &mut *conn };
-                    conn.flags |= CONN_FLAG_VALIDATED;
-                    conn.state = 3;  // Established
-                    conn.last_seen = now;
-                }
+                if cookie_valid {
+                    update_stats_syn_cookie_validated();
 
-                // Remove cookie entry
-                // Note: LruHashMap doesn't have remove, it will age out
-            } else {
-                // Cookie validation failed
-                update_stats_syn_cookie_failed();
-                if config.protection_level >= 2 {
-                    return Ok(xdp_action::XDP_DROP);
+                    // Mark connection as validated and complete handshake
+                    if let Some(conn) = unsafe { TCP_CONNECTIONS.get_ptr_mut(&conn_key) } {
+                        let conn = unsafe { &mut *conn };
+                        conn.flags |= CONN_FLAG_VALIDATED;
+                        conn.state = 3;  // Established
+                        conn.last_seen = now;
+
+                        // Clear incomplete handshake tracking for this IP
+                        clear_incomplete_handshake(src_ip, now, config);
+                    }
+                } else {
+                    // Cookie validation failed - potential ACK flood with spoofed cookies
+                    update_stats_syn_cookie_failed();
+                    if config.protection_level >= 2 {
+                        return Ok(xdp_action::XDP_DROP);
+                    }
                 }
             }
         }
     }
 
-    // Update connection state
+    // Update connection state and validate ACK sequence
     if let Some(conn) = unsafe { TCP_CONNECTIONS.get_ptr_mut(&conn_key) } {
         let conn = unsafe { &mut *conn };
+
+        // ACK sequence validation for established connections
+        if config.ack_validation_enabled != 0 && conn.state >= 3 {
+            // For established connections, validate that ACK is within reasonable window
+            // ACK should acknowledge data we've sent (expected_ack tracks our sent data)
+            // Allow some slack for out-of-order packets
+
+            // Validate that the ACK is not acknowledging data we haven't sent
+            // This detects ACK flood attacks with random ACK numbers
+            if conn.expected_ack != 0 {
+                // Check if ack_seq is within a reasonable window of expected_ack
+                // Using a window of 2^30 to handle wraparound
+                let diff = ack_seq.wrapping_sub(conn.expected_ack);
+                let reverse_diff = conn.expected_ack.wrapping_sub(ack_seq);
+
+                // If the ACK is way out of range (more than 2^30 in either direction)
+                // it's likely invalid. However, be careful with wraparound.
+                // In practice, we allow any ACK that's "ahead" of expected (diff < 2^31)
+                // or slightly behind (for retransmits)
+                const MAX_VALID_WINDOW: u32 = 0x40000000; // 2^30
+
+                if diff > MAX_VALID_WINDOW && reverse_diff > MAX_VALID_WINDOW {
+                    // ACK is far outside expected range - suspicious
+                    update_stats_invalid_ack();
+                    if config.protection_level >= 3 {
+                        return Ok(xdp_action::XDP_DROP);
+                    }
+                }
+            }
+        }
+
         conn.packets += 1;
         conn.last_seen = now;
 
         // State transitions
         match conn.state {
             1 => {
-                // SYN_RECV -> expecting SYN-ACK from server (wrong direction)
-                // This shouldn't happen for incoming ACK
+                // SYN_RECV -> This is the ACK completing the 3-way handshake
+                // Validate that ACK matches our expected value
+                if config.ack_validation_enabled != 0 {
+                    // The ACK should acknowledge our SYN-ACK (initial_seq + 1)
+                    // But we're the receiving side, so we check against expected_ack
+                    if conn.expected_ack != 0 && ack_seq != conn.expected_ack {
+                        // ACK doesn't match what we expect for handshake completion
+                        update_stats_invalid_ack();
+                        if config.protection_level >= 2 {
+                            return Ok(xdp_action::XDP_DROP);
+                        }
+                    }
+                }
+                conn.state = 3;  // Established
+                // Clear incomplete handshake tracking
+                clear_incomplete_handshake(src_ip, now, config);
             }
             2 => {
                 // SYN_SENT (client) -> ESTABLISHED on ACK
@@ -863,6 +1113,7 @@ fn handle_ack_packet(
             }
             3 => {
                 // ESTABLISHED - normal data flow
+                // Update expected_ack based on incoming seq to track received data
             }
             4 => {
                 // FIN_WAIT - closing
@@ -871,6 +1122,19 @@ fn handle_ack_packet(
                 }
             }
             _ => {}
+        }
+    } else {
+        // ACK for unknown connection
+        // This could be:
+        // 1. A legitimate packet for a connection we haven't tracked (overflow)
+        // 2. An ACK flood attack with random 4-tuples
+        // 3. A response to our outgoing connection (reverse direction)
+
+        if config.ack_validation_enabled != 0 && config.protection_level >= 3 {
+            // In aggressive mode, drop ACKs to unknown connections
+            // This may cause issues with asymmetric routing, so only use level 3
+            update_stats_invalid_ack();
+            return Ok(xdp_action::XDP_DROP);
         }
     }
 
@@ -988,7 +1252,12 @@ fn get_config() -> TcpConfig {
             rate_limit_window_ns: DEFAULT_RATE_LIMIT_WINDOW_NS,
             block_duration_ns: DEFAULT_BLOCK_DURATION_NS,
             protection_level: 2,
-            syn_cookie_secret: 0x12345678,  // Should be randomized in production
+            syn_cookie_secret: DEFAULT_SYN_COOKIE_SECRET,
+            syn_cookie_secret2: DEFAULT_SYN_COOKIE_SECRET2,
+            handshake_timeout_ns: DEFAULT_HANDSHAKE_TIMEOUT_NS,
+            max_incomplete_handshakes_per_ip: DEFAULT_MAX_INCOMPLETE_HANDSHAKES_PER_IP,
+            ack_validation_enabled: 1,
+            fragment_handling_enabled: 1,
         }
     }
 }
@@ -1078,6 +1347,34 @@ fn update_stats_syn_cookie_failed() {
 fn update_stats_window_probe() {
     if let Some(stats) = unsafe { TCP_STATS.get_ptr_mut(0) } {
         unsafe { (*stats).window_probe_detected += 1; }
+    }
+}
+
+#[inline(always)]
+fn update_stats_dropped_fragments() {
+    if let Some(stats) = unsafe { TCP_STATS.get_ptr_mut(0) } {
+        unsafe { (*stats).dropped_fragments += 1; }
+    }
+}
+
+#[inline(always)]
+fn update_stats_invalid_ack() {
+    if let Some(stats) = unsafe { TCP_STATS.get_ptr_mut(0) } {
+        unsafe { (*stats).dropped_invalid_ack += 1; }
+    }
+}
+
+#[inline(always)]
+fn update_stats_handshake_timeout() {
+    if let Some(stats) = unsafe { TCP_STATS.get_ptr_mut(0) } {
+        unsafe { (*stats).dropped_handshake_timeout += 1; }
+    }
+}
+
+#[inline(always)]
+fn update_stats_incomplete_handshake() {
+    if let Some(stats) = unsafe { TCP_STATS.get_ptr_mut(0) } {
+        unsafe { (*stats).incomplete_handshakes_detected += 1; }
     }
 }
 

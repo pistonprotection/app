@@ -4,8 +4,8 @@ use super::test_utils::{
     constants, create_test_ddos_protection, create_test_filter_rule, MockKubeClient,
 };
 use crate::crd::{
-    Condition, DDoSProtection, DDoSProtectionStatus, FilterRule, FilterRuleStatus, Phase,
-    FINALIZER,
+    Condition, DDoSProtection, DDoSProtectionSpec, DDoSProtectionStatus, FilterRule,
+    FilterRuleSpec, FilterRuleStatus, Phase, FINALIZER,
 };
 use std::collections::BTreeMap;
 
@@ -86,7 +86,7 @@ impl MockReconciler {
             .metadata
             .finalizers
             .as_ref()
-            .map(|f| f.contains(&FINALIZER.to_string()))
+            .map(|f: &Vec<String>| f.contains(&FINALIZER.to_string()))
             .unwrap_or(false)
     }
 
@@ -109,7 +109,7 @@ impl MockReconciler {
 
     fn validate_spec(
         &self,
-        spec: &crate::crd::DDoSProtectionSpec,
+        spec: &DDoSProtectionSpec,
     ) -> Result<(), String> {
         if spec.backends.is_empty() {
             return Err("At least one backend is required".to_string());
@@ -172,7 +172,7 @@ impl MockReconciler {
         })
     }
 
-    fn validate_filter_rule(&self, spec: &crate::crd::FilterRuleSpec) -> Result<(), String> {
+    fn validate_filter_rule(&self, spec: &FilterRuleSpec) -> Result<(), String> {
         if spec.name.is_empty() {
             return Err("Rule name is required".to_string());
         }

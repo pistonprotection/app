@@ -1,0 +1,12 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "installation",
+    "configuration",
+    "filters",
+    "api",
+    "architecture",
+    "operations"
+  ]
+}

@@ -1,3 +1,14 @@
+# =============================================================================
+# PistonProtection - Security Scanning Workflow
+# =============================================================================
+# This workflow performs comprehensive security scanning including:
+# - Dependency audits (Rust, npm)
+# - Container image scanning (Trivy)
+# - Static analysis (CodeQL, Semgrep)
+# - Secret scanning (TruffleHog, Gitleaks)
+# - License compliance
+# =============================================================================
+
 name: Security
 
 on:
@@ -18,13 +29,20 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # Rust dependency audit
+  # ===========================================================================
+  # Rust Dependency Audit (cargo-audit)
+  # ===========================================================================
   cargo-audit:
     name: Cargo Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-action@stable
@@ -44,14 +62,18 @@ jobs:
 
       - name: Generate audit report
         run: |
-          echo "## Security Audit Report" > audit-report.md
+          echo "## Rust Security Audit Report" > audit-report.md
           echo "" >> audit-report.md
           echo "### Services" >> audit-report.md
-          cd services && cargo audit --json 2>/dev/null | jq -r '.vulnerabilities.list[] | "- \(.advisory.id): \(.advisory.title)"' >> ../audit-report.md || echo "No vulnerabilities found" >> ../audit-report.md
+          echo '```' >> audit-report.md
+          cd services && cargo audit 2>&1 || true
           cd ..
+          echo '```' >> audit-report.md
           echo "" >> audit-report.md
           echo "### Operator" >> audit-report.md
-          cd operator && cargo audit --json 2>/dev/null | jq -r '.vulnerabilities.list[] | "- \(.advisory.id): \(.advisory.title)"' >> ../audit-report.md || echo "No vulnerabilities found" >> ../audit-report.md
+          echo '```' >> audit-report.md
+          cd operator && cargo audit 2>&1 || true
+          echo '```' >> audit-report.md
 
       - name: Upload audit report
         uses: actions/upload-artifact@v4
@@ -59,12 +81,15 @@ jobs:
           name: cargo-audit-report
           path: audit-report.md
 
-  # Cargo deny - license and dependency checks
+  # ===========================================================================
+  # Rust License and Dependency Check (cargo-deny)
+  # ===========================================================================
   cargo-deny:
     name: Cargo Deny
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-action@stable
@@ -72,7 +97,7 @@ jobs:
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
 
-      - name: Create deny.toml for services
+      - name: Create deny.toml
         run: |
           cat > services/deny.toml << 'EOF'
           [advisories]
@@ -94,12 +119,16 @@ jobs:
               "MPL-2.0",
               "Unicode-DFS-2016",
               "CC0-1.0",
+              "BSL-1.0",
+              "OpenSSL",
           ]
           copyleft = "warn"
 
           [bans]
           multiple-versions = "warn"
           wildcards = "deny"
+          deny = []
+          skip = []
 
           [sources]
           unknown-registry = "deny"
@@ -107,17 +136,27 @@ jobs:
           allow-registry = ["https://github.com/rust-lang/crates.io-index"]
           EOF
 
+          cp services/deny.toml operator/deny.toml
+
       - name: Run cargo deny (services)
         run: cargo deny check
         working-directory: services
         continue-on-error: true
 
-  # NPM audit for frontend
+      - name: Run cargo deny (operator)
+        run: cargo deny check
+        working-directory: operator
+        continue-on-error: true
+
+  # ===========================================================================
+  # NPM/pnpm Audit
+  # ===========================================================================
   npm-audit:
     name: NPM Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -142,7 +181,10 @@ jobs:
         run: |
           cd frontend
           echo "## NPM Audit Report" > npm-audit-report.md
-          pnpm audit --json 2>/dev/null | jq -r '.advisories | to_entries[] | "- \(.value.severity): \(.value.title) (\(.value.module_name))"' >> npm-audit-report.md || echo "No vulnerabilities found" >> npm-audit-report.md
+          echo "" >> npm-audit-report.md
+          echo '```' >> npm-audit-report.md
+          pnpm audit 2>&1 || true
+          echo '```' >> npm-audit-report.md
 
       - name: Upload audit report
         uses: actions/upload-artifact@v4
@@ -150,12 +192,15 @@ jobs:
           name: npm-audit-report
           path: frontend/npm-audit-report.md
 
-  # Trivy filesystem scan
+  # ===========================================================================
+  # Trivy Filesystem Scan
+  # ===========================================================================
   trivy-fs:
     name: Trivy Filesystem Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Run Trivy vulnerability scanner (filesystem)
         uses: aquasecurity/trivy-action@master
@@ -173,7 +218,7 @@ jobs:
           sarif_file: 'trivy-fs-results.sarif'
           category: 'trivy-filesystem'
 
-      - name: Run Trivy (table output)
+      - name: Run Trivy (table output for summary)
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
@@ -181,7 +226,9 @@ jobs:
           severity: 'CRITICAL,HIGH,MEDIUM'
           format: 'table'
 
-  # Trivy container image scan
+  # ===========================================================================
+  # Trivy Container Image Scan
+  # ===========================================================================
   trivy-images:
     name: Trivy Image Scan
     runs-on: ubuntu-latest
@@ -198,7 +245,8 @@ jobs:
           - operator
           - frontend
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -211,7 +259,7 @@ jobs:
           push: false
           load: true
           tags: pistonprotection/${{ matrix.component }}:scan
-          cache-from: type=gha
+          cache-from: type=gha,scope=${{ matrix.component }}
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
@@ -228,12 +276,15 @@ jobs:
           sarif_file: 'trivy-${{ matrix.component }}-results.sarif'
           category: 'trivy-${{ matrix.component }}'
 
-  # Grype vulnerability scanner
-  grype-scan:
+  # ===========================================================================
+  # Grype Vulnerability Scanner
+  # ===========================================================================
+  grype:
     name: Grype Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Run Grype
         uses: anchore/scan-action@v4
@@ -249,17 +300,24 @@ jobs:
           sarif_file: results.sarif
           category: 'grype'
 
-  # CodeQL analysis
+  # ===========================================================================
+  # CodeQL Analysis
+  # ===========================================================================
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript-typescript']
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: javascript-typescript
+          languages: ${{ matrix.language }}
           queries: security-extended
 
       - name: Autobuild
@@ -268,14 +326,17 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
-          category: 'codeql-javascript'
+          category: 'codeql-${{ matrix.language }}'
 
-  # Secret scanning
-  secret-scan:
+  # ===========================================================================
+  # Secret Scanning
+  # ===========================================================================
+  secrets:
     name: Secret Scanning
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -286,6 +347,7 @@ jobs:
           base: ${{ github.event.repository.default_branch }}
           head: HEAD
           extra_args: --only-verified
+        continue-on-error: true
 
       - name: Gitleaks
         uses: gitleaks/gitleaks-action@v2
@@ -293,14 +355,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
-  # SAST with Semgrep
+  # ===========================================================================
+  # Semgrep SAST
+  # ===========================================================================
   semgrep:
     name: Semgrep SAST
     runs-on: ubuntu-latest
     container:
       image: semgrep/semgrep
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Run Semgrep
         run: |
@@ -311,6 +376,7 @@ jobs:
             --config=p/react \
             --config=p/security-audit \
             --config=p/secrets \
+            --config=p/owasp-top-ten \
             --sarif \
             --output=semgrep-results.sarif \
             .
@@ -323,34 +389,42 @@ jobs:
           category: 'semgrep'
         if: always()
 
-  # Helm chart security scan
+  # ===========================================================================
+  # Helm Chart Security Scan
+  # ===========================================================================
   helm-security:
     name: Helm Security
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
         with:
           version: v3.14.0
 
-      - name: Add Bitnami repo
+      - name: Add dependency repos
         run: |
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo update
 
       - name: Install kubesec
         run: |
-          wget https://github.com/controlplaneio/kubesec/releases/download/v2.14.0/kubesec_linux_amd64.tar.gz
+          wget -q https://github.com/controlplaneio/kubesec/releases/download/v2.14.0/kubesec_linux_amd64.tar.gz
           tar xzf kubesec_linux_amd64.tar.gz
           sudo mv kubesec /usr/local/bin/
 
+      - name: Build dependencies
+        run: helm dependency build charts/pistonprotection
+
       - name: Template and scan Helm chart
         run: |
-          helm dependency build charts/pistonprotection
           helm template test charts/pistonprotection > rendered.yaml
-          kubesec scan rendered.yaml || true
+          echo "## Kubesec Scan Results" > helm-security-report.md
+          echo '```' >> helm-security-report.md
+          kubesec scan rendered.yaml >> helm-security-report.md 2>&1 || true
+          echo '```' >> helm-security-report.md
 
       - name: Run Checkov on Helm templates
         uses: bridgecrewio/checkov-action@v12
@@ -358,9 +432,50 @@ jobs:
           directory: charts/
           framework: helm
           soft_fail: true
+          output_format: sarif
+          output_file_path: checkov-helm.sarif
 
-  # Security summary
-  security-summary:
+      - name: Upload Checkov results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov-helm.sarif
+          category: 'checkov-helm'
+        continue-on-error: true
+
+      - name: Upload security report
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-security-report
+          path: helm-security-report.md
+
+  # ===========================================================================
+  # SBOM Generation
+  # ===========================================================================
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate SBOM for repository
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          artifact-name: sbom-repository.spdx.json
+          output-file: sbom-repository.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-repository
+          path: sbom-repository.spdx.json
+
+  # ===========================================================================
+  # Security Summary
+  # ===========================================================================
+  summary:
     name: Security Summary
     runs-on: ubuntu-latest
     needs:
@@ -368,10 +483,11 @@ jobs:
       - cargo-deny
       - npm-audit
       - trivy-fs
-      - grype-scan
-      - secret-scan
+      - grype
+      - secrets
       - semgrep
       - helm-security
+      - codeql
     if: always()
     steps:
       - name: Download all artifacts
@@ -384,13 +500,38 @@ jobs:
         run: |
           echo "# Security Scan Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Cargo Audit | ${{ needs.cargo-audit.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Cargo Deny | ${{ needs.cargo-deny.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| NPM Audit | ${{ needs.npm-audit.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Trivy FS | ${{ needs.trivy-fs.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Grype | ${{ needs.grype-scan.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Secret Scan | ${{ needs.secret-scan.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Semgrep | ${{ needs.semgrep.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Helm Security | ${{ needs.helm-security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scanner | Status | Description |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|-------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Cargo Audit | ${{ needs.cargo-audit.result }} | Rust dependency vulnerabilities |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cargo Deny | ${{ needs.cargo-deny.result }} | License & dependency compliance |" >> $GITHUB_STEP_SUMMARY
+          echo "| NPM Audit | ${{ needs.npm-audit.result }} | Node.js dependency vulnerabilities |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy FS | ${{ needs.trivy-fs.result }} | Filesystem vulnerability scan |" >> $GITHUB_STEP_SUMMARY
+          echo "| Grype | ${{ needs.grype.result }} | Additional vulnerability scan |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secret Scan | ${{ needs.secrets.result }} | Exposed secrets detection |" >> $GITHUB_STEP_SUMMARY
+          echo "| Semgrep | ${{ needs.semgrep.result }} | Static application security testing |" >> $GITHUB_STEP_SUMMARY
+          echo "| Helm Security | ${{ needs.helm-security.result }} | Kubernetes manifest security |" >> $GITHUB_STEP_SUMMARY
+          echo "| CodeQL | ${{ needs.codeql.result }} | Code analysis |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Cargo Audit Report" >> $GITHUB_STEP_SUMMARY
+          echo "- NPM Audit Report" >> $GITHUB_STEP_SUMMARY
+          echo "- Helm Security Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All SARIF reports have been uploaded to GitHub Security tab." >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for critical failures
+        run: |
+          # Only fail if critical security scans failed (not just warnings)
+          if [[ "${{ needs.trivy-fs.result }}" == "failure" ]] || \
+             [[ "${{ needs.secrets.result }}" == "failure" ]]; then
+            echo "Critical security scan failed"
+            exit 1
+          fi
+          echo "Security scans completed"

@@ -13,14 +13,15 @@ use crate::crd::{
 use crate::error::{Error, Result};
 use crate::metrics::{Metrics, ReconciliationTimer};
 
+use k8s_openapi::api::core::v1::ObjectReference;
 use kube::{
     api::{Api, ObjectMeta, Patch, PatchParams},
     runtime::{
         controller::Action,
-        events::{Event, EventType, Recorder},
+        events::{Event, EventType, Recorder, Reporter},
         finalizer::{finalizer, Event as FinalizerEvent},
     },
-    Client, ResourceExt,
+    Client, Resource, ResourceExt,
 };
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
@@ -35,8 +36,8 @@ pub struct Context {
     pub gateway_client: GatewayClient,
     /// Metrics collector
     pub metrics: Arc<Metrics>,
-    /// Event recorder
-    pub recorder: Recorder,
+    /// Event reporter
+    pub reporter: Reporter,
 }
 
 impl Context {
@@ -45,14 +46,19 @@ impl Context {
         client: Client,
         gateway_client: GatewayClient,
         metrics: Arc<Metrics>,
-        recorder: Recorder,
+        reporter: Reporter,
     ) -> Self {
         Self {
             client,
             gateway_client,
             metrics,
-            recorder,
+            reporter,
         }
+    }
+
+    /// Create a recorder for a specific object
+    fn recorder(&self, obj_ref: ObjectReference) -> Recorder {
+        Recorder::new(self.client.clone(), self.reporter.clone(), obj_ref)
     }
 }
 
@@ -73,6 +79,17 @@ pub async fn reconcile(
 
     let timer = ReconciliationTimer::new(&ctx.metrics, "Backend", &namespace);
 
+    // Create object reference for events
+    let obj_ref = ObjectReference {
+        api_version: Some(Backend::api_version(&()).to_string()),
+        kind: Some(Backend::kind(&()).to_string()),
+        name: Some(name.clone()),
+        namespace: Some(namespace.clone()),
+        uid: backend.metadata.uid.clone(),
+        ..Default::default()
+    };
+    let recorder = ctx.recorder(obj_ref);
+
     // Get API for this namespace
     let backend_api: Api<Backend> = Api::namespaced(ctx.client.clone(), &namespace);
 
@@ -80,10 +97,10 @@ pub async fn reconcile(
     let result = finalizer(&backend_api, FINALIZER, backend, |event| async {
         match event {
             FinalizerEvent::Apply(backend) => {
-                reconcile_apply(&backend, &ctx, &namespace, &name).await
+                reconcile_apply(&backend, &ctx, &recorder, &namespace, &name).await
             }
             FinalizerEvent::Cleanup(backend) => {
-                reconcile_cleanup(&backend, &ctx, &namespace, &name).await
+                reconcile_cleanup(&backend, &ctx, &recorder, &namespace, &name).await
             }
         }
     })
@@ -95,8 +112,20 @@ pub async fn reconcile(
             Ok(action)
         }
         Err(e) => {
-            timer.error(e.category());
-            Err(e)
+            let error = match e {
+                kube::runtime::finalizer::Error::ApplyFailed(e) => e,
+                kube::runtime::finalizer::Error::CleanupFailed(e) => e,
+                kube::runtime::finalizer::Error::AddFinalizer(e) => Error::KubeError(e),
+                kube::runtime::finalizer::Error::RemoveFinalizer(e) => Error::KubeError(e),
+                kube::runtime::finalizer::Error::UnnamedObject => {
+                    Error::Permanent("Resource has no name".to_string())
+                }
+                kube::runtime::finalizer::Error::InvalidFinalizer => {
+                    Error::Permanent("Invalid finalizer".to_string())
+                }
+            };
+            timer.error(error.category());
+            Err(error)
         }
     }
 }
@@ -105,6 +134,7 @@ pub async fn reconcile(
 async fn reconcile_apply(
     backend: &Backend,
     ctx: &Context,
+    recorder: &Recorder,
     namespace: &str,
     name: &str,
 ) -> Result<Action> {
@@ -114,7 +144,7 @@ async fn reconcile_apply(
     validate_backend(backend)?;
 
     // Record event
-    ctx.recorder
+    recorder
         .publish(Event {
             type_: EventType::Normal,
             reason: "Reconciling".to_string(),
@@ -172,7 +202,7 @@ async fn reconcile_apply(
     update_status(&ctx.client, namespace, name, status).await?;
 
     // Record success event
-    ctx.recorder
+    recorder
         .publish(Event {
             type_: EventType::Normal,
             reason: "Reconciled".to_string(),
@@ -200,13 +230,14 @@ async fn reconcile_apply(
 async fn reconcile_cleanup(
     backend: &Backend,
     ctx: &Context,
+    recorder: &Recorder,
     namespace: &str,
     name: &str,
 ) -> Result<Action> {
     info!("Cleaning up Backend {}/{}", namespace, name);
 
     // Record event
-    ctx.recorder
+    recorder
         .publish(Event {
             type_: EventType::Normal,
             reason: "Deleting".to_string(),
