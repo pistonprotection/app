@@ -371,6 +371,46 @@ impl OrganizationMember {
     }
 }
 
+impl Subscription {
+    pub fn to_proto(&self) -> pistonprotection_proto::auth::Subscription {
+        use pistonprotection_proto::Timestamp;
+        use pistonprotection_proto::auth::Subscription as ProtoSubscription;
+
+        ProtoSubscription {
+            id: self.id.clone(),
+            plan_id: self.plan_id.clone(),
+            plan_name: self.plan_name.clone(),
+            status: i32::from(self.status),
+            stripe_customer_id: self.stripe_customer_id.clone().unwrap_or_default(),
+            stripe_subscription_id: self.stripe_subscription_id.clone().unwrap_or_default(),
+            current_period_start: Some(Timestamp::from(self.current_period_start)),
+            current_period_end: Some(Timestamp::from(self.current_period_end)),
+            in_trial: self.in_trial,
+            trial_ends_at: self.trial_ends_at.map(Timestamp::from),
+            cancel_at_period_end: self.cancel_at_period_end,
+            canceled_at: self.canceled_at.map(Timestamp::from),
+        }
+    }
+}
+
+impl OrganizationLimits {
+    pub fn to_proto(&self) -> pistonprotection_proto::auth::OrganizationLimits {
+        pistonprotection_proto::auth::OrganizationLimits {
+            max_backends: self.max_backends as u32,
+            max_origins_per_backend: self.max_origins_per_backend as u32,
+            max_domains: self.max_domains as u32,
+            max_filter_rules: self.max_filter_rules as u32,
+            max_bandwidth_bytes: self.max_bandwidth_bytes as u64,
+            max_requests: self.max_requests as u64,
+            advanced_protection: self.advanced_protection,
+            priority_support: self.priority_support,
+            custom_ssl: self.custom_ssl,
+            api_access: self.api_access,
+            data_retention_days: self.data_retention_days as u32,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

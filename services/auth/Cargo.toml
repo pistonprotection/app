@@ -88,6 +88,9 @@ ipnetwork = { workspace = true }
 # Stripe integration
 stripe-rust = { package = "async-stripe", version = "0.39", features = ["runtime-tokio-hyper"] }
 
+# HTTP client for email services
+reqwest = { workspace = true }
+
 [dev-dependencies]
 tokio-test = { workspace = true }
 mockall = { workspace = true }

@@ -678,108 +678,650 @@ impl ProtoAuthService for AuthServiceImpl {
 
     async fn list_plans(
         &self,
-        _request: Request<ListPlansRequest>,
+        request: Request<ListPlansRequest>,
     ) -> Result<Response<ListPlansResponse>, Status> {
-        // TODO: Implement list_plans
-        Ok(Response::new(ListPlansResponse { plans: vec![] }))
+        let stripe_service = self
+            .state
+            .stripe_service()
+            .ok_or_else(|| Status::failed_precondition("Stripe is not configured"))?;
+
+        let req = request.into_inner();
+
+        let plans = stripe_service
+            .list_plans()
+            .await
+            .map_err(|e| {
+                error!("Failed to list plans: {}", e);
+                Status::internal("Failed to list plans")
+            })?;
+
+        // Filter inactive plans if not requested
+        let plans: Vec<_> = if req.include_inactive {
+            plans
+        } else {
+            plans.into_iter().filter(|p| p.is_active).collect()
+        };
+
+        Ok(Response::new(ListPlansResponse {
+            plans: plans.into_iter().map(|p| p.to_proto()).collect(),
+        }))
     }
 
     async fn get_plan(
         &self,
-        _request: Request<GetPlanRequest>,
+        request: Request<GetPlanRequest>,
     ) -> Result<Response<GetPlanResponse>, Status> {
-        // TODO: Implement get_plan
-        Err(Status::unimplemented("get_plan not yet implemented"))
+        let stripe_service = self
+            .state
+            .stripe_service()
+            .ok_or_else(|| Status::failed_precondition("Stripe is not configured"))?;
+
+        let req = request.into_inner();
+
+        let plan = stripe_service
+            .get_plan_by_id(&req.plan_id)
+            .await
+            .map_err(|e| {
+                error!("Failed to get plan: {}", e);
+                Status::not_found("Plan not found")
+            })?;
+
+        Ok(Response::new(GetPlanResponse {
+            plan: Some(plan.to_proto()),
+        }))
     }
 
     async fn get_subscription(
         &self,
-        _request: Request<GetSubscriptionRequest>,
+        request: Request<GetSubscriptionRequest>,
     ) -> Result<Response<GetSubscriptionResponse>, Status> {
-        // TODO: Implement get_subscription
-        Err(Status::unimplemented("get_subscription not yet implemented"))
+        let stripe_service = self
+            .state
+            .stripe_service()
+            .ok_or_else(|| Status::failed_precondition("Stripe is not configured"))?;
+
+        let req = request.into_inner();
+
+        let subscription = stripe_service
+            .get_subscription_by_org_id(&req.organization_id)
+            .await
+            .map_err(|e| {
+                error!("Failed to get subscription: {}", e);
+                Status::internal("Failed to get subscription")
+            })?
+            .ok_or_else(|| Status::not_found("Subscription not found"))?;
+
+        // Get the plan details
+        let plan = stripe_service
+            .get_plan_by_id(&subscription.plan_id)
+            .await
+            .ok();
+
+        Ok(Response::new(GetSubscriptionResponse {
+            subscription: Some(subscription.to_proto()),
+            plan: plan.map(|p| p.to_proto()),
+        }))
     }
 
     async fn update_subscription(
         &self,
-        _request: Request<pistonprotection_proto::auth::UpdateSubscriptionRequest>,
+        request: Request<pistonprotection_proto::auth::UpdateSubscriptionRequest>,
     ) -> Result<Response<UpdateSubscriptionResponse>, Status> {
-        // TODO: Implement update_subscription
-        Err(Status::unimplemented("update_subscription not yet implemented"))
+        let stripe_service = self
+            .state
+            .stripe_service()
+            .ok_or_else(|| Status::failed_precondition("Stripe is not configured"))?;
+
+        let req = request.into_inner();
+
+        // Get current subscription
+        let subscription = stripe_service
+            .get_subscription_by_org_id(&req.organization_id)
+            .await
+            .map_err(|e| {
+                error!("Failed to get subscription: {}", e);
+                Status::internal("Failed to get subscription")
+            })?
+            .ok_or_else(|| Status::not_found("Subscription not found"))?;
+
+        let stripe_sub_id = subscription
+            .stripe_subscription_id
+            .as_ref()
+            .ok_or_else(|| Status::failed_precondition("No Stripe subscription ID"))?;
+
+        // Get new price ID if plan is changing
+        let new_price_id = if !req.plan_id.is_empty() {
+            let plan = stripe_service
+                .get_plan_by_id(&req.plan_id)
+                .await
+                .map_err(|e| {
+                    error!("Failed to get plan: {}", e);
+                    Status::not_found("Plan not found")
+                })?;
+
+            // Determine price based on billing period
+            let price_id = match req.billing_period {
+                2 => plan.stripe_price_id_yearly.as_ref(),
+                _ => plan.stripe_price_id_monthly.as_ref(),
+            };
+
+            price_id.cloned()
+        } else {
+            None
+        };
+
+        // Convert proration behavior
+        let proration = match req.proration_behavior {
+            2 => crate::models::subscription::ProrationBehavior::None,
+            3 => crate::models::subscription::ProrationBehavior::AlwaysInvoice,
+            _ => crate::models::subscription::ProrationBehavior::CreateProrations,
+        };
+
+        // Update subscription in Stripe
+        let _updated_stripe_sub = stripe_service
+            .update_subscription(stripe_sub_id, new_price_id.as_deref(), proration)
+            .await
+            .map_err(|e| {
+                error!("Failed to update Stripe subscription: {}", e);
+                Status::internal("Failed to update subscription")
+            })?;
+
+        // Fetch updated subscription
+        let updated_subscription = stripe_service
+            .get_subscription_by_org_id(&req.organization_id)
+            .await
+            .map_err(|e| {
+                error!("Failed to get updated subscription: {}", e);
+                Status::internal("Failed to get updated subscription")
+            })?
+            .ok_or_else(|| Status::internal("Subscription not found after update"))?;
+
+        info!(
+            organization_id = %req.organization_id,
+            "Updated subscription"
+        );
+
+        Ok(Response::new(UpdateSubscriptionResponse {
+            subscription: Some(updated_subscription.to_proto()),
+        }))
     }
 
     async fn cancel_subscription(
         &self,
-        _request: Request<pistonprotection_proto::auth::CancelSubscriptionRequest>,
+        request: Request<pistonprotection_proto::auth::CancelSubscriptionRequest>,
     ) -> Result<Response<CancelSubscriptionResponse>, Status> {
-        // TODO: Implement cancel_subscription
-        Err(Status::unimplemented("cancel_subscription not yet implemented"))
+        let stripe_service = self
+            .state
+            .stripe_service()
+            .ok_or_else(|| Status::failed_precondition("Stripe is not configured"))?;
+
+        let req = request.into_inner();
+
+        // Get current subscription
+        let subscription = stripe_service
+            .get_subscription_by_org_id(&req.organization_id)
+            .await
+            .map_err(|e| {
+                error!("Failed to get subscription: {}", e);
+                Status::internal("Failed to get subscription")
+            })?
+            .ok_or_else(|| Status::not_found("Subscription not found"))?;
+
+        let stripe_sub_id = subscription
+            .stripe_subscription_id
+            .as_ref()
+            .ok_or_else(|| Status::failed_precondition("No Stripe subscription ID"))?;
+
+        // Cancel in Stripe
+        let _cancelled = stripe_service
+            .cancel_subscription(stripe_sub_id, req.cancel_at_period_end)
+            .await
+            .map_err(|e| {
+                error!("Failed to cancel Stripe subscription: {}", e);
+                Status::internal("Failed to cancel subscription")
+            })?;
+
+        // Fetch updated subscription
+        let updated_subscription = stripe_service
+            .get_subscription_by_org_id(&req.organization_id)
+            .await
+            .map_err(|e| {
+                error!("Failed to get updated subscription: {}", e);
+                Status::internal("Failed to get updated subscription")
+            })?
+            .ok_or_else(|| Status::internal("Subscription not found after cancellation"))?;
+
+        info!(
+            organization_id = %req.organization_id,
+            cancel_at_period_end = %req.cancel_at_period_end,
+            "Cancelled subscription"
+        );
+
+        Ok(Response::new(CancelSubscriptionResponse {
+            subscription: Some(updated_subscription.to_proto()),
+        }))
     }
 
     async fn resume_subscription(
         &self,
-        _request: Request<ResumeSubscriptionRequest>,
+        request: Request<ResumeSubscriptionRequest>,
     ) -> Result<Response<ResumeSubscriptionResponse>, Status> {
-        // TODO: Implement resume_subscription
-        Err(Status::unimplemented("resume_subscription not yet implemented"))
+        let stripe_service = self
+            .state
+            .stripe_service()
+            .ok_or_else(|| Status::failed_precondition("Stripe is not configured"))?;
+
+        let req = request.into_inner();
+
+        // Get current subscription
+        let subscription = stripe_service
+            .get_subscription_by_org_id(&req.organization_id)
+            .await
+            .map_err(|e| {
+                error!("Failed to get subscription: {}", e);
+                Status::internal("Failed to get subscription")
+            })?
+            .ok_or_else(|| Status::not_found("Subscription not found"))?;
+
+        let stripe_sub_id = subscription
+            .stripe_subscription_id
+            .as_ref()
+            .ok_or_else(|| Status::failed_precondition("No Stripe subscription ID"))?;
+
+        // Resume in Stripe
+        let _resumed = stripe_service
+            .resume_subscription(stripe_sub_id)
+            .await
+            .map_err(|e| {
+                error!("Failed to resume Stripe subscription: {}", e);
+                Status::internal("Failed to resume subscription")
+            })?;
+
+        // Fetch updated subscription
+        let updated_subscription = stripe_service
+            .get_subscription_by_org_id(&req.organization_id)
+            .await
+            .map_err(|e| {
+                error!("Failed to get updated subscription: {}", e);
+                Status::internal("Failed to get updated subscription")
+            })?
+            .ok_or_else(|| Status::internal("Subscription not found after resume"))?;
+
+        info!(
+            organization_id = %req.organization_id,
+            "Resumed subscription"
+        );
+
+        Ok(Response::new(ResumeSubscriptionResponse {
+            subscription: Some(updated_subscription.to_proto()),
+        }))
     }
 
     async fn create_checkout_session(
         &self,
-        _request: Request<pistonprotection_proto::auth::CreateCheckoutSessionRequest>,
+        request: Request<pistonprotection_proto::auth::CreateCheckoutSessionRequest>,
     ) -> Result<Response<CreateCheckoutSessionResponse>, Status> {
-        // TODO: Implement create_checkout_session
-        Err(Status::unimplemented("create_checkout_session not yet implemented"))
+        let stripe_service = self
+            .state
+            .stripe_service()
+            .ok_or_else(|| Status::failed_precondition("Stripe is not configured"))?;
+
+        let req = request.into_inner();
+
+        // Convert billing period
+        let billing_period = match req.billing_period {
+            2 => crate::models::subscription::BillingPeriod::Yearly,
+            _ => crate::models::subscription::BillingPeriod::Monthly,
+        };
+
+        let checkout_request = crate::models::subscription::CreateCheckoutSessionRequest {
+            organization_id: req.organization_id.clone(),
+            plan_id: req.plan_id.clone(),
+            billing_period,
+            success_url: req.success_url.clone(),
+            cancel_url: req.cancel_url.clone(),
+            allow_promotion_codes: req.allow_promotion_codes,
+        };
+
+        let session = stripe_service
+            .create_checkout_session(&checkout_request)
+            .await
+            .map_err(|e| {
+                error!("Failed to create checkout session: {}", e);
+                Status::internal("Failed to create checkout session")
+            })?;
+
+        info!(
+            organization_id = %req.organization_id,
+            plan_id = %req.plan_id,
+            session_id = %session.id,
+            "Created checkout session"
+        );
+
+        Ok(Response::new(CreateCheckoutSessionResponse {
+            session: Some(CheckoutSession {
+                id: session.id.to_string(),
+                url: session.url.unwrap_or_default(),
+                expires_at: Some(pistonprotection_proto::Timestamp {
+                    seconds: session.expires_at,
+                    nanos: 0,
+                }),
+            }),
+        }))
     }
 
     async fn create_billing_portal_session(
         &self,
-        _request: Request<pistonprotection_proto::auth::CreateBillingPortalSessionRequest>,
+        request: Request<pistonprotection_proto::auth::CreateBillingPortalSessionRequest>,
     ) -> Result<Response<CreateBillingPortalSessionResponse>, Status> {
-        // TODO: Implement create_billing_portal_session
-        Err(Status::unimplemented("create_billing_portal_session not yet implemented"))
+        let stripe_service = self
+            .state
+            .stripe_service()
+            .ok_or_else(|| Status::failed_precondition("Stripe is not configured"))?;
+
+        let req = request.into_inner();
+
+        let portal_request = crate::models::subscription::CreateBillingPortalSessionRequest {
+            organization_id: req.organization_id.clone(),
+            return_url: req.return_url.clone(),
+        };
+
+        let session = stripe_service
+            .create_billing_portal_session(&portal_request)
+            .await
+            .map_err(|e| {
+                error!("Failed to create billing portal session: {}", e);
+                Status::internal("Failed to create billing portal session")
+            })?;
+
+        info!(
+            organization_id = %req.organization_id,
+            "Created billing portal session"
+        );
+
+        Ok(Response::new(CreateBillingPortalSessionResponse {
+            session: Some(BillingPortalSession {
+                id: session.id.to_string(),
+                url: session.url,
+            }),
+        }))
     }
 
     async fn list_invoices(
         &self,
-        _request: Request<ListInvoicesRequest>,
+        request: Request<ListInvoicesRequest>,
     ) -> Result<Response<ListInvoicesResponse>, Status> {
-        // TODO: Implement list_invoices
+        let stripe_service = self
+            .state
+            .stripe_service()
+            .ok_or_else(|| Status::failed_precondition("Stripe is not configured"))?;
+
+        let req = request.into_inner();
+
+        let pagination = req.pagination.unwrap_or_default();
+        let page = pagination.page.max(1);
+        let page_size = pagination.page_size.clamp(1, 100);
+        let offset = ((page - 1) * page_size) as i64;
+
+        let invoices = stripe_service
+            .get_organization_invoices(&req.organization_id, page_size as i64, offset)
+            .await
+            .map_err(|e| {
+                error!("Failed to list invoices: {}", e);
+                Status::internal("Failed to list invoices")
+            })?;
+
         Ok(Response::new(ListInvoicesResponse {
-            invoices: vec![],
-            pagination: None,
+            invoices: invoices.into_iter().map(|i| i.to_proto()).collect(),
+            pagination: Some(PaginationInfo {
+                total_count: 0, // Would need a count query
+                page,
+                page_size,
+                has_next: false,
+                next_cursor: String::new(),
+            }),
         }))
     }
 
     async fn get_invoice(
         &self,
-        _request: Request<GetInvoiceRequest>,
+        request: Request<GetInvoiceRequest>,
     ) -> Result<Response<GetInvoiceResponse>, Status> {
-        // TODO: Implement get_invoice
-        Err(Status::unimplemented("get_invoice not yet implemented"))
+        let stripe_service = self
+            .state
+            .stripe_service()
+            .ok_or_else(|| Status::failed_precondition("Stripe is not configured"))?;
+
+        let req = request.into_inner();
+
+        // Fetch from Stripe
+        let stripe_invoice = stripe_service
+            .get_invoice(&req.invoice_id)
+            .await
+            .map_err(|e| {
+                error!("Failed to get invoice: {}", e);
+                Status::not_found("Invoice not found")
+            })?;
+
+        // Convert to proto
+        let invoice = pistonprotection_proto::auth::Invoice {
+            id: stripe_invoice.id.to_string(),
+            organization_id: String::new(), // Would need lookup
+            subscription_id: stripe_invoice
+                .subscription
+                .map(|s| match s {
+                    stripe_rust::Expandable::Id(id) => id.to_string(),
+                    stripe_rust::Expandable::Object(sub) => sub.id.to_string(),
+                })
+                .unwrap_or_default(),
+            stripe_invoice_id: stripe_invoice.id.to_string(),
+            number: stripe_invoice.number.unwrap_or_default(),
+            status: stripe_invoice
+                .status
+                .map(|s| {
+                    crate::models::subscription::InvoiceStatus::from_stripe_status(&s.to_string())
+                })
+                .map(i32::from)
+                .unwrap_or(0),
+            currency: stripe_invoice
+                .currency
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "usd".to_string()),
+            subtotal_cents: stripe_invoice.subtotal.unwrap_or(0),
+            tax_cents: stripe_invoice.tax.unwrap_or(0),
+            total_cents: stripe_invoice.total.unwrap_or(0),
+            amount_paid_cents: stripe_invoice.amount_paid.unwrap_or(0),
+            amount_due_cents: stripe_invoice.amount_due.unwrap_or(0),
+            description: stripe_invoice.description.unwrap_or_default(),
+            invoice_pdf_url: stripe_invoice.invoice_pdf.unwrap_or_default(),
+            hosted_invoice_url: stripe_invoice.hosted_invoice_url.unwrap_or_default(),
+            period_start: stripe_invoice.period_start.map(|ts| {
+                pistonprotection_proto::Timestamp {
+                    seconds: ts,
+                    nanos: 0,
+                }
+            }),
+            period_end: stripe_invoice.period_end.map(|ts| {
+                pistonprotection_proto::Timestamp {
+                    seconds: ts,
+                    nanos: 0,
+                }
+            }),
+            due_date: stripe_invoice.due_date.map(|ts| {
+                pistonprotection_proto::Timestamp {
+                    seconds: ts,
+                    nanos: 0,
+                }
+            }),
+            paid_at: None,
+            created_at: stripe_invoice.created.map(|ts| {
+                pistonprotection_proto::Timestamp {
+                    seconds: ts,
+                    nanos: 0,
+                }
+            }),
+        };
+
+        Ok(Response::new(GetInvoiceResponse {
+            invoice: Some(invoice),
+        }))
     }
 
     async fn get_usage_summary(
         &self,
-        _request: Request<GetUsageSummaryRequest>,
+        request: Request<GetUsageSummaryRequest>,
     ) -> Result<Response<GetUsageSummaryResponse>, Status> {
-        // TODO: Implement get_usage_summary
-        Err(Status::unimplemented("get_usage_summary not yet implemented"))
+        let stripe_service = self
+            .state
+            .stripe_service()
+            .ok_or_else(|| Status::failed_precondition("Stripe is not configured"))?;
+
+        let req = request.into_inner();
+
+        use chrono::Datelike;
+
+        // Parse timestamps
+        let period_start = req
+            .period_start
+            .map(|t| {
+                chrono::DateTime::from_timestamp(t.seconds, t.nanos as u32)
+                    .unwrap_or_else(chrono::Utc::now)
+            })
+            .unwrap_or_else(|| {
+                // Default to start of current month
+                let now = chrono::Utc::now();
+                now - chrono::Duration::days(now.day0() as i64)
+            });
+
+        let period_end = req
+            .period_end
+            .map(|t| {
+                chrono::DateTime::from_timestamp(t.seconds, t.nanos as u32)
+                    .unwrap_or_else(chrono::Utc::now)
+            })
+            .unwrap_or_else(chrono::Utc::now);
+
+        let summary = stripe_service
+            .get_usage_summary(&req.organization_id, period_start, period_end)
+            .await
+            .map_err(|e| {
+                error!("Failed to get usage summary: {}", e);
+                Status::internal("Failed to get usage summary")
+            })?;
+
+        // Get organization limits
+        let limits = self
+            .state
+            .organization_service()
+            .get_limits(&req.organization_id)
+            .await
+            .map_err(|e| Status::from(e))?;
+
+        Ok(Response::new(GetUsageSummaryResponse {
+            summary: summary.map(|s| pistonprotection_proto::auth::UsageSummary {
+                id: s.id,
+                organization_id: s.organization_id,
+                subscription_id: s.subscription_id,
+                period_start: Some(pistonprotection_proto::Timestamp::from(s.period_start)),
+                period_end: Some(pistonprotection_proto::Timestamp::from(s.period_end)),
+                total_requests: s.total_requests,
+                total_bandwidth_bytes: s.total_bandwidth_bytes,
+                total_blocked_requests: s.total_blocked_requests,
+                total_challenges_served: s.total_challenges_served,
+                overage_requests: s.overage_requests,
+                overage_bandwidth_bytes: s.overage_bandwidth_bytes,
+                overage_charges_cents: s.overage_charges_cents,
+            }),
+            limits: limits.map(|l| l.to_proto()),
+        }))
     }
 
     async fn report_usage(
         &self,
-        _request: Request<ReportUsageRequest>,
+        request: Request<ReportUsageRequest>,
     ) -> Result<Response<ReportUsageResponse>, Status> {
-        // TODO: Implement report_usage
-        Err(Status::unimplemented("report_usage not yet implemented"))
+        let stripe_service = self
+            .state
+            .stripe_service()
+            .ok_or_else(|| Status::failed_precondition("Stripe is not configured"))?;
+
+        let req = request.into_inner();
+
+        // Convert metric type
+        let metric_type = crate::models::subscription::UsageMetricType::try_from(req.metric_type)
+            .unwrap_or(crate::models::subscription::UsageMetricType::Requests);
+
+        // Report usage based on metric type
+        match metric_type {
+            crate::models::subscription::UsageMetricType::BandwidthBytes => {
+                stripe_service
+                    .report_bandwidth_usage(&req.organization_id, req.quantity)
+                    .await
+                    .map_err(|e| {
+                        error!("Failed to report bandwidth usage: {}", e);
+                        Status::internal("Failed to report usage")
+                    })?;
+            }
+            crate::models::subscription::UsageMetricType::Requests => {
+                stripe_service
+                    .report_request_usage(&req.organization_id, req.quantity)
+                    .await
+                    .map_err(|e| {
+                        error!("Failed to report request usage: {}", e);
+                        Status::internal("Failed to report usage")
+                    })?;
+            }
+            _ => {
+                // Other metrics not yet supported for Stripe reporting
+            }
+        }
+
+        Ok(Response::new(ReportUsageResponse {
+            success: true,
+            record: Some(pistonprotection_proto::auth::UsageRecord {
+                id: uuid::Uuid::new_v4().to_string(),
+                organization_id: req.organization_id,
+                subscription_id: String::new(),
+                metric_type: req.metric_type,
+                quantity: req.quantity,
+                timestamp: req.timestamp,
+            }),
+        }))
     }
 
     async fn list_payment_methods(
         &self,
-        _request: Request<ListPaymentMethodsRequest>,
+        request: Request<ListPaymentMethodsRequest>,
     ) -> Result<Response<ListPaymentMethodsResponse>, Status> {
-        // TODO: Implement list_payment_methods
+        let stripe_service = self
+            .state
+            .stripe_service()
+            .ok_or_else(|| Status::failed_precondition("Stripe is not configured"))?;
+
+        let req = request.into_inner();
+
+        // Get subscription to find customer ID
+        let subscription = stripe_service
+            .get_subscription_by_org_id(&req.organization_id)
+            .await
+            .map_err(|e| {
+                error!("Failed to get subscription: {}", e);
+                Status::internal("Failed to get subscription")
+            })?;
+
+        let customer_id = match subscription {
+            Some(ref sub) => sub.stripe_customer_id.as_ref(),
+            None => None,
+        };
+
+        if customer_id.is_none() {
+            return Ok(Response::new(ListPaymentMethodsResponse {
+                payment_methods: vec![],
+            }));
+        }
+
+        // Payment methods would be fetched from local DB or Stripe
+        // For now, return empty list (would need to implement Stripe PaymentMethod listing)
         Ok(Response::new(ListPaymentMethodsResponse {
             payment_methods: vec![],
         }))
