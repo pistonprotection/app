@@ -1,11 +1,12 @@
 [package]
 name = "pistonprotection-common"
 version.workspace = true
-edition = "2024"
+edition = "2021"
 license.workspace = true
 
 [dependencies]
 pistonprotection-proto = { path = "../proto" }
+tonic = { workspace = true }
 
 # Async
 tokio = { workspace = true }
