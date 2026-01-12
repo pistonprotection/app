@@ -1,512 +1,675 @@
-import { useState, useMemo } from 'react'
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
-  BarChart3,
-  Globe,
-  Shield,
-  TrendingUp,
-  TrendingDown,
-  Calendar,
-} from 'lucide-react'
-import {
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts'
-
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { formatNumber, formatBytes } from '@/lib/utils'
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { metricsQueryOptions, type Metrics } from "@/lib/api";
+import { formatNumber, formatBytes } from "@/lib/utils";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from "recharts";
 
-const PIE_COLORS = ['#22c55e', '#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#ec4899']
+// Mock data generator for different time ranges
+const generateMockMetrics = (timeRange: string): Metrics => {
+  const dataPoints = timeRange === "24h" ? 24 : timeRange === "7d" ? 7 : 30;
+  const multiplier = timeRange === "24h" ? 1 : timeRange === "7d" ? 7 : 30;
 
-function TimeRangeSelector({
-  value,
-  onChange,
-}: {
-  value: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="w-[180px]">
-        <Calendar className="mr-2 h-4 w-4" />
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="1h">Last Hour</SelectItem>
-        <SelectItem value="24h">Last 24 Hours</SelectItem>
-        <SelectItem value="7d">Last 7 Days</SelectItem>
-        <SelectItem value="30d">Last 30 Days</SelectItem>
-        <SelectItem value="90d">Last 90 Days</SelectItem>
-      </SelectContent>
-    </Select>
-  )
-}
+  return {
+    totalRequests: 12847293 * multiplier,
+    blockedRequests: 284739 * multiplier,
+    allowedRequests: 12562554 * multiplier,
+    challengedRequests: 45000 * multiplier,
+    avgResponseTime: 45,
+    bandwidthIn: 1024 * 1024 * 1024 * 2.5 * multiplier,
+    bandwidthOut: 1024 * 1024 * 1024 * 8.2 * multiplier,
+    activeConnections: 1247,
+    requestsPerSecond: 4521,
+    topAttackTypes: [
+      { type: "DDoS", count: 150000 * multiplier, percentage: 52.7 },
+      { type: "SQL Injection", count: 45000 * multiplier, percentage: 15.8 },
+      { type: "XSS", count: 32000 * multiplier, percentage: 11.2 },
+      { type: "Bot Traffic", count: 28000 * multiplier, percentage: 9.8 },
+      { type: "Other", count: 29739 * multiplier, percentage: 10.5 },
+    ],
+    trafficByCountry: [
+      { country: "United States", countryCode: "US", requests: 5000000 * multiplier, blocked: 50000 * multiplier },
+      { country: "Germany", countryCode: "DE", requests: 2000000 * multiplier, blocked: 20000 * multiplier },
+      { country: "Japan", countryCode: "JP", requests: 1500000 * multiplier, blocked: 15000 * multiplier },
+      { country: "United Kingdom", countryCode: "GB", requests: 1200000 * multiplier, blocked: 12000 * multiplier },
+      { country: "France", countryCode: "FR", requests: 800000 * multiplier, blocked: 8000 * multiplier },
+    ],
+    requestsOverTime: Array.from({ length: dataPoints }, (_, i) => ({
+      timestamp: timeRange === "24h" ? `${i}:00` : timeRange === "7d" ? `Day ${i + 1}` : `${i + 1}`,
+      value: Math.floor(Math.random() * 500000) + 300000,
+      blocked: Math.floor(Math.random() * 20000) + 5000,
+      allowed: Math.floor(Math.random() * 480000) + 295000,
+    })),
+    responseTimeOverTime: Array.from({ length: dataPoints }, (_, i) => ({
+      timestamp: timeRange === "24h" ? `${i}:00` : timeRange === "7d" ? `Day ${i + 1}` : `${i + 1}`,
+      value: Math.floor(Math.random() * 30) + 30,
+    })),
+  };
+};
 
-function TrafficChart({ timeRange }: { timeRange: string }) {
-  // Generate mock data based on time range
-  const data = useMemo(() => {
-    const now = Date.now()
-    const points = timeRange === '1h' ? 12 : timeRange === '24h' ? 24 : timeRange === '7d' ? 7 : 30
-    const interval = timeRange === '1h' ? 5 * 60 * 1000 : timeRange === '24h' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000
+export function Analytics() {
+  const [timeRange, setTimeRange] = useState("24h");
 
-    return Array.from({ length: points }, (_, i) => {
-      const timestamp = new Date(now - (points - i - 1) * interval)
-      const baseRequests = 10000 + Math.random() * 5000
-      const blocked = baseRequests * (0.05 + Math.random() * 0.1)
-      return {
-        time: timeRange === '1h'
-          ? timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          : timeRange === '24h'
-          ? timestamp.toLocaleTimeString([], { hour: '2-digit' })
-          : timestamp.toLocaleDateString([], { month: 'short', day: 'numeric' }),
-        requests: Math.round(baseRequests),
-        blocked: Math.round(blocked),
-        passed: Math.round(baseRequests - blocked),
-      }
+  const { data: metrics, isLoading } = useQuery({
+    ...metricsQueryOptions(timeRange),
+    placeholderData: () => generateMockMetrics(timeRange),
+  });
+
+  const blockRate = metrics
+    ? ((metrics.blockedRequests / metrics.totalRequests) * 100).toFixed(2)
+    : "0";
+
+  // Generate bandwidth over time data
+  const bandwidthData = Array.from(
+    { length: timeRange === "24h" ? 24 : timeRange === "7d" ? 7 : 30 },
+    (_, i) => ({
+      timestamp:
+        timeRange === "24h"
+          ? `${i}:00`
+          : timeRange === "7d"
+          ? `Day ${i + 1}`
+          : `${i + 1}`,
+      inbound: Math.floor(Math.random() * 500) + 100,
+      outbound: Math.floor(Math.random() * 800) + 200,
     })
-  }, [timeRange])
+  );
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Traffic Overview</CardTitle>
-        <CardDescription>Request volume and blocked threats over time</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="h-[350px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data}>
-              <defs>
-                <linearGradient id="colorPassed" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="colorBlocked" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis
-                dataKey="time"
-                tick={{ fontSize: 12 }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 12 }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(value) => formatNumber(value)}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                }}
-                formatter={(value: number) => formatNumber(value)}
-              />
-              <Legend />
-              <Area
-                type="monotone"
-                dataKey="passed"
-                name="Passed"
-                stroke="#22c55e"
-                fillOpacity={1}
-                fill="url(#colorPassed)"
-              />
-              <Area
-                type="monotone"
-                dataKey="blocked"
-                name="Blocked"
-                stroke="#ef4444"
-                fillOpacity={1}
-                fill="url(#colorBlocked)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function LatencyChart({ timeRange }: { timeRange: string }) {
-  const data = useMemo(() => {
-    const points = timeRange === '1h' ? 12 : timeRange === '24h' ? 24 : 7
-    return Array.from({ length: points }, (_, i) => ({
-      time: `${i}`,
-      p50: 20 + Math.random() * 30,
-      p95: 50 + Math.random() * 50,
-      p99: 100 + Math.random() * 100,
-    }))
-  }, [timeRange])
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Response Latency</CardTitle>
-        <CardDescription>P50, P95, and P99 latency percentiles</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis dataKey="time" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
-              <YAxis
-                tick={{ fontSize: 12 }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(value) => `${value}ms`}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                }}
-                formatter={(value: number) => `${value.toFixed(1)}ms`}
-              />
-              <Legend />
-              <Line type="monotone" dataKey="p50" name="P50" stroke="#22c55e" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="p95" name="P95" stroke="#f59e0b" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="p99" name="P99" stroke="#ef4444" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function AttackTypesChart() {
-  const data = [
-    { name: 'SYN Flood', value: 35, count: 12450 },
-    { name: 'UDP Flood', value: 25, count: 8900 },
-    { name: 'HTTP Flood', value: 20, count: 7100 },
-    { name: 'DNS Amplification', value: 12, count: 4260 },
-    { name: 'Slowloris', value: 5, count: 1780 },
-    { name: 'Other', value: 3, count: 1065 },
-  ]
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Attack Types</CardTitle>
-        <CardDescription>Distribution of blocked attack types</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={100}
-                paddingAngle={2}
-                dataKey="value"
-              >
-                {data.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                }}
-                formatter={(value, name, entry) => [
-                  `${value}% (${formatNumber((entry.payload as { count: number }).count)} attacks)`,
-                  name,
-                ]}
-              />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function TopCountriesChart() {
-  const data = [
-    { country: 'China', code: 'CN', requests: 45230, blocked: 38500 },
-    { country: 'Russia', code: 'RU', requests: 32100, blocked: 28900 },
-    { country: 'United States', code: 'US', requests: 28500, blocked: 4200 },
-    { country: 'Brazil', code: 'BR', requests: 15600, blocked: 8900 },
-    { country: 'India', code: 'IN', requests: 12300, blocked: 3100 },
-    { country: 'Germany', code: 'DE', requests: 9800, blocked: 1200 },
-  ]
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Traffic by Country</CardTitle>
-        <CardDescription>Top source countries by request volume</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" horizontal={false} />
-              <XAxis
-                type="number"
-                tick={{ fontSize: 12 }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(value) => formatNumber(value)}
-              />
-              <YAxis
-                type="category"
-                dataKey="country"
-                tick={{ fontSize: 12 }}
-                tickLine={false}
-                axisLine={false}
-                width={100}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                }}
-                formatter={(value: number) => formatNumber(value)}
-              />
-              <Legend />
-              <Bar dataKey="requests" name="Total Requests" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-              <Bar dataKey="blocked" name="Blocked" fill="#ef4444" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function BandwidthChart({ timeRange }: { timeRange: string }) {
-  const data = useMemo(() => {
-    const points = timeRange === '1h' ? 12 : timeRange === '24h' ? 24 : 7
-    return Array.from({ length: points }, (_, i) => ({
-      time: `${i}`,
-      inbound: (50 + Math.random() * 100) * 1024 * 1024,
-      outbound: (30 + Math.random() * 60) * 1024 * 1024,
-    }))
-  }, [timeRange])
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Bandwidth Usage</CardTitle>
-        <CardDescription>Inbound and outbound traffic volume</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data}>
-              <defs>
-                <linearGradient id="colorInbound" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="colorOutbound" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis dataKey="time" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
-              <YAxis
-                tick={{ fontSize: 12 }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(value) => formatBytes(value)}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                }}
-                formatter={(value: number) => formatBytes(value)}
-              />
-              <Legend />
-              <Area
-                type="monotone"
-                dataKey="inbound"
-                name="Inbound"
-                stroke="#3b82f6"
-                fillOpacity={1}
-                fill="url(#colorInbound)"
-              />
-              <Area
-                type="monotone"
-                dataKey="outbound"
-                name="Outbound"
-                stroke="#8b5cf6"
-                fillOpacity={1}
-                fill="url(#colorOutbound)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function StatCard({
-  title,
-  value,
-  change,
-  changeType,
-  icon: Icon,
-}: {
-  title: string
-  value: string
-  change: string
-  changeType: 'positive' | 'negative' | 'neutral'
-  icon: React.ComponentType<{ className?: string }>
-}) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        <div className="flex items-center gap-1 text-xs">
-          {changeType === 'positive' ? (
-            <TrendingUp className="h-3 w-3 text-success" />
-          ) : changeType === 'negative' ? (
-            <TrendingDown className="h-3 w-3 text-destructive" />
-          ) : null}
-          <span
-            className={
-              changeType === 'positive'
-                ? 'text-success'
-                : changeType === 'negative'
-                ? 'text-destructive'
-                : 'text-muted-foreground'
-            }
-          >
-            {change}
-          </span>
-          <span className="text-muted-foreground">vs last period</span>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-export default function DashboardAnalytics() {
-  const [timeRange, setTimeRange] = useState('24h')
+  // Generate status code distribution
+  const statusCodeData = [
+    { name: "2xx", value: 85, color: "#10b981" },
+    { name: "3xx", value: 5, color: "#06b6d4" },
+    { name: "4xx", value: 7, color: "#f59e0b" },
+    { name: "5xx", value: 3, color: "#ef4444" },
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
           <p className="text-muted-foreground">
-            Detailed insights into your traffic and protection metrics
+            Deep insights into your traffic and protection metrics
           </p>
         </div>
-        <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+        <div className="flex items-center gap-4">
+          <Select value={timeRange} onValueChange={setTimeRange}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Select time range" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="24h">Last 24 Hours</SelectItem>
+              <SelectItem value="7d">Last 7 Days</SelectItem>
+              <SelectItem value="30d">Last 30 Days</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline">Export Report</Button>
+        </div>
       </div>
 
       {/* Summary Stats */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Requests"
-          value="2.4M"
-          change="+12.5%"
-          changeType="positive"
-          icon={Globe}
-        />
-        <StatCard
-          title="Threats Blocked"
-          value="156K"
-          change="-8.2%"
-          changeType="positive"
-          icon={Shield}
-        />
-        <StatCard
-          title="Avg Response Time"
-          value="45ms"
-          change="+2ms"
-          changeType="negative"
-          icon={TrendingUp}
-        />
-        <StatCard
-          title="Bandwidth"
-          value="1.2 TB"
-          change="+18%"
-          changeType="neutral"
-          icon={BarChart3}
-        />
+      <div className="grid gap-4 md:grid-cols-5">
+        {[
+          { label: "Total Requests", value: formatNumber(metrics?.totalRequests || 0) },
+          { label: "Blocked", value: formatNumber(metrics?.blockedRequests || 0), variant: "destructive" as const },
+          { label: "Challenged", value: formatNumber(metrics?.challengedRequests || 0), variant: "warning" as const },
+          { label: "Block Rate", value: `${blockRate}%` },
+          { label: "Avg Response", value: `${metrics?.avgResponseTime || 0}ms` },
+        ].map((stat, index) => (
+          <Card key={index}>
+            <CardContent className="pt-6">
+              <div className="text-sm text-muted-foreground">{stat.label}</div>
+              <div className="flex items-center gap-2">
+                <span className="text-2xl font-bold">{stat.value}</span>
+                {stat.variant && <Badge variant={stat.variant}>{stat.variant === "destructive" ? "blocked" : "challenged"}</Badge>}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {/* Main Traffic Chart */}
-      <TrafficChart timeRange={timeRange} />
-
-      {/* Secondary Charts */}
-      <Tabs defaultValue="latency" className="space-y-4">
+      {/* Main Charts */}
+      <Tabs defaultValue="traffic" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="latency">Latency</TabsTrigger>
-          <TabsTrigger value="bandwidth">Bandwidth</TabsTrigger>
-          <TabsTrigger value="attacks">Attack Types</TabsTrigger>
-          <TabsTrigger value="geography">Geography</TabsTrigger>
+          <TabsTrigger value="traffic">Traffic</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="performance">Performance</TabsTrigger>
+          <TabsTrigger value="geographic">Geographic</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="latency" className="space-y-4">
-          <LatencyChart timeRange={timeRange} />
+        {/* Traffic Tab */}
+        <TabsContent value="traffic" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Request Volume</CardTitle>
+                <CardDescription>
+                  Total requests over time with blocked vs allowed breakdown
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <Skeleton className="h-[300px] w-full" />
+                ) : (
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={metrics?.requestsOverTime || []}>
+                        <defs>
+                          <linearGradient id="colorAllowed2" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                          </linearGradient>
+                          <linearGradient id="colorBlocked2" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis
+                          dataKey="timestamp"
+                          className="text-xs"
+                          tick={{ fill: "hsl(var(--muted-foreground))" }}
+                        />
+                        <YAxis
+                          className="text-xs"
+                          tick={{ fill: "hsl(var(--muted-foreground))" }}
+                          tickFormatter={(value) => formatNumber(value)}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: "8px",
+                          }}
+                        />
+                        <Legend />
+                        <Area
+                          type="monotone"
+                          dataKey="allowed"
+                          stroke="#8b5cf6"
+                          fillOpacity={1}
+                          fill="url(#colorAllowed2)"
+                          name="Allowed"
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="blocked"
+                          stroke="#ef4444"
+                          fillOpacity={1}
+                          fill="url(#colorBlocked2)"
+                          name="Blocked"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Bandwidth Usage</CardTitle>
+                <CardDescription>
+                  Inbound and outbound bandwidth over time (MB)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <Skeleton className="h-[300px] w-full" />
+                ) : (
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={bandwidthData}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis
+                          dataKey="timestamp"
+                          className="text-xs"
+                          tick={{ fill: "hsl(var(--muted-foreground))" }}
+                        />
+                        <YAxis
+                          className="text-xs"
+                          tick={{ fill: "hsl(var(--muted-foreground))" }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: "8px",
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="inbound" fill="#8b5cf6" name="Inbound" />
+                        <Bar dataKey="outbound" fill="#06b6d4" name="Outbound" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Status Codes */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Response Status Codes</CardTitle>
+              <CardDescription>Distribution of HTTP status codes</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-8">
+                <div className="h-[200px] w-[200px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={statusCodeData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={80}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        {statusCodeData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {statusCodeData.map((item) => (
+                    <div key={item.name} className="flex items-center gap-2">
+                      <div
+                        className="h-3 w-3 rounded-full"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="text-sm font-medium">{item.name}</span>
+                      <span className="text-sm text-muted-foreground">
+                        {item.value}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="bandwidth" className="space-y-4">
-          <BandwidthChart timeRange={timeRange} />
+        {/* Security Tab */}
+        <TabsContent value="security" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Threat Distribution</CardTitle>
+                <CardDescription>Types of blocked threats</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <Skeleton className="h-[300px] w-full" />
+                ) : (
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={metrics?.topAttackTypes || []}
+                        layout="vertical"
+                      >
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis
+                          type="number"
+                          className="text-xs"
+                          tick={{ fill: "hsl(var(--muted-foreground))" }}
+                          tickFormatter={(value) => formatNumber(value)}
+                        />
+                        <YAxis
+                          type="category"
+                          dataKey="type"
+                          className="text-xs"
+                          tick={{ fill: "hsl(var(--muted-foreground))" }}
+                          width={100}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: "8px",
+                          }}
+                          formatter={(value) => formatNumber(Number(value))}
+                        />
+                        <Bar dataKey="count" fill="#ef4444" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Attack Timeline</CardTitle>
+                <CardDescription>Blocked requests over time</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <Skeleton className="h-[300px] w-full" />
+                ) : (
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={metrics?.requestsOverTime || []}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis
+                          dataKey="timestamp"
+                          className="text-xs"
+                          tick={{ fill: "hsl(var(--muted-foreground))" }}
+                        />
+                        <YAxis
+                          className="text-xs"
+                          tick={{ fill: "hsl(var(--muted-foreground))" }}
+                          tickFormatter={(value) => formatNumber(value)}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: "8px",
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="blocked"
+                          stroke="#ef4444"
+                          strokeWidth={2}
+                          dot={false}
+                          name="Blocked Requests"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Top Blocked IPs/Countries */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Top Blocked Countries</CardTitle>
+                <CardDescription>Countries with most blocked requests</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {(metrics?.trafficByCountry || []).map((country) => (
+                    <div
+                      key={country.countryCode}
+                      className="flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg">{getCountryFlag(country.countryCode)}</span>
+                        <span className="font-medium">{country.country}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="destructive">
+                          {formatNumber(country.blocked)} blocked
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          ({((country.blocked / country.requests) * 100).toFixed(1)}%)
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Security Summary</CardTitle>
+                <CardDescription>Key security metrics</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Total Threats Blocked</span>
+                    <span className="text-2xl font-bold text-destructive">
+                      {formatNumber(metrics?.blockedRequests || 0)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Challenges Issued</span>
+                    <span className="text-2xl font-bold text-yellow-500">
+                      {formatNumber(metrics?.challengedRequests || 0)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Block Rate</span>
+                    <span className="text-2xl font-bold">{blockRate}%</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Top Attack Vector</span>
+                    <Badge variant="outline">
+                      {metrics?.topAttackTypes[0]?.type || "N/A"}
+                    </Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
-        <TabsContent value="attacks" className="space-y-4">
-          <AttackTypesChart />
+        {/* Performance Tab */}
+        <TabsContent value="performance" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Response Time</CardTitle>
+                <CardDescription>Average response time over time (ms)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <Skeleton className="h-[300px] w-full" />
+                ) : (
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={metrics?.responseTimeOverTime || []}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis
+                          dataKey="timestamp"
+                          className="text-xs"
+                          tick={{ fill: "hsl(var(--muted-foreground))" }}
+                        />
+                        <YAxis
+                          className="text-xs"
+                          tick={{ fill: "hsl(var(--muted-foreground))" }}
+                          domain={[0, 100]}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: "8px",
+                          }}
+                          formatter={(value) => `${value}ms`}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="value"
+                          stroke="#8b5cf6"
+                          strokeWidth={2}
+                          dot={false}
+                          name="Response Time"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Performance Metrics</CardTitle>
+                <CardDescription>Key performance indicators</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Average Response Time</span>
+                    <span className="text-2xl font-bold">
+                      {metrics?.avgResponseTime || 0}ms
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Requests per Second</span>
+                    <span className="text-2xl font-bold">
+                      {formatNumber(metrics?.requestsPerSecond || 0)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Active Connections</span>
+                    <span className="text-2xl font-bold">
+                      {formatNumber(metrics?.activeConnections || 0)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Total Bandwidth</span>
+                    <span className="text-2xl font-bold">
+                      {formatBytes(
+                        (metrics?.bandwidthIn || 0) + (metrics?.bandwidthOut || 0)
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
-        <TabsContent value="geography" className="space-y-4">
-          <TopCountriesChart />
+        {/* Geographic Tab */}
+        <TabsContent value="geographic" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Traffic by Country</CardTitle>
+              <CardDescription>
+                Geographic distribution of requests
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-[400px] w-full" />
+              ) : (
+                <div className="h-[400px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={metrics?.trafficByCountry || []}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis
+                        dataKey="country"
+                        className="text-xs"
+                        tick={{ fill: "hsl(var(--muted-foreground))" }}
+                      />
+                      <YAxis
+                        className="text-xs"
+                        tick={{ fill: "hsl(var(--muted-foreground))" }}
+                        tickFormatter={(value) => formatNumber(value)}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--card))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                        }}
+                        formatter={(value) => formatNumber(Number(value))}
+                      />
+                      <Legend />
+                      <Bar
+                        dataKey="requests"
+                        fill="#8b5cf6"
+                        name="Total Requests"
+                        radius={[4, 4, 0, 0]}
+                      />
+                      <Bar
+                        dataKey="blocked"
+                        fill="#ef4444"
+                        name="Blocked"
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Country Details */}
+          <div className="grid gap-4 md:grid-cols-2">
+            {(metrics?.trafficByCountry || []).slice(0, 4).map((country) => (
+              <Card key={country.countryCode}>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">{getCountryFlag(country.countryCode)}</span>
+                      <div>
+                        <div className="font-semibold">{country.country}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {country.countryCode}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold">
+                        {formatNumber(country.requests)}
+                      </div>
+                      <div className="text-sm text-destructive">
+                        {formatNumber(country.blocked)} blocked
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </TabsContent>
       </Tabs>
-
-      {/* Bottom Row */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <AttackTypesChart />
-        <TopCountriesChart />
-      </div>
     </div>
-  )
+  );
+}
+
+function getCountryFlag(countryCode: string): string {
+  const codePoints = countryCode
+    .toUpperCase()
+    .split("")
+    .map((char) => 127397 + char.charCodeAt(0));
+  return String.fromCodePoint(...codePoints);
 }

@@ -1,29 +1,32 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
-  Filter,
   Plus,
+  Filter,
   MoreHorizontal,
   Pencil,
   Trash2,
-  GripVertical,
+  Power,
+  PowerOff,
   Shield,
-  Globe,
-  Clock,
-  Code,
-  Network,
-  Zap,
-} from 'lucide-react'
-import { toast } from 'sonner'
-
-import { Button } from '@/components/ui/button'
+  Ban,
+  AlertTriangle,
+  FileText,
+  GripVertical,
+} from "lucide-react";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card'
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -31,628 +34,301 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
-import { Skeleton } from '@/components/ui/skeleton'
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   filterRulesQueryOptions,
-  backendsQueryOptions,
-  apiClient,
+  useCreateFilterRule,
+  useUpdateFilterRule,
+  useDeleteFilterRule,
   type FilterRule,
-} from '@/lib/api'
-import { formatNumber } from '@/lib/utils'
+} from "@/lib/api";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
-const ruleTypeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
-  ip: Shield,
-  geo: Globe,
-  rate: Clock,
-  pattern: Code,
-  protocol: Network,
-  custom: Zap,
+// Mock data
+const mockFilterRules: FilterRule[] = [
+  {
+    id: "1",
+    name: "Rate Limit - API Endpoints",
+    description: "Limit requests to 100 per minute for API endpoints",
+    type: "rate_limit",
+    action: "block",
+    priority: 1,
+    isEnabled: true,
+    conditions: [
+      { field: "path", operator: "contains", value: "/api/" },
+    ],
+    rateLimit: { requests: 100, window: 60, burstSize: 10 },
+    createdAt: "2024-01-01T00:00:00Z",
+    updatedAt: "2024-01-15T00:00:00Z",
+  },
+  {
+    id: "2",
+    name: "Block Known Bad IPs",
+    description: "Block traffic from known malicious IP ranges",
+    type: "ip_block",
+    action: "block",
+    priority: 2,
+    isEnabled: true,
+    conditions: [
+      { field: "ip", operator: "in", value: ["192.168.1.0/24", "10.0.0.0/8"] },
+    ],
+    createdAt: "2024-01-02T00:00:00Z",
+    updatedAt: "2024-01-14T00:00:00Z",
+  },
+  {
+    id: "3",
+    name: "Geo Block - Sanctioned Countries",
+    description: "Block traffic from sanctioned countries",
+    type: "geo_block",
+    action: "block",
+    priority: 3,
+    isEnabled: true,
+    conditions: [
+      { field: "country", operator: "in", value: ["NK", "IR", "SY"] },
+    ],
+    createdAt: "2024-01-03T00:00:00Z",
+    updatedAt: "2024-01-13T00:00:00Z",
+  },
+  {
+    id: "4",
+    name: "Challenge Suspicious User Agents",
+    description: "Challenge requests with suspicious user agent strings",
+    type: "header_filter",
+    action: "challenge",
+    priority: 4,
+    isEnabled: true,
+    conditions: [
+      { field: "user-agent", operator: "regex", value: ".*bot.*|.*crawler.*|.*spider.*" },
+    ],
+    createdAt: "2024-01-04T00:00:00Z",
+    updatedAt: "2024-01-12T00:00:00Z",
+  },
+  {
+    id: "5",
+    name: "Log Admin Access",
+    description: "Log all access to admin endpoints",
+    type: "path_filter",
+    action: "log",
+    priority: 5,
+    isEnabled: false,
+    conditions: [
+      { field: "path", operator: "contains", value: "/admin" },
+    ],
+    createdAt: "2024-01-05T00:00:00Z",
+    updatedAt: "2024-01-11T00:00:00Z",
+  },
+];
+
+interface FilterFormData {
+  name: string;
+  description: string;
+  type: FilterRule["type"];
+  action: FilterRule["action"];
+  priority: number;
+  isEnabled: boolean;
+  conditionField: string;
+  conditionOperator: string;
+  conditionValue: string;
+  rateLimitRequests?: number;
+  rateLimitWindow?: number;
 }
 
-const ruleTypeLabels: Record<string, string> = {
-  ip: 'IP Block',
-  geo: 'Geo Block',
-  rate: 'Rate Limit',
-  pattern: 'Pattern Match',
-  protocol: 'Protocol Filter',
-  custom: 'Custom Rule',
-}
+const defaultFormData: FilterFormData = {
+  name: "",
+  description: "",
+  type: "rate_limit",
+  action: "block",
+  priority: 1,
+  isEnabled: true,
+  conditionField: "path",
+  conditionOperator: "contains",
+  conditionValue: "",
+  rateLimitRequests: 100,
+  rateLimitWindow: 60,
+};
 
-const actionLabels: Record<string, string> = {
-  drop: 'Drop',
-  ratelimit: 'Rate Limit',
-  allow: 'Allow',
-  log: 'Log Only',
-  challenge: 'Challenge',
-}
+const typeIcons = {
+  rate_limit: AlertTriangle,
+  ip_block: Ban,
+  geo_block: Shield,
+  header_filter: FileText,
+  path_filter: Filter,
+  custom: FileText,
+};
 
-const actionVariants = {
-  drop: 'destructive',
-  ratelimit: 'warning',
-  allow: 'success',
-  log: 'secondary',
-  challenge: 'default',
-} as const
+const actionColors = {
+  block: "destructive" as const,
+  allow: "success" as const,
+  challenge: "warning" as const,
+  log: "secondary" as const,
+};
 
-function FilterFormDialog({
-  rule,
-  open,
-  onOpenChange,
-}: {
-  rule?: FilterRule
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  const queryClient = useQueryClient()
-  const isEditing = !!rule
-  const { data: backends } = useQuery(backendsQueryOptions())
+export function Filters() {
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [selectedRule, setSelectedRule] = useState<FilterRule | null>(null);
+  const [formData, setFormData] = useState<FilterFormData>(defaultFormData);
 
-  const [formData, setFormData] = useState<{
-    name: string;
-    description: string;
-    type: 'ip' | 'geo' | 'rate' | 'pattern' | 'protocol' | 'custom';
-    action: 'drop' | 'ratelimit' | 'allow' | 'log' | 'challenge';
-    priority: number;
-    enabled: boolean;
-    backendId: string;
-    ips: string;
-    countries: string;
-    rateRequests: number;
-    rateWindow: number;
-    pattern: string;
-    protocol: string;
-    expression: string;
-  }>({
-    name: rule?.name || '',
-    description: rule?.description || '',
-    type: rule?.type || 'ip',
-    action: rule?.action || 'drop',
-    priority: rule?.priority || 100,
-    enabled: rule?.enabled ?? true,
-    backendId: rule?.backendId || '',
-    // IP config
-    ips: rule?.config?.ips?.join('\n') || '',
-    // Geo config
-    countries: rule?.config?.countries?.join(', ') || '',
-    // Rate limit config
-    rateRequests: rule?.config?.rateLimit?.requests || 100,
-    rateWindow: rule?.config?.rateLimit?.window || 60,
-    // Pattern config
-    pattern: rule?.config?.pattern || '',
-    // Protocol config
-    protocol: rule?.config?.protocol || '',
-    // Custom expression
-    expression: rule?.config?.expression || '',
-  })
+  const { data: filterRules, isLoading } = useQuery({
+    ...filterRulesQueryOptions(),
+    placeholderData: mockFilterRules,
+  });
 
-  const createMutation = useMutation({
-    mutationFn: (data: Parameters<typeof apiClient.createFilterRule>[0]) =>
-      apiClient.createFilterRule(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['filterRules'] })
-      toast.success('Filter rule created successfully')
-      onOpenChange(false)
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to create filter rule: ${error.message}`)
-    },
-  })
+  const createFilterRule = useCreateFilterRule();
+  const updateFilterRule = useUpdateFilterRule();
+  const deleteFilterRule = useDeleteFilterRule();
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<FilterRule> }) =>
-      apiClient.updateFilterRule(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['filterRules'] })
-      toast.success('Filter rule updated successfully')
-      onOpenChange(false)
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to update filter rule: ${error.message}`)
-    },
-  })
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-
-    const config: FilterRule['config'] = {}
-
-    switch (formData.type) {
-      case 'ip':
-        config.ips = formData.ips.split('\n').filter(Boolean).map((ip) => ip.trim())
-        break
-      case 'geo':
-        config.countries = formData.countries.split(',').filter(Boolean).map((c) => c.trim())
-        break
-      case 'rate':
-        config.rateLimit = {
-          requests: formData.rateRequests,
-          window: formData.rateWindow,
-        }
-        break
-      case 'pattern':
-        config.pattern = formData.pattern
-        break
-      case 'protocol':
-        config.protocol = formData.protocol
-        break
-      case 'custom':
-        config.expression = formData.expression
-        break
+  const handleCreate = async () => {
+    try {
+      await createFilterRule.mutateAsync({
+        name: formData.name,
+        description: formData.description,
+        type: formData.type,
+        action: formData.action,
+        priority: formData.priority,
+        isEnabled: formData.isEnabled,
+        conditions: [
+          {
+            field: formData.conditionField,
+            operator: formData.conditionOperator as FilterRule["conditions"][0]["operator"],
+            value: formData.conditionValue,
+          },
+        ],
+        rateLimit:
+          formData.type === "rate_limit"
+            ? {
+                requests: formData.rateLimitRequests || 100,
+                window: formData.rateLimitWindow || 60,
+              }
+            : undefined,
+      });
+      toast.success("Filter rule created successfully");
+      setIsCreateDialogOpen(false);
+      setFormData(defaultFormData);
+    } catch {
+      toast.error("Failed to create filter rule");
     }
+  };
 
-    const data = {
-      name: formData.name,
-      description: formData.description || undefined,
-      type: formData.type as FilterRule['type'],
-      action: formData.action as FilterRule['action'],
-      priority: formData.priority,
-      enabled: formData.enabled,
-      backendId: formData.backendId || undefined,
-      config,
+  const handleUpdate = async () => {
+    if (!selectedRule) return;
+    try {
+      await updateFilterRule.mutateAsync({
+        id: selectedRule.id,
+        name: formData.name,
+        description: formData.description,
+        type: formData.type,
+        action: formData.action,
+        priority: formData.priority,
+        isEnabled: formData.isEnabled,
+        conditions: [
+          {
+            field: formData.conditionField,
+            operator: formData.conditionOperator as FilterRule["conditions"][0]["operator"],
+            value: formData.conditionValue,
+          },
+        ],
+        rateLimit:
+          formData.type === "rate_limit"
+            ? {
+                requests: formData.rateLimitRequests || 100,
+                window: formData.rateLimitWindow || 60,
+              }
+            : undefined,
+      });
+      toast.success("Filter rule updated successfully");
+      setIsEditDialogOpen(false);
+      setSelectedRule(null);
+      setFormData(defaultFormData);
+    } catch {
+      toast.error("Failed to update filter rule");
     }
+  };
 
-    if (isEditing && rule) {
-      updateMutation.mutate({ id: rule.id, data })
-    } else {
-      createMutation.mutate(data)
+  const handleDelete = async () => {
+    if (!selectedRule) return;
+    try {
+      await deleteFilterRule.mutateAsync(selectedRule.id);
+      toast.success("Filter rule deleted successfully");
+      setIsDeleteDialogOpen(false);
+      setSelectedRule(null);
+    } catch {
+      toast.error("Failed to delete filter rule");
     }
-  }
+  };
 
-  const isPending = createMutation.isPending || updateMutation.isPending
+  const handleToggleEnabled = async (rule: FilterRule) => {
+    try {
+      await updateFilterRule.mutateAsync({
+        id: rule.id,
+        isEnabled: !rule.isEnabled,
+      });
+      toast.success(
+        `Filter rule ${rule.isEnabled ? "disabled" : "enabled"} successfully`
+      );
+    } catch {
+      toast.error("Failed to update filter rule status");
+    }
+  };
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[550px]">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>
-              {isEditing ? 'Edit Filter Rule' : 'Create Filter Rule'}
-            </DialogTitle>
-            <DialogDescription>
-              {isEditing
-                ? 'Update the filter rule configuration'
-                : 'Configure a new filter rule for traffic filtering'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid max-h-[60vh] gap-4 overflow-y-auto py-4 pr-2">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                placeholder="Block suspicious IPs"
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="description">Description (optional)</Label>
-              <Textarea
-                id="description"
-                placeholder="Describe what this rule does..."
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-                rows={2}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="type">Rule Type</Label>
-                <Select
-                  value={formData.type}
-                  onValueChange={(value: 'ip' | 'geo' | 'rate' | 'pattern' | 'protocol' | 'custom') =>
-                    setFormData({ ...formData, type: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ip">IP Block</SelectItem>
-                    <SelectItem value="geo">Geo Block</SelectItem>
-                    <SelectItem value="rate">Rate Limit</SelectItem>
-                    <SelectItem value="pattern">Pattern Match</SelectItem>
-                    <SelectItem value="protocol">Protocol Filter</SelectItem>
-                    <SelectItem value="custom">Custom Expression</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="action">Action</Label>
-                <Select
-                  value={formData.action}
-                  onValueChange={(value: 'drop' | 'ratelimit' | 'allow' | 'log' | 'challenge') =>
-                    setFormData({ ...formData, action: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="drop">Drop</SelectItem>
-                    <SelectItem value="ratelimit">Rate Limit</SelectItem>
-                    <SelectItem value="allow">Allow</SelectItem>
-                    <SelectItem value="log">Log Only</SelectItem>
-                    <SelectItem value="challenge">Challenge</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+  const openEditDialog = (rule: FilterRule) => {
+    setSelectedRule(rule);
+    setFormData({
+      name: rule.name,
+      description: rule.description,
+      type: rule.type,
+      action: rule.action,
+      priority: rule.priority,
+      isEnabled: rule.isEnabled,
+      conditionField: rule.conditions[0]?.field || "path",
+      conditionOperator: rule.conditions[0]?.operator || "contains",
+      conditionValue: String(rule.conditions[0]?.value || ""),
+      rateLimitRequests: rule.rateLimit?.requests,
+      rateLimitWindow: rule.rateLimit?.window,
+    });
+    setIsEditDialogOpen(true);
+  };
 
-            {/* Type-specific configuration */}
-            {formData.type === 'ip' && (
-              <div className="grid gap-2">
-                <Label htmlFor="ips">IP Addresses (one per line)</Label>
-                <Textarea
-                  id="ips"
-                  placeholder="192.168.1.100&#10;10.0.0.0/8&#10;2001:db8::/32"
-                  value={formData.ips}
-                  onChange={(e) =>
-                    setFormData({ ...formData, ips: e.target.value })
-                  }
-                  rows={4}
-                />
-              </div>
-            )}
+  const openDeleteDialog = (rule: FilterRule) => {
+    setSelectedRule(rule);
+    setIsDeleteDialogOpen(true);
+  };
 
-            {formData.type === 'geo' && (
-              <div className="grid gap-2">
-                <Label htmlFor="countries">
-                  Country Codes (comma-separated)
-                </Label>
-                <Input
-                  id="countries"
-                  placeholder="CN, RU, KP"
-                  value={formData.countries}
-                  onChange={(e) =>
-                    setFormData({ ...formData, countries: e.target.value })
-                  }
-                />
-                <p className="text-xs text-muted-foreground">
-                  Use ISO 3166-1 alpha-2 country codes
-                </p>
-              </div>
-            )}
-
-            {formData.type === 'rate' && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="rateRequests">Max Requests</Label>
-                  <Input
-                    id="rateRequests"
-                    type="number"
-                    min={1}
-                    value={formData.rateRequests}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        rateRequests: parseInt(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="rateWindow">Window (seconds)</Label>
-                  <Input
-                    id="rateWindow"
-                    type="number"
-                    min={1}
-                    value={formData.rateWindow}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        rateWindow: parseInt(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-              </div>
-            )}
-
-            {formData.type === 'pattern' && (
-              <div className="grid gap-2">
-                <Label htmlFor="pattern">Regex Pattern</Label>
-                <Input
-                  id="pattern"
-                  placeholder=".*\\.(php|asp|aspx)$"
-                  value={formData.pattern}
-                  onChange={(e) =>
-                    setFormData({ ...formData, pattern: e.target.value })
-                  }
-                />
-                <p className="text-xs text-muted-foreground">
-                  Regular expression to match against request paths
-                </p>
-              </div>
-            )}
-
-            {formData.type === 'protocol' && (
-              <div className="grid gap-2">
-                <Label htmlFor="protocol">Protocol</Label>
-                <Select
-                  value={formData.protocol}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, protocol: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select protocol" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="icmp">ICMP</SelectItem>
-                    <SelectItem value="udp">UDP</SelectItem>
-                    <SelectItem value="tcp-syn">TCP SYN</SelectItem>
-                    <SelectItem value="dns">DNS</SelectItem>
-                    <SelectItem value="ntp">NTP</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {formData.type === 'custom' && (
-              <div className="grid gap-2">
-                <Label htmlFor="expression">Custom Expression</Label>
-                <Textarea
-                  id="expression"
-                  placeholder='ip.src in {"192.168.1.0/24"} and http.request.uri.path contains "/admin"'
-                  value={formData.expression}
-                  onChange={(e) =>
-                    setFormData({ ...formData, expression: e.target.value })
-                  }
-                  rows={4}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Use Wireshark-style filter expressions
-                </p>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="priority">Priority</Label>
-                <Input
-                  id="priority"
-                  type="number"
-                  min={1}
-                  max={1000}
-                  value={formData.priority}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      priority: parseInt(e.target.value),
-                    })
-                  }
-                />
-                <p className="text-xs text-muted-foreground">
-                  Lower = higher priority
-                </p>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="backend">Apply to Backend</Label>
-                <Select
-                  value={formData.backendId}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, backendId: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="All backends" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">All backends</SelectItem>
-                    {backends?.map((backend) => (
-                      <SelectItem key={backend.id} value={backend.id}>
-                        {backend.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <div className="space-y-0.5">
-                <Label htmlFor="enabled">Enabled</Label>
-                <p className="text-sm text-muted-foreground">
-                  Activate this filter rule
-                </p>
-              </div>
-              <Switch
-                id="enabled"
-                checked={formData.enabled}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, enabled: checked })
-                }
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? 'Saving...' : isEditing ? 'Save Changes' : 'Create'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function DeleteFilterDialog({
-  rule,
-  open,
-  onOpenChange,
-}: {
-  rule: FilterRule
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  const queryClient = useQueryClient()
-
-  const deleteMutation = useMutation({
-    mutationFn: () => apiClient.deleteFilterRule(rule.id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['filterRules'] })
-      toast.success('Filter rule deleted successfully')
-      onOpenChange(false)
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to delete filter rule: ${error.message}`)
-    },
-  })
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Delete Filter Rule</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete "{rule.name}"? This action cannot be
-            undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => deleteMutation.mutate()}
-            disabled={deleteMutation.isPending}
-          >
-            {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function FilterRuleCard({ rule }: { rule: FilterRule }) {
-  const queryClient = useQueryClient()
-  const [editOpen, setEditOpen] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
-
-  const toggleMutation = useMutation({
-    mutationFn: () => apiClient.toggleFilterRule(rule.id, !rule.enabled),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['filterRules'] })
-      toast.success(rule.enabled ? 'Rule disabled' : 'Rule enabled')
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to toggle rule: ${error.message}`)
-    },
-  })
-
-  const TypeIcon = ruleTypeIcons[rule.type] || Filter
-
-  return (
-    <>
-      <Card className={!rule.enabled ? 'opacity-60' : undefined}>
-        <CardContent className="flex items-center gap-4 p-4">
-          <div className="cursor-move text-muted-foreground hover:text-foreground">
-            <GripVertical className="h-5 w-5" />
-          </div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-            <TypeIcon className="h-5 w-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="font-medium truncate">{rule.name}</h3>
-              <Badge variant="outline" className="text-xs">
-                #{rule.priority}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground truncate">
-              {rule.description || ruleTypeLabels[rule.type]}
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <Badge variant={actionVariants[rule.action]}>
-                {actionLabels[rule.action]}
-              </Badge>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {formatNumber(rule.matches)} matches
-              </p>
-            </div>
-            <Switch
-              checked={rule.enabled}
-              onCheckedChange={() => toggleMutation.mutate()}
-              disabled={toggleMutation.isPending}
-            />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">Open menu</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setEditOpen(true)}>
-                  <Pencil className="mr-2 h-4 w-4" />
-                  Edit
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => setDeleteOpen(true)}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </CardContent>
-      </Card>
-
-      <FilterFormDialog rule={rule} open={editOpen} onOpenChange={setEditOpen} />
-      <DeleteFilterDialog rule={rule} open={deleteOpen} onOpenChange={setDeleteOpen} />
-    </>
-  )
-}
-
-export default function DashboardFilters() {
-  const [createOpen, setCreateOpen] = useState(false)
-  const { data: rules, isLoading } = useQuery(filterRulesQueryOptions())
-
-  const activeRules = rules?.filter((r) => r.enabled).length || 0
-  const totalMatches = rules?.reduce((sum, r) => sum + r.matches, 0) || 0
+  const sortedRules = [...(filterRules || [])].sort(
+    (a, b) => a.priority - b.priority
+  );
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Filter Rules</h1>
@@ -660,54 +336,80 @@ export default function DashboardFilters() {
             Configure traffic filtering and protection rules
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Rule
-        </Button>
+        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Rule
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Create Filter Rule</DialogTitle>
+              <DialogDescription>
+                Define a new traffic filtering rule
+              </DialogDescription>
+            </DialogHeader>
+            <FilterForm formData={formData} setFormData={setFormData} />
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsCreateDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreate}
+                disabled={createFilterRule.isPending}
+              >
+                {createFilterRule.isPending ? "Creating..." : "Create Rule"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Rules</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Rules</CardTitle>
             <Filter className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
+            <div className="text-2xl font-bold">{filterRules?.length || 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Rules</CardTitle>
+            <Power className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
             <div className="text-2xl font-bold">
-              {activeRules} / {rules?.length || 0}
+              {filterRules?.filter((r) => r.isEnabled).length || 0}
             </div>
-            <p className="text-xs text-muted-foreground">Currently enforced</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Matches</CardTitle>
-            <Shield className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Blocking Rules</CardTitle>
+            <Ban className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(totalMatches)}</div>
-            <p className="text-xs text-muted-foreground">All time rule matches</p>
+            <div className="text-2xl font-bold">
+              {filterRules?.filter((r) => r.action === "block").length || 0}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Rule Types</CardTitle>
-            <Zap className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Rate Limiters</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-1">
-              {['ip', 'geo', 'rate', 'pattern', 'protocol', 'custom'].map(
-                (type) => {
-                  const count = rules?.filter((r) => r.type === type).length || 0
-                  if (count === 0) return null
-                  return (
-                    <Badge key={type} variant="secondary" className="text-xs">
-                      {ruleTypeLabels[type]}: {count}
-                    </Badge>
-                  )
-                }
-              )}
+            <div className="text-2xl font-bold">
+              {filterRules?.filter((r) => r.type === "rate_limit").length || 0}
             </div>
           </CardContent>
         </Card>
@@ -716,45 +418,346 @@ export default function DashboardFilters() {
       {/* Filter Rules List */}
       <Card>
         <CardHeader>
-          <CardTitle>All Rules</CardTitle>
+          <CardTitle>Active Rules</CardTitle>
           <CardDescription>
-            Rules are evaluated in priority order (lowest number first). Drag to
-            reorder.
+            Rules are processed in order of priority (lowest number first)
           </CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="space-y-4">
-              {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-20 w-full" />
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-24 w-full" />
               ))}
             </div>
-          ) : rules?.length ? (
-            <div className="space-y-3">
-              {[...rules]
-                .sort((a, b) => a.priority - b.priority)
-                .map((rule) => (
-                  <FilterRuleCard key={rule.id} rule={rule} />
-                ))}
-            </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Filter className="h-12 w-12 text-muted-foreground" />
-              <h3 className="mt-4 text-lg font-semibold">No filter rules</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Create your first filter rule to start protecting your backends
-              </p>
-              <Button onClick={() => setCreateOpen(true)} className="mt-4">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Rule
-              </Button>
+            <div className="space-y-3">
+              {sortedRules.map((rule) => {
+                const Icon = typeIcons[rule.type];
+                return (
+                  <div
+                    key={rule.id}
+                    className={cn(
+                      "flex items-start gap-4 rounded-lg border p-4 transition-colors",
+                      !rule.isEnabled && "opacity-50"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <GripVertical className="h-5 w-5 cursor-grab text-muted-foreground" />
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{rule.name}</span>
+                        <Badge variant="outline" className="text-xs">
+                          Priority: {rule.priority}
+                        </Badge>
+                        <Badge variant={actionColors[rule.action]}>
+                          {rule.action}
+                        </Badge>
+                        {!rule.isEnabled && (
+                          <Badge variant="secondary">Disabled</Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {rule.description}
+                      </p>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {rule.conditions.map((condition, index) => (
+                          <Badge key={index} variant="outline" className="font-mono text-xs">
+                            {condition.field} {condition.operator}{" "}
+                            {Array.isArray(condition.value)
+                              ? condition.value.join(", ")
+                              : condition.value}
+                          </Badge>
+                        ))}
+                        {rule.rateLimit && (
+                          <Badge variant="outline" className="font-mono text-xs">
+                            {rule.rateLimit.requests} req / {rule.rateLimit.window}s
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openEditDialog(rule)}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleToggleEnabled(rule)}
+                        >
+                          {rule.isEnabled ? (
+                            <>
+                              <PowerOff className="mr-2 h-4 w-4" />
+                              Disable
+                            </>
+                          ) : (
+                            <>
+                              <Power className="mr-2 h-4 w-4" />
+                              Enable
+                            </>
+                          )}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => openDeleteDialog(rule)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Create Dialog */}
-      <FilterFormDialog open={createOpen} onOpenChange={setCreateOpen} />
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Edit Filter Rule</DialogTitle>
+            <DialogDescription>
+              Update the configuration for {selectedRule?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <FilterForm formData={formData} setFormData={setFormData} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdate}
+              disabled={updateFilterRule.isPending}
+            >
+              {updateFilterRule.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Filter Rule</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{selectedRule?.name}"? This action
+              cannot be undone and may affect your traffic protection.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteFilterRule.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
-  )
+  );
+}
+
+interface FilterFormProps {
+  formData: FilterFormData;
+  setFormData: React.Dispatch<React.SetStateAction<FilterFormData>>;
+}
+
+function FilterForm({ formData, setFormData }: FilterFormProps) {
+  return (
+    <div className="grid gap-4 py-4">
+      <div className="grid gap-2">
+        <Label htmlFor="name">Rule Name</Label>
+        <Input
+          id="name"
+          placeholder="My Filter Rule"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+        />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="description">Description</Label>
+        <Textarea
+          id="description"
+          placeholder="What does this rule do?"
+          value={formData.description}
+          onChange={(e) =>
+            setFormData({ ...formData, description: e.target.value })
+          }
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="type">Rule Type</Label>
+          <Select
+            value={formData.type}
+            onValueChange={(value: FilterRule["type"]) =>
+              setFormData({ ...formData, type: value })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="rate_limit">Rate Limit</SelectItem>
+              <SelectItem value="ip_block">IP Block</SelectItem>
+              <SelectItem value="geo_block">Geo Block</SelectItem>
+              <SelectItem value="header_filter">Header Filter</SelectItem>
+              <SelectItem value="path_filter">Path Filter</SelectItem>
+              <SelectItem value="custom">Custom</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="action">Action</Label>
+          <Select
+            value={formData.action}
+            onValueChange={(value: FilterRule["action"]) =>
+              setFormData({ ...formData, action: value })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select action" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="block">Block</SelectItem>
+              <SelectItem value="allow">Allow</SelectItem>
+              <SelectItem value="challenge">Challenge</SelectItem>
+              <SelectItem value="log">Log Only</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="priority">Priority</Label>
+        <Input
+          id="priority"
+          type="number"
+          min="1"
+          value={formData.priority}
+          onChange={(e) =>
+            setFormData({ ...formData, priority: parseInt(e.target.value) || 1 })
+          }
+        />
+        <p className="text-xs text-muted-foreground">
+          Lower numbers are processed first
+        </p>
+      </div>
+
+      {/* Condition Fields */}
+      <div className="space-y-2">
+        <Label>Condition</Label>
+        <div className="grid grid-cols-3 gap-2">
+          <Select
+            value={formData.conditionField}
+            onValueChange={(value) =>
+              setFormData({ ...formData, conditionField: value })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Field" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="path">Path</SelectItem>
+              <SelectItem value="ip">IP Address</SelectItem>
+              <SelectItem value="country">Country</SelectItem>
+              <SelectItem value="user-agent">User Agent</SelectItem>
+              <SelectItem value="referer">Referer</SelectItem>
+              <SelectItem value="host">Host</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={formData.conditionOperator}
+            onValueChange={(value) =>
+              setFormData({ ...formData, conditionOperator: value })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Operator" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="equals">Equals</SelectItem>
+              <SelectItem value="contains">Contains</SelectItem>
+              <SelectItem value="regex">Regex</SelectItem>
+              <SelectItem value="in">In List</SelectItem>
+              <SelectItem value="gt">Greater Than</SelectItem>
+              <SelectItem value="lt">Less Than</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            placeholder="Value"
+            value={formData.conditionValue}
+            onChange={(e) =>
+              setFormData({ ...formData, conditionValue: e.target.value })
+            }
+          />
+        </div>
+      </div>
+
+      {/* Rate Limit Fields */}
+      {formData.type === "rate_limit" && (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="rateLimitRequests">Requests</Label>
+            <Input
+              id="rateLimitRequests"
+              type="number"
+              min="1"
+              value={formData.rateLimitRequests}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  rateLimitRequests: parseInt(e.target.value) || 100,
+                })
+              }
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="rateLimitWindow">Window (seconds)</Label>
+            <Input
+              id="rateLimitWindow"
+              type="number"
+              min="1"
+              value={formData.rateLimitWindow}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  rateLimitWindow: parseInt(e.target.value) || 60,
+                })
+              }
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <Label htmlFor="isEnabled">Enabled</Label>
+        <Switch
+          id="isEnabled"
+          checked={formData.isEnabled}
+          onCheckedChange={(checked) =>
+            setFormData({ ...formData, isEnabled: checked })
+          }
+        />
+      </div>
+    </div>
+  );
 }

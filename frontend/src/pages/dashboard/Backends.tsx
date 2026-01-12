@@ -1,26 +1,28 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
-  Server,
   Plus,
+  Server,
   MoreHorizontal,
   Pencil,
   Trash2,
   Power,
   PowerOff,
-  Activity,
-  Shield,
-} from 'lucide-react'
-import { toast } from 'sonner'
-
-import { Button } from '@/components/ui/button'
+  RefreshCw,
+  ExternalLink,
+} from "lucide-react";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card'
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -28,14 +30,22 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+} from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -43,495 +53,274 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+} from "@/components/ui/table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
-import { Skeleton } from '@/components/ui/skeleton'
-import { backendsQueryOptions, apiClient, type Backend } from '@/lib/api'
-import { formatNumber, formatBytes } from '@/lib/utils'
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  backendsQueryOptions,
+  useCreateBackend,
+  useUpdateBackend,
+  useDeleteBackend,
+  type Backend,
+} from "@/lib/api";
+import { toast } from "sonner";
 
-function BackendFormDialog({
-  backend,
-  open,
-  onOpenChange,
-}: {
-  backend?: Backend
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  const queryClient = useQueryClient()
-  const isEditing = !!backend
+// Mock data
+const mockBackends: Backend[] = [
+  {
+    id: "1",
+    name: "Primary API Server",
+    host: "api-primary.example.com",
+    port: 443,
+    protocol: "https",
+    healthCheckPath: "/health",
+    healthCheckInterval: 30,
+    weight: 100,
+    isActive: true,
+    createdAt: "2024-01-01T00:00:00Z",
+    updatedAt: "2024-01-15T00:00:00Z",
+  },
+  {
+    id: "2",
+    name: "Secondary API Server",
+    host: "api-secondary.example.com",
+    port: 443,
+    protocol: "https",
+    healthCheckPath: "/health",
+    healthCheckInterval: 30,
+    weight: 50,
+    isActive: true,
+    createdAt: "2024-01-02T00:00:00Z",
+    updatedAt: "2024-01-14T00:00:00Z",
+  },
+  {
+    id: "3",
+    name: "Static Assets CDN",
+    host: "cdn.example.com",
+    port: 443,
+    protocol: "https",
+    healthCheckPath: "/",
+    healthCheckInterval: 60,
+    weight: 100,
+    isActive: true,
+    createdAt: "2024-01-03T00:00:00Z",
+    updatedAt: "2024-01-13T00:00:00Z",
+  },
+  {
+    id: "4",
+    name: "Legacy API (Deprecated)",
+    host: "legacy-api.example.com",
+    port: 8080,
+    protocol: "http",
+    healthCheckPath: "/ping",
+    healthCheckInterval: 120,
+    weight: 10,
+    isActive: false,
+    createdAt: "2024-01-04T00:00:00Z",
+    updatedAt: "2024-01-12T00:00:00Z",
+  },
+];
 
-  const [formData, setFormData] = useState<{
-    name: string;
-    address: string;
-    port: number;
-    protocol: 'tcp' | 'udp' | 'http' | 'https';
-    enabled: boolean;
-    healthCheckInterval: number;
-    healthCheckTimeout: number;
-    healthCheckPath: string;
-  }>({
-    name: backend?.name || '',
-    address: backend?.address || '',
-    port: backend?.port || 80,
-    protocol: backend?.protocol || 'http',
-    enabled: backend?.enabled ?? true,
-    healthCheckInterval: backend?.healthCheck?.interval || 30,
-    healthCheckTimeout: backend?.healthCheck?.timeout || 5,
-    healthCheckPath: backend?.healthCheck?.path || '/health',
-  })
-
-  const createMutation = useMutation({
-    mutationFn: (data: Parameters<typeof apiClient.createBackend>[0]) =>
-      apiClient.createBackend(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['backends'] })
-      toast.success('Backend created successfully')
-      onOpenChange(false)
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to create backend: ${error.message}`)
-    },
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<Backend> }) =>
-      apiClient.updateBackend(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['backends'] })
-      toast.success('Backend updated successfully')
-      onOpenChange(false)
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to update backend: ${error.message}`)
-    },
-  })
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    const data = {
-      name: formData.name,
-      address: formData.address,
-      port: formData.port,
-      protocol: formData.protocol as 'tcp' | 'udp' | 'http' | 'https',
-      enabled: formData.enabled,
-      healthCheck: {
-        interval: formData.healthCheckInterval,
-        timeout: formData.healthCheckTimeout,
-        path: formData.healthCheckPath,
-      },
-    }
-
-    if (isEditing && backend) {
-      updateMutation.mutate({ id: backend.id, data })
-    } else {
-      createMutation.mutate(data)
-    }
-  }
-
-  const isPending = createMutation.isPending || updateMutation.isPending
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>
-              {isEditing ? 'Edit Backend' : 'Add New Backend'}
-            </DialogTitle>
-            <DialogDescription>
-              {isEditing
-                ? 'Update the backend server configuration'
-                : 'Configure a new backend server to protect'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                placeholder="My Backend Server"
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="address">Address</Label>
-                <Input
-                  id="address"
-                  placeholder="192.168.1.100"
-                  value={formData.address}
-                  onChange={(e) =>
-                    setFormData({ ...formData, address: e.target.value })
-                  }
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="port">Port</Label>
-                <Input
-                  id="port"
-                  type="number"
-                  min={1}
-                  max={65535}
-                  value={formData.port}
-                  onChange={(e) =>
-                    setFormData({ ...formData, port: parseInt(e.target.value) })
-                  }
-                  required
-                />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="protocol">Protocol</Label>
-              <Select
-                value={formData.protocol}
-                onValueChange={(value: 'tcp' | 'udp' | 'http' | 'https') =>
-                  setFormData({ ...formData, protocol: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="http">HTTP</SelectItem>
-                  <SelectItem value="https">HTTPS</SelectItem>
-                  <SelectItem value="tcp">TCP</SelectItem>
-                  <SelectItem value="udp">UDP</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="healthInterval">Health Interval (s)</Label>
-                <Input
-                  id="healthInterval"
-                  type="number"
-                  min={5}
-                  max={300}
-                  value={formData.healthCheckInterval}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      healthCheckInterval: parseInt(e.target.value),
-                    })
-                  }
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="healthTimeout">Timeout (s)</Label>
-                <Input
-                  id="healthTimeout"
-                  type="number"
-                  min={1}
-                  max={30}
-                  value={formData.healthCheckTimeout}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      healthCheckTimeout: parseInt(e.target.value),
-                    })
-                  }
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="healthPath">Health Path</Label>
-                <Input
-                  id="healthPath"
-                  placeholder="/health"
-                  value={formData.healthCheckPath}
-                  onChange={(e) =>
-                    setFormData({ ...formData, healthCheckPath: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <div className="space-y-0.5">
-                <Label htmlFor="enabled">Enabled</Label>
-                <p className="text-sm text-muted-foreground">
-                  Enable protection for this backend
-                </p>
-              </div>
-              <Switch
-                id="enabled"
-                checked={formData.enabled}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, enabled: checked })
-                }
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? 'Saving...' : isEditing ? 'Save Changes' : 'Create'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
+interface BackendFormData {
+  name: string;
+  host: string;
+  port: number;
+  protocol: "http" | "https";
+  healthCheckPath: string;
+  healthCheckInterval: number;
+  weight: number;
+  isActive: boolean;
 }
 
-function DeleteBackendDialog({
-  backend,
-  open,
-  onOpenChange,
-}: {
-  backend: Backend
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  const queryClient = useQueryClient()
+const defaultFormData: BackendFormData = {
+  name: "",
+  host: "",
+  port: 443,
+  protocol: "https",
+  healthCheckPath: "/health",
+  healthCheckInterval: 30,
+  weight: 100,
+  isActive: true,
+};
 
-  const deleteMutation = useMutation({
-    mutationFn: () => apiClient.deleteBackend(backend.id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['backends'] })
-      toast.success('Backend deleted successfully')
-      onOpenChange(false)
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to delete backend: ${error.message}`)
-    },
-  })
+export function Backends() {
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [selectedBackend, setSelectedBackend] = useState<Backend | null>(null);
+  const [formData, setFormData] = useState<BackendFormData>(defaultFormData);
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Delete Backend</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete "{backend.name}"? This action cannot
-            be undone and will remove all associated filter rules.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => deleteMutation.mutate()}
-            disabled={deleteMutation.isPending}
-          >
-            {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
+  const { data: backends, isLoading } = useQuery({
+    ...backendsQueryOptions(),
+    placeholderData: mockBackends,
+  });
 
-function BackendRow({ backend }: { backend: Backend }) {
-  const queryClient = useQueryClient()
-  const [editOpen, setEditOpen] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
+  const createBackend = useCreateBackend();
+  const updateBackend = useUpdateBackend();
+  const deleteBackend = useDeleteBackend();
 
-  const toggleMutation = useMutation({
-    mutationFn: () => apiClient.toggleBackend(backend.id, !backend.enabled),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['backends'] })
+  const handleCreate = async () => {
+    try {
+      await createBackend.mutateAsync(formData);
+      toast.success("Backend created successfully");
+      setIsCreateDialogOpen(false);
+      setFormData(defaultFormData);
+    } catch {
+      toast.error("Failed to create backend");
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!selectedBackend) return;
+    try {
+      await updateBackend.mutateAsync({ id: selectedBackend.id, ...formData });
+      toast.success("Backend updated successfully");
+      setIsEditDialogOpen(false);
+      setSelectedBackend(null);
+      setFormData(defaultFormData);
+    } catch {
+      toast.error("Failed to update backend");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedBackend) return;
+    try {
+      await deleteBackend.mutateAsync(selectedBackend.id);
+      toast.success("Backend deleted successfully");
+      setIsDeleteDialogOpen(false);
+      setSelectedBackend(null);
+    } catch {
+      toast.error("Failed to delete backend");
+    }
+  };
+
+  const handleToggleActive = async (backend: Backend) => {
+    try {
+      await updateBackend.mutateAsync({
+        id: backend.id,
+        isActive: !backend.isActive,
+      });
       toast.success(
-        backend.enabled ? 'Backend disabled' : 'Backend enabled'
-      )
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to toggle backend: ${error.message}`)
-    },
-  })
+        `Backend ${backend.isActive ? "disabled" : "enabled"} successfully`
+      );
+    } catch {
+      toast.error("Failed to update backend status");
+    }
+  };
 
-  const statusVariant: 'success' | 'warning' | 'destructive' =
-    backend.status === 'healthy'
-      ? 'success'
-      : backend.status === 'degraded'
-      ? 'warning'
-      : 'destructive'
+  const openEditDialog = (backend: Backend) => {
+    setSelectedBackend(backend);
+    setFormData({
+      name: backend.name,
+      host: backend.host,
+      port: backend.port,
+      protocol: backend.protocol,
+      healthCheckPath: backend.healthCheckPath,
+      healthCheckInterval: backend.healthCheckInterval,
+      weight: backend.weight,
+      isActive: backend.isActive,
+    });
+    setIsEditDialogOpen(true);
+  };
 
-  return (
-    <>
-      <TableRow>
-        <TableCell>
-          <div className="flex items-center gap-3">
-            <div
-              className={`h-2 w-2 rounded-full ${
-                backend.enabled
-                  ? backend.status === 'healthy'
-                    ? 'bg-success'
-                    : backend.status === 'degraded'
-                    ? 'bg-warning'
-                    : 'bg-destructive'
-                  : 'bg-muted'
-              }`}
-            />
-            <div>
-              <p className="font-medium">{backend.name}</p>
-              <p className="text-sm text-muted-foreground">
-                {backend.address}:{backend.port}
-              </p>
-            </div>
-          </div>
-        </TableCell>
-        <TableCell>
-          <Badge variant="outline">{backend.protocol.toUpperCase()}</Badge>
-        </TableCell>
-        <TableCell>
-          <Badge variant={backend.enabled ? statusVariant : 'secondary'}>
-            {backend.enabled ? backend.status : 'disabled'}
-          </Badge>
-        </TableCell>
-        <TableCell className="text-right">
-          {formatNumber(backend.stats.requests)}
-        </TableCell>
-        <TableCell className="text-right">
-          <span className="text-destructive">
-            {formatNumber(backend.stats.blocked)}
-          </span>
-        </TableCell>
-        <TableCell className="text-right">
-          {formatBytes(backend.stats.bytesIn + backend.stats.bytesOut)}
-        </TableCell>
-        <TableCell>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <MoreHorizontal className="h-4 w-4" />
-                <span className="sr-only">Open menu</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setEditOpen(true)}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => toggleMutation.mutate()}
-                disabled={toggleMutation.isPending}
-              >
-                {backend.enabled ? (
-                  <>
-                    <PowerOff className="mr-2 h-4 w-4" />
-                    Disable
-                  </>
-                ) : (
-                  <>
-                    <Power className="mr-2 h-4 w-4" />
-                    Enable
-                  </>
-                )}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => setDeleteOpen(true)}
-                className="text-destructive focus:text-destructive"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </TableCell>
-      </TableRow>
-
-      <BackendFormDialog
-        backend={backend}
-        open={editOpen}
-        onOpenChange={setEditOpen}
-      />
-      <DeleteBackendDialog
-        backend={backend}
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-      />
-    </>
-  )
-}
-
-export default function DashboardBackends() {
-  const [createOpen, setCreateOpen] = useState(false)
-  const { data: backends, isLoading } = useQuery(backendsQueryOptions())
-
-  const totalRequests = backends?.reduce((sum, b) => sum + b.stats.requests, 0) || 0
-  const totalBlocked = backends?.reduce((sum, b) => sum + b.stats.blocked, 0) || 0
-  const activeBackends = backends?.filter((b) => b.enabled).length || 0
+  const openDeleteDialog = (backend: Backend) => {
+    setSelectedBackend(backend);
+    setIsDeleteDialogOpen(true);
+  };
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Backends</h1>
           <p className="text-muted-foreground">
-            Manage your protected backend servers
+            Manage your origin servers and load balancing
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Backend
-        </Button>
+        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Backend
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Add New Backend</DialogTitle>
+              <DialogDescription>
+                Configure a new origin server for your traffic
+              </DialogDescription>
+            </DialogHeader>
+            <BackendForm formData={formData} setFormData={setFormData} />
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsCreateDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleCreate} disabled={createBackend.isPending}>
+                {createBackend.isPending ? "Creating..." : "Create Backend"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Backends</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Backends</CardTitle>
             <Server className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
+            <div className="text-2xl font-bold">{backends?.length || 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active</CardTitle>
+            <Power className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
             <div className="text-2xl font-bold">
-              {activeBackends} / {backends?.length || 0}
+              {backends?.filter((b) => b.isActive).length || 0}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Currently protected servers
-            </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Inactive</CardTitle>
+            <PowerOff className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(totalRequests)}</div>
-            <p className="text-xs text-muted-foreground">Across all backends</p>
+            <div className="text-2xl font-bold">
+              {backends?.filter((b) => !b.isActive).length || 0}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Threats Blocked</CardTitle>
-            <Shield className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total Weight</CardTitle>
+            <RefreshCw className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">
-              {formatNumber(totalBlocked)}
+            <div className="text-2xl font-bold">
+              {backends?.reduce((sum, b) => sum + (b.isActive ? b.weight : 0), 0) ||
+                0}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {totalRequests > 0
-                ? `${((totalBlocked / totalRequests) * 100).toFixed(1)}% block rate`
-                : 'No traffic yet'}
-            </p>
           </CardContent>
         </Card>
       </div>
@@ -539,55 +328,286 @@ export default function DashboardBackends() {
       {/* Backends Table */}
       <Card>
         <CardHeader>
-          <CardTitle>All Backends</CardTitle>
+          <CardTitle>Origin Servers</CardTitle>
           <CardDescription>
-            A list of all configured backend servers and their status
+            Configure and manage your backend servers
           </CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="space-y-4">
-              {[...Array(3)].map((_, i) => (
+              {[1, 2, 3].map((i) => (
                 <Skeleton key={i} className="h-16 w-full" />
               ))}
             </div>
-          ) : backends?.length ? (
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Backend</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Host</TableHead>
                   <TableHead>Protocol</TableHead>
+                  <TableHead>Health Check</TableHead>
+                  <TableHead>Weight</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Requests</TableHead>
-                  <TableHead className="text-right">Blocked</TableHead>
-                  <TableHead className="text-right">Bandwidth</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
+                  <TableHead className="w-[70px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {backends.map((backend) => (
-                  <BackendRow key={backend.id} backend={backend} />
+                {backends?.map((backend) => (
+                  <TableRow key={backend.id}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <Server className="h-4 w-4 text-muted-foreground" />
+                        {backend.name}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm">
+                          {backend.host}:{backend.port}
+                        </span>
+                        <a
+                          href={`${backend.protocol}://${backend.host}:${backend.port}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-muted-foreground hover:text-foreground"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="uppercase">
+                        {backend.protocol}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        <div className="font-mono">{backend.healthCheckPath}</div>
+                        <div className="text-muted-foreground">
+                          every {backend.healthCheckInterval}s
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{backend.weight}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={backend.isActive ? "success" : "secondary"}
+                      >
+                        {backend.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => openEditDialog(backend)}
+                          >
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleToggleActive(backend)}
+                          >
+                            {backend.isActive ? (
+                              <>
+                                <PowerOff className="mr-2 h-4 w-4" />
+                                Disable
+                              </>
+                            ) : (
+                              <>
+                                <Power className="mr-2 h-4 w-4" />
+                                Enable
+                              </>
+                            )}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => openDeleteDialog(backend)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
                 ))}
               </TableBody>
             </Table>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Server className="h-12 w-12 text-muted-foreground" />
-              <h3 className="mt-4 text-lg font-semibold">No backends configured</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Add your first backend server to start protecting it
-              </p>
-              <Button onClick={() => setCreateOpen(true)} className="mt-4">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Backend
-              </Button>
-            </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Create Dialog */}
-      <BackendFormDialog open={createOpen} onOpenChange={setCreateOpen} />
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Edit Backend</DialogTitle>
+            <DialogDescription>
+              Update the configuration for {selectedBackend?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <BackendForm formData={formData} setFormData={setFormData} />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsEditDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleUpdate} disabled={updateBackend.isPending}>
+              {updateBackend.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Backend</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{selectedBackend?.name}"? This
+              action cannot be undone and will remove all traffic routing to this
+              backend.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteBackend.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
-  )
+  );
+}
+
+interface BackendFormProps {
+  formData: BackendFormData;
+  setFormData: React.Dispatch<React.SetStateAction<BackendFormData>>;
+}
+
+function BackendForm({ formData, setFormData }: BackendFormProps) {
+  return (
+    <div className="grid gap-4 py-4">
+      <div className="grid gap-2">
+        <Label htmlFor="name">Name</Label>
+        <Input
+          id="name"
+          placeholder="My Backend Server"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="host">Host</Label>
+          <Input
+            id="host"
+            placeholder="api.example.com"
+            value={formData.host}
+            onChange={(e) => setFormData({ ...formData, host: e.target.value })}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="port">Port</Label>
+          <Input
+            id="port"
+            type="number"
+            placeholder="443"
+            value={formData.port}
+            onChange={(e) =>
+              setFormData({ ...formData, port: parseInt(e.target.value) || 443 })
+            }
+          />
+        </div>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="protocol">Protocol</Label>
+        <Select
+          value={formData.protocol}
+          onValueChange={(value: "http" | "https") =>
+            setFormData({ ...formData, protocol: value })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select protocol" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="https">HTTPS</SelectItem>
+            <SelectItem value="http">HTTP</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="healthCheckPath">Health Check Path</Label>
+          <Input
+            id="healthCheckPath"
+            placeholder="/health"
+            value={formData.healthCheckPath}
+            onChange={(e) =>
+              setFormData({ ...formData, healthCheckPath: e.target.value })
+            }
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="healthCheckInterval">Interval (seconds)</Label>
+          <Input
+            id="healthCheckInterval"
+            type="number"
+            placeholder="30"
+            value={formData.healthCheckInterval}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                healthCheckInterval: parseInt(e.target.value) || 30,
+              })
+            }
+          />
+        </div>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="weight">Weight</Label>
+        <Input
+          id="weight"
+          type="number"
+          placeholder="100"
+          value={formData.weight}
+          onChange={(e) =>
+            setFormData({ ...formData, weight: parseInt(e.target.value) || 100 })
+          }
+        />
+        <p className="text-xs text-muted-foreground">
+          Higher weight means more traffic will be routed to this backend
+        </p>
+      </div>
+      <div className="flex items-center justify-between">
+        <Label htmlFor="isActive">Active</Label>
+        <Switch
+          id="isActive"
+          checked={formData.isActive}
+          onCheckedChange={(checked) =>
+            setFormData({ ...formData, isActive: checked })
+          }
+        />
+      </div>
+    </div>
+  );
 }

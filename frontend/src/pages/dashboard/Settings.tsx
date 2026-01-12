@@ -1,30 +1,33 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   User,
-  Bell,
   Shield,
   Key,
-  Trash2,
-  Plus,
+  Bell,
+  Palette,
   Copy,
   Eye,
   EyeOff,
-  Building2,
-  Users,
-  Mail,
-} from 'lucide-react'
-import { toast } from 'sonner'
-
-import { Button } from '@/components/ui/button'
+  Plus,
+  Trash2,
+  RefreshCw,
+} from "lucide-react";
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card'
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
@@ -32,14 +35,26 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -47,677 +62,742 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
+} from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
-import {
+  userQueryOptions,
   apiKeysQueryOptions,
-  organizationQueryOptions,
-  organizationMembersQueryOptions,
-  apiClient,
-} from '@/lib/api'
-import { useSession } from '@/lib/auth-client'
-import { copyToClipboard } from '@/lib/utils'
+  useUpdateUser,
+  useCreateApiKey,
+  useDeleteApiKey,
+  type ApiKey,
+} from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { toast } from "sonner";
+import { formatDate } from "@/lib/utils";
 
-function ProfileSettings() {
-  const { data: session } = useSession()
-  const [name, setName] = useState(session?.user?.name || '')
-  const [email, setEmail] = useState(session?.user?.email || '')
-  const [isSaving, setIsSaving] = useState(false)
+// Mock data
+const mockUser = {
+  id: "1",
+  email: "john@example.com",
+  name: "John Doe",
+  avatar: "",
+  role: "owner" as const,
+  createdAt: "2024-01-01T00:00:00Z",
+};
 
-  const handleSave = async () => {
-    setIsSaving(true)
-    // In production, call API to update profile
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    toast.success('Profile updated successfully')
-    setIsSaving(false)
-  }
+const mockApiKeys: ApiKey[] = [
+  {
+    id: "1",
+    name: "Production API Key",
+    prefix: "pp_live_",
+    lastUsed: "2024-01-15T10:30:00Z",
+    createdAt: "2024-01-01T00:00:00Z",
+    expiresAt: null,
+    scopes: ["read", "write"],
+  },
+  {
+    id: "2",
+    name: "Development Key",
+    prefix: "pp_dev_",
+    lastUsed: "2024-01-14T08:00:00Z",
+    createdAt: "2024-01-05T00:00:00Z",
+    expiresAt: "2024-12-31T23:59:59Z",
+    scopes: ["read"],
+  },
+];
 
-  const userInitials = session?.user?.name
-    ? session.user.name
-        .split(' ')
-        .map((n: string) => n[0])
-        .join('')
-        .toUpperCase()
-    : session?.user?.email?.charAt(0).toUpperCase() || 'U'
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Profile</CardTitle>
-        <CardDescription>Manage your personal information</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="flex items-center gap-6">
-          <Avatar className="h-20 w-20">
-            <AvatarImage src={session?.user?.image || undefined} />
-            <AvatarFallback className="text-lg">{userInitials}</AvatarFallback>
-          </Avatar>
-          <div>
-            <Button variant="outline" size="sm">
-              Change Avatar
-            </Button>
-            <p className="mt-1 text-xs text-muted-foreground">
-              JPG, PNG or GIF. Max 2MB.
-            </p>
-          </div>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="name">Full Name</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="John Doe"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="john@example.com"
-            />
-          </div>
-        </div>
-      </CardContent>
-      <CardFooter>
-        <Button onClick={handleSave} disabled={isSaving}>
-          {isSaving ? 'Saving...' : 'Save Changes'}
-        </Button>
-      </CardFooter>
-    </Card>
-  )
+interface ApiKeyFormData {
+  name: string;
+  scopes: string[];
+  expiresIn: string;
 }
 
-function NotificationSettings() {
-  const [emailAlerts, setEmailAlerts] = useState(true)
-  const [attackAlerts, setAttackAlerts] = useState(true)
-  const [weeklyReports, setWeeklyReports] = useState(true)
-  const [backendDown, setBackendDown] = useState(true)
+const defaultApiKeyFormData: ApiKeyFormData = {
+  name: "",
+  scopes: ["read"],
+  expiresIn: "never",
+};
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Notifications</CardTitle>
-        <CardDescription>Configure how you receive alerts</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center justify-between rounded-lg border p-4">
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-2">
-              <Mail className="h-4 w-4 text-muted-foreground" />
-              <Label>Email Alerts</Label>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Receive important alerts via email
-            </p>
-          </div>
-          <Switch checked={emailAlerts} onCheckedChange={setEmailAlerts} />
-        </div>
-        <div className="flex items-center justify-between rounded-lg border p-4">
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-muted-foreground" />
-              <Label>Attack Detection</Label>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Get notified when attacks are detected
-            </p>
-          </div>
-          <Switch checked={attackAlerts} onCheckedChange={setAttackAlerts} />
-        </div>
-        <div className="flex items-center justify-between rounded-lg border p-4">
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-2">
-              <Bell className="h-4 w-4 text-muted-foreground" />
-              <Label>Backend Status</Label>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Alert when backends go offline
-            </p>
-          </div>
-          <Switch checked={backendDown} onCheckedChange={setBackendDown} />
-        </div>
-        <div className="flex items-center justify-between rounded-lg border p-4">
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-2">
-              <Mail className="h-4 w-4 text-muted-foreground" />
-              <Label>Weekly Reports</Label>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Receive weekly summary reports
-            </p>
-          </div>
-          <Switch checked={weeklyReports} onCheckedChange={setWeeklyReports} />
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
+export function Settings() {
+  useAuth(); // For authentication context
+  const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [selectedApiKey, setSelectedApiKey] = useState<ApiKey | null>(null);
+  const [newApiKey, setNewApiKey] = useState<string | null>(null);
+  const [showNewKey, setShowNewKey] = useState(false);
+  const [apiKeyFormData, setApiKeyFormData] = useState<ApiKeyFormData>(defaultApiKeyFormData);
 
-function SecuritySettings() {
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
-  const [isChanging, setIsChanging] = useState(false)
+  const { data: user, isLoading: userLoading } = useQuery({
+    ...userQueryOptions(),
+    placeholderData: mockUser,
+  });
 
-  const handleChangePassword = async () => {
-    if (newPassword !== confirmPassword) {
-      toast.error('Passwords do not match')
-      return
+  const { data: apiKeys, isLoading: apiKeysLoading } = useQuery({
+    ...apiKeysQueryOptions(),
+    placeholderData: mockApiKeys,
+  });
+
+  const updateUser = useUpdateUser();
+  const createApiKey = useCreateApiKey();
+  const deleteApiKey = useDeleteApiKey();
+
+  const [profileForm, setProfileForm] = useState({
+    name: user?.name || "",
+    email: user?.email || "",
+  });
+
+  const [notifications, setNotifications] = useState({
+    email: true,
+    attacks: true,
+    usage: true,
+    newsletter: false,
+  });
+
+  const handleUpdateProfile = async () => {
+    try {
+      await updateUser.mutateAsync(profileForm);
+      toast.success("Profile updated successfully");
+    } catch {
+      toast.error("Failed to update profile");
     }
-    setIsChanging(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    toast.success('Password changed successfully')
-    setCurrentPassword('')
-    setNewPassword('')
-    setConfirmPassword('')
-    setIsChanging(false)
-  }
+  };
+
+  const handleCreateApiKey = async () => {
+    try {
+      const result = await createApiKey.mutateAsync({
+        name: apiKeyFormData.name,
+        scopes: apiKeyFormData.scopes,
+        expiresAt:
+          apiKeyFormData.expiresIn !== "never"
+            ? new Date(
+                Date.now() + parseInt(apiKeyFormData.expiresIn) * 24 * 60 * 60 * 1000
+              ).toISOString()
+            : undefined,
+      });
+      setNewApiKey(result.key);
+      toast.success("API key created successfully");
+    } catch {
+      toast.error("Failed to create API key");
+    }
+  };
+
+  const handleDeleteApiKey = async () => {
+    if (!selectedApiKey) return;
+    try {
+      await deleteApiKey.mutateAsync(selectedApiKey.id);
+      toast.success("API key deleted successfully");
+      setIsDeleteDialogOpen(false);
+      setSelectedApiKey(null);
+    } catch {
+      toast.error("Failed to delete API key");
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard");
+  };
+
+  const getInitials = (name?: string) => {
+    if (!name) return "U";
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Change Password</CardTitle>
-          <CardDescription>Update your account password</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="current-password">Current Password</Label>
-            <div className="relative">
-              <Input
-                id="current-password"
-                type={showPassword ? 'text' : 'password'}
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-0 top-0 h-full px-3"
-                onClick={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="new-password">New Password</Label>
-            <Input
-              id="new-password"
-              type={showPassword ? 'text' : 'password'}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="confirm-password">Confirm New Password</Label>
-            <Input
-              id="confirm-password"
-              type={showPassword ? 'text' : 'password'}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
-          </div>
-        </CardContent>
-        <CardFooter>
-          <Button onClick={handleChangePassword} disabled={isChanging}>
-            {isChanging ? 'Changing...' : 'Change Password'}
-          </Button>
-        </CardFooter>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Two-Factor Authentication</CardTitle>
-          <CardDescription>
-            Add an extra layer of security to your account
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between rounded-lg border p-4">
-            <div className="space-y-0.5">
-              <Label>2FA Status</Label>
-              <p className="text-sm text-muted-foreground">
-                {twoFactorEnabled
-                  ? 'Two-factor authentication is enabled'
-                  : 'Protect your account with 2FA'}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {twoFactorEnabled && (
-                <Badge variant="success">Enabled</Badge>
-              )}
-              <Button
-                variant={twoFactorEnabled ? 'outline' : 'default'}
-                onClick={() => setTwoFactorEnabled(!twoFactorEnabled)}
-              >
-                {twoFactorEnabled ? 'Disable' : 'Enable'}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-function ApiKeysSettings() {
-  const queryClient = useQueryClient()
-  const { data: apiKeys, isLoading } = useQuery(apiKeysQueryOptions())
-  const [createOpen, setCreateOpen] = useState(false)
-  const [newKeyName, setNewKeyName] = useState('')
-  const [createdKey, setCreatedKey] = useState<string | null>(null)
-  const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set())
-
-  const createMutation = useMutation({
-    mutationFn: (name: string) => apiClient.createApiKey(name),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['api-keys'] })
-      setCreatedKey(data.key)
-      setNewKeyName('')
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to create API key: ${error.message}`)
-    },
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiClient.deleteApiKey(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['api-keys'] })
-      toast.success('API key deleted')
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to delete API key: ${error.message}`)
-    },
-  })
-
-  const handleCopy = async (text: string) => {
-    const success = await copyToClipboard(text)
-    if (success) {
-      toast.success('Copied to clipboard')
-    }
-  }
-
-  const toggleKeyVisibility = (id: string) => {
-    const newVisible = new Set(visibleKeys)
-    if (newVisible.has(id)) {
-      newVisible.delete(id)
-    } else {
-      newVisible.add(id)
-    }
-    setVisibleKeys(newVisible)
-  }
-
-  return (
-    <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>API Keys</CardTitle>
-              <CardDescription>Manage API keys for programmatic access</CardDescription>
-            </div>
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create Key
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-4">
-              {[...Array(2)].map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
-          ) : apiKeys?.length ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Key</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Last Used</TableHead>
-                  <TableHead className="w-[100px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {apiKeys.map((key) => (
-                  <TableRow key={key.id}>
-                    <TableCell className="font-medium">{key.name}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <code className="rounded bg-muted px-2 py-1 text-sm">
-                          {visibleKeys.has(key.id) ? key.key : `${key.prefix}...`}
-                        </code>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => toggleKeyVisibility(key.id)}
-                        >
-                          {visibleKeys.has(key.id) ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => handleCopy(key.key)}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(key.createdAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>
-                      {key.lastUsed
-                        ? new Date(key.lastUsed).toLocaleDateString()
-                        : 'Never'}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => deleteMutation.mutate(key.id)}
-                        disabled={deleteMutation.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <Key className="h-10 w-10 text-muted-foreground" />
-              <p className="mt-2 text-sm text-muted-foreground">No API keys</p>
-              <Button onClick={() => setCreateOpen(true)} className="mt-4" size="sm">
-                Create your first API key
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Create Key Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {createdKey ? 'API Key Created' : 'Create API Key'}
-            </DialogTitle>
-            <DialogDescription>
-              {createdKey
-                ? 'Copy your new API key now. You will not be able to see it again.'
-                : 'Give your API key a descriptive name'}
-            </DialogDescription>
-          </DialogHeader>
-          {createdKey ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 rounded-lg bg-muted p-4">
-                <code className="flex-1 break-all text-sm">{createdKey}</code>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleCopy(createdKey)}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-              <DialogFooter>
-                <Button
-                  onClick={() => {
-                    setCreatedKey(null)
-                    setCreateOpen(false)
-                  }}
-                >
-                  Done
-                </Button>
-              </DialogFooter>
-            </div>
-          ) : (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="key-name">Key Name</Label>
-                <Input
-                  id="key-name"
-                  placeholder="Production API Key"
-                  value={newKeyName}
-                  onChange={(e) => setNewKeyName(e.target.value)}
-                />
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setCreateOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={() => createMutation.mutate(newKeyName)}
-                  disabled={!newKeyName || createMutation.isPending}
-                >
-                  {createMutation.isPending ? 'Creating...' : 'Create'}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-    </>
-  )
-}
-
-function OrganizationSettings() {
-  const { data: organization, isLoading: orgLoading } = useQuery(organizationQueryOptions())
-  const { data: members, isLoading: membersLoading } = useQuery(organizationMembersQueryOptions())
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteRole, setInviteRole] = useState('member')
-
-  const handleInvite = () => {
-    toast.success(`Invitation sent to ${inviteEmail}`)
-    setInviteEmail('')
-  }
-
-  return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Organization</CardTitle>
-          <CardDescription>Manage your organization settings</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {orgLoading ? (
-            <Skeleton className="h-20 w-full" />
-          ) : (
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-muted">
-                <Building2 className="h-8 w-8 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-lg font-medium">{organization?.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  Slug: {organization?.slug}
-                </p>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Team Members</CardTitle>
-              <CardDescription>Manage who has access to your organization</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Invite Form */}
-          <div className="flex gap-2">
-            <Input
-              placeholder="colleague@company.com"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              className="flex-1"
-            />
-            <Select value={inviteRole} onValueChange={setInviteRole}>
-              <SelectTrigger className="w-[120px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="member">Member</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button onClick={handleInvite} disabled={!inviteEmail}>
-              Invite
-            </Button>
-          </div>
-
-          <Separator />
-
-          {/* Members List */}
-          {membersLoading ? (
-            <div className="space-y-4">
-              {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {members?.map((member) => (
-                <div
-                  key={member.id}
-                  className="flex items-center justify-between rounded-lg border p-4"
-                >
-                  <div className="flex items-center gap-3">
-                    <Avatar>
-                      <AvatarImage src={member.user.image || undefined} />
-                      <AvatarFallback>
-                        {member.user.name?.charAt(0) || member.user.email.charAt(0)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium">
-                        {member.user.name || member.user.email}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {member.user.email}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      variant={
-                        member.role === 'owner'
-                          ? 'default'
-                          : member.role === 'admin'
-                          ? 'secondary'
-                          : 'outline'
-                      }
-                    >
-                      {member.role}
-                    </Badge>
-                    {member.role !== 'owner' && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <Trash2 className="h-4 w-4 text-muted-foreground" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-export default function DashboardSettings() {
-  return (
-    <div className="space-y-6">
-      {/* Page Header */}
+      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">
-          Manage your account and organization settings
+          Manage your account and application settings
         </p>
       </div>
 
-      {/* Settings Tabs */}
-      <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:grid-cols-none">
-          <TabsTrigger value="profile" className="gap-2">
+      <Tabs defaultValue="profile" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="profile" className="flex items-center gap-2">
             <User className="h-4 w-4" />
-            <span className="hidden sm:inline">Profile</span>
+            Profile
           </TabsTrigger>
-          <TabsTrigger value="notifications" className="gap-2">
-            <Bell className="h-4 w-4" />
-            <span className="hidden sm:inline">Notifications</span>
-          </TabsTrigger>
-          <TabsTrigger value="security" className="gap-2">
+          <TabsTrigger value="security" className="flex items-center gap-2">
             <Shield className="h-4 w-4" />
-            <span className="hidden sm:inline">Security</span>
+            Security
           </TabsTrigger>
-          <TabsTrigger value="api-keys" className="gap-2">
+          <TabsTrigger value="api-keys" className="flex items-center gap-2">
             <Key className="h-4 w-4" />
-            <span className="hidden sm:inline">API Keys</span>
+            API Keys
           </TabsTrigger>
-          <TabsTrigger value="organization" className="gap-2">
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">Team</span>
+          <TabsTrigger value="notifications" className="flex items-center gap-2">
+            <Bell className="h-4 w-4" />
+            Notifications
+          </TabsTrigger>
+          <TabsTrigger value="appearance" className="flex items-center gap-2">
+            <Palette className="h-4 w-4" />
+            Appearance
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="profile">
-          <ProfileSettings />
+        {/* Profile Tab */}
+        <TabsContent value="profile" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile Information</CardTitle>
+              <CardDescription>
+                Update your account profile information
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {userLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-20 w-20 rounded-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-6">
+                    <Avatar className="h-20 w-20">
+                      <AvatarImage src={user?.avatar} />
+                      <AvatarFallback className="text-2xl">
+                        {getInitials(user?.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <Button variant="outline" size="sm">
+                        Change Avatar
+                      </Button>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        JPG, PNG or GIF. Max size 2MB.
+                      </p>
+                    </div>
+                  </div>
+                  <Separator />
+                  <div className="grid gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="name">Full Name</Label>
+                      <Input
+                        id="name"
+                        value={profileForm.name}
+                        onChange={(e) =>
+                          setProfileForm({ ...profileForm, name: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="email">Email Address</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={profileForm.email}
+                        onChange={(e) =>
+                          setProfileForm({ ...profileForm, email: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Role</Label>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="capitalize">
+                          {user?.role}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          Member since {formatDate(user?.createdAt || "")}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={handleUpdateProfile}
+                      disabled={updateUser.isPending}
+                    >
+                      {updateUser.isPending ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="notifications">
-          <NotificationSettings />
+        {/* Security Tab */}
+        <TabsContent value="security" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Change Password</CardTitle>
+              <CardDescription>
+                Update your password to keep your account secure
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-2">
+                <Label htmlFor="current-password">Current Password</Label>
+                <Input id="current-password" type="password" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="new-password">New Password</Label>
+                <Input id="new-password" type="password" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="confirm-password">Confirm New Password</Label>
+                <Input id="confirm-password" type="password" />
+              </div>
+              <div className="flex justify-end">
+                <Button>Update Password</Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Two-Factor Authentication</CardTitle>
+              <CardDescription>
+                Add an extra layer of security to your account
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Authenticator App</p>
+                  <p className="text-sm text-muted-foreground">
+                    Use an authenticator app to generate verification codes
+                  </p>
+                </div>
+                <Button variant="outline">Enable</Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-destructive">
+            <CardHeader>
+              <CardTitle className="text-destructive">Danger Zone</CardTitle>
+              <CardDescription>
+                Irreversible and destructive actions
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Delete Account</p>
+                  <p className="text-sm text-muted-foreground">
+                    Permanently delete your account and all associated data
+                  </p>
+                </div>
+                <Button variant="destructive">Delete Account</Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="security">
-          <SecuritySettings />
+        {/* API Keys Tab */}
+        <TabsContent value="api-keys" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>API Keys</CardTitle>
+                  <CardDescription>
+                    Manage your API keys for programmatic access
+                  </CardDescription>
+                </div>
+                <Dialog
+                  open={isApiKeyDialogOpen}
+                  onOpenChange={(open) => {
+                    setIsApiKeyDialogOpen(open);
+                    if (!open) {
+                      setNewApiKey(null);
+                      setApiKeyFormData(defaultApiKeyFormData);
+                    }
+                  }}
+                >
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create API Key
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    {newApiKey ? (
+                      <>
+                        <DialogHeader>
+                          <DialogTitle>API Key Created</DialogTitle>
+                          <DialogDescription>
+                            Copy your new API key. You won't be able to see it again!
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type={showNewKey ? "text" : "password"}
+                              value={newApiKey}
+                              readOnly
+                              className="font-mono"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setShowNewKey(!showNewKey)}
+                            >
+                              {showNewKey ? (
+                                <EyeOff className="h-4 w-4" />
+                              ) : (
+                                <Eye className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => copyToClipboard(newApiKey)}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button onClick={() => setIsApiKeyDialogOpen(false)}>
+                            Done
+                          </Button>
+                        </DialogFooter>
+                      </>
+                    ) : (
+                      <>
+                        <DialogHeader>
+                          <DialogTitle>Create API Key</DialogTitle>
+                          <DialogDescription>
+                            Create a new API key for programmatic access
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="grid gap-2">
+                            <Label htmlFor="key-name">Key Name</Label>
+                            <Input
+                              id="key-name"
+                              placeholder="Production API Key"
+                              value={apiKeyFormData.name}
+                              onChange={(e) =>
+                                setApiKeyFormData({
+                                  ...apiKeyFormData,
+                                  name: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label>Permissions</Label>
+                            <div className="space-y-2">
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id="read"
+                                  checked={apiKeyFormData.scopes.includes("read")}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setApiKeyFormData({
+                                        ...apiKeyFormData,
+                                        scopes: [...apiKeyFormData.scopes, "read"],
+                                      });
+                                    } else {
+                                      setApiKeyFormData({
+                                        ...apiKeyFormData,
+                                        scopes: apiKeyFormData.scopes.filter(
+                                          (s) => s !== "read"
+                                        ),
+                                      });
+                                    }
+                                  }}
+                                />
+                                <Label htmlFor="read">Read</Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id="write"
+                                  checked={apiKeyFormData.scopes.includes("write")}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setApiKeyFormData({
+                                        ...apiKeyFormData,
+                                        scopes: [...apiKeyFormData.scopes, "write"],
+                                      });
+                                    } else {
+                                      setApiKeyFormData({
+                                        ...apiKeyFormData,
+                                        scopes: apiKeyFormData.scopes.filter(
+                                          (s) => s !== "write"
+                                        ),
+                                      });
+                                    }
+                                  }}
+                                />
+                                <Label htmlFor="write">Write</Label>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="expires">Expiration</Label>
+                            <Select
+                              value={apiKeyFormData.expiresIn}
+                              onValueChange={(value) =>
+                                setApiKeyFormData({
+                                  ...apiKeyFormData,
+                                  expiresIn: value,
+                                })
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select expiration" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="never">Never</SelectItem>
+                                <SelectItem value="30">30 days</SelectItem>
+                                <SelectItem value="90">90 days</SelectItem>
+                                <SelectItem value="365">1 year</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            variant="outline"
+                            onClick={() => setIsApiKeyDialogOpen(false)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={handleCreateApiKey}
+                            disabled={createApiKey.isPending}
+                          >
+                            {createApiKey.isPending ? "Creating..." : "Create Key"}
+                          </Button>
+                        </DialogFooter>
+                      </>
+                    )}
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {apiKeysLoading ? (
+                <div className="space-y-4">
+                  {[1, 2].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Key Prefix</TableHead>
+                      <TableHead>Scopes</TableHead>
+                      <TableHead>Last Used</TableHead>
+                      <TableHead>Expires</TableHead>
+                      <TableHead className="w-[70px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {apiKeys?.map((apiKey) => (
+                      <TableRow key={apiKey.id}>
+                        <TableCell className="font-medium">
+                          {apiKey.name}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {apiKey.prefix}****
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            {apiKey.scopes.map((scope) => (
+                              <Badge key={scope} variant="outline">
+                                {scope}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {apiKey.lastUsed
+                            ? formatDate(apiKey.lastUsed)
+                            : "Never"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {apiKey.expiresAt
+                            ? formatDate(apiKey.expiresAt)
+                            : "Never"}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => {
+                              setSelectedApiKey(apiKey);
+                              setIsDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          <AlertDialog
+            open={isDeleteDialogOpen}
+            onOpenChange={setIsDeleteDialogOpen}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete API Key</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete "{selectedApiKey?.name}"? Any
+                  applications using this key will lose access.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteApiKey}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {deleteApiKey.isPending ? "Deleting..." : "Delete"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </TabsContent>
 
-        <TabsContent value="api-keys">
-          <ApiKeysSettings />
+        {/* Notifications Tab */}
+        <TabsContent value="notifications" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Email Notifications</CardTitle>
+              <CardDescription>
+                Configure how you receive notifications
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Email Notifications</p>
+                  <p className="text-sm text-muted-foreground">
+                    Receive email notifications for important events
+                  </p>
+                </div>
+                <Switch
+                  checked={notifications.email}
+                  onCheckedChange={(checked) =>
+                    setNotifications({ ...notifications, email: checked })
+                  }
+                />
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Attack Alerts</p>
+                  <p className="text-sm text-muted-foreground">
+                    Get notified when attacks are detected and blocked
+                  </p>
+                </div>
+                <Switch
+                  checked={notifications.attacks}
+                  onCheckedChange={(checked) =>
+                    setNotifications({ ...notifications, attacks: checked })
+                  }
+                />
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Usage Alerts</p>
+                  <p className="text-sm text-muted-foreground">
+                    Get notified when approaching usage limits
+                  </p>
+                </div>
+                <Switch
+                  checked={notifications.usage}
+                  onCheckedChange={(checked) =>
+                    setNotifications({ ...notifications, usage: checked })
+                  }
+                />
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Newsletter</p>
+                  <p className="text-sm text-muted-foreground">
+                    Receive product updates and news
+                  </p>
+                </div>
+                <Switch
+                  checked={notifications.newsletter}
+                  onCheckedChange={(checked) =>
+                    setNotifications({ ...notifications, newsletter: checked })
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="organization">
-          <OrganizationSettings />
+        {/* Appearance Tab */}
+        <TabsContent value="appearance" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Theme</CardTitle>
+              <CardDescription>
+                Customize the appearance of the application
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <Button
+                  variant="outline"
+                  className="h-24 flex-col gap-2"
+                  onClick={() => {
+                    document.documentElement.classList.remove("dark");
+                    localStorage.setItem("theme", "light");
+                  }}
+                >
+                  <div className="h-8 w-8 rounded-full bg-white border" />
+                  <span>Light</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-24 flex-col gap-2"
+                  onClick={() => {
+                    document.documentElement.classList.add("dark");
+                    localStorage.setItem("theme", "dark");
+                  }}
+                >
+                  <div className="h-8 w-8 rounded-full bg-zinc-900 border" />
+                  <span>Dark</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-24 flex-col gap-2"
+                  onClick={() => {
+                    const prefersDark = window.matchMedia(
+                      "(prefers-color-scheme: dark)"
+                    ).matches;
+                    document.documentElement.classList.toggle("dark", prefersDark);
+                    localStorage.removeItem("theme");
+                  }}
+                >
+                  <RefreshCw className="h-8 w-8" />
+                  <span>System</span>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }
