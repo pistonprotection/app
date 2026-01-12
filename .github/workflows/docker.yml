@@ -67,15 +67,7 @@ jobs:
       - name: Set build matrix
         id: matrix
         run: |
-          echo 'matrix={"include":[
-            {"component":"gateway","context":".","file":"./docker/gateway/Dockerfile"},
-            {"component":"worker","context":".","file":"./docker/worker/Dockerfile"},
-            {"component":"config-mgr","context":".","file":"./docker/config-mgr/Dockerfile"},
-            {"component":"metrics","context":".","file":"./docker/metrics/Dockerfile"},
-            {"component":"auth","context":".","file":"./docker/auth/Dockerfile"},
-            {"component":"operator","context":".","file":"./docker/operator/Dockerfile"},
-            {"component":"frontend","context":".","file":"./docker/frontend/Dockerfile"}
-          ]}' >> $GITHUB_OUTPUT
+          echo 'matrix={"include":[{"component":"gateway","context":".","file":"./docker/gateway/Dockerfile"},{"component":"worker","context":".","file":"./docker/worker/Dockerfile"},{"component":"config-mgr","context":".","file":"./docker/config-mgr/Dockerfile"},{"component":"metrics","context":".","file":"./docker/metrics/Dockerfile"},{"component":"auth","context":".","file":"./docker/auth/Dockerfile"},{"component":"operator","context":".","file":"./docker/operator/Dockerfile"},{"component":"frontend","context":".","file":"./docker/frontend/Dockerfile"}]}' >> $GITHUB_OUTPUT
 
   # ===========================================================================
   # Build and Push Docker Images
