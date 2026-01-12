@@ -23,6 +23,9 @@ pub struct Config {
     /// Redis configuration
     pub redis: Option<RedisConfig>,
 
+    /// Authentication configuration
+    pub auth: Option<AuthConfig>,
+
     /// Telemetry configuration
     #[serde(default)]
     pub telemetry: TelemetryConfig,
@@ -177,6 +180,46 @@ fn default_redis_pool_size() -> usize {
 
 fn default_redis_timeout() -> u64 {
     5
+}
+
+/// Authentication configuration
+#[derive(Debug, Clone, Deserialize)]
+pub struct AuthConfig {
+    /// JWT secret for token validation
+    pub jwt_secret: String,
+
+    /// JWT issuer
+    #[serde(default = "default_jwt_issuer")]
+    pub jwt_issuer: String,
+
+    /// JWT audience
+    #[serde(default = "default_jwt_audience")]
+    pub jwt_audience: String,
+
+    /// Skip authentication (development only - NEVER in production)
+    #[serde(default)]
+    pub skip_auth: bool,
+
+    /// Paths that don't require authentication
+    #[serde(default = "default_public_paths")]
+    pub public_paths: Vec<String>,
+}
+
+fn default_jwt_issuer() -> String {
+    "pistonprotection".to_string()
+}
+
+fn default_jwt_audience() -> String {
+    "pistonprotection-api".to_string()
+}
+
+fn default_public_paths() -> Vec<String> {
+    vec![
+        "/grpc.health".to_string(),
+        "/grpc.reflection".to_string(),
+        "/health".to_string(),
+        "/metrics".to_string(),
+    ]
 }
 
 /// Telemetry configuration

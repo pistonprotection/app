@@ -2784,6 +2784,7 @@ dependencies = [
  "http 1.4.0",
  "http-body 1.0.1",
  "http-body-util",
+ "jsonwebtoken",
  "lazy_static",
  "mockall",
  "parking_lot",
