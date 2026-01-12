@@ -535,8 +535,8 @@ async fn handle_invoice_paid(
     // Update subscription status to active if it was past_due
     if let Some(subscription) = &invoice.subscription {
         let sub_id = match subscription {
-            stripe::Expandable::Id(id) => id.to_string(),
-            stripe::Expandable::Object(sub) => sub.id.to_string(),
+            stripe_rust::Expandable::Id(id) => id.to_string(),
+            stripe_rust::Expandable::Object(sub) => sub.id.to_string(),
         };
 
         if let Ok(Some(local_sub)) = state.stripe_service.get_subscription_by_stripe_id(&sub_id).await {
@@ -569,8 +569,8 @@ async fn handle_invoice_payment_failed(
     // Update subscription status to past_due
     if let Some(subscription) = &invoice.subscription {
         let sub_id = match subscription {
-            stripe::Expandable::Id(id) => id.to_string(),
-            stripe::Expandable::Object(sub) => sub.id.to_string(),
+            stripe_rust::Expandable::Id(id) => id.to_string(),
+            stripe_rust::Expandable::Object(sub) => sub.id.to_string(),
         };
 
         state
@@ -631,8 +631,8 @@ async fn handle_invoice_uncollectible(
     // Update subscription status
     if let Some(subscription) = &invoice.subscription {
         let sub_id = match subscription {
-            stripe::Expandable::Id(id) => id.to_string(),
-            stripe::Expandable::Object(sub) => sub.id.to_string(),
+            stripe_rust::Expandable::Id(id) => id.to_string(),
+            stripe_rust::Expandable::Object(sub) => sub.id.to_string(),
         };
 
         state

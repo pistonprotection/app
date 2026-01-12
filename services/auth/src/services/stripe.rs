@@ -149,7 +149,7 @@ impl StripeService {
 
         // Set payment behavior
         create_subscription.payment_behavior =
-            Some(stripe::SubscriptionPaymentBehavior::DefaultIncomplete);
+            Some(stripe_rust::SubscriptionPaymentBehavior::DefaultIncomplete);
 
         let subscription = StripeSubscription::create(&self.client, create_subscription)
             .await
@@ -188,7 +188,7 @@ impl StripeService {
         if let Some(price_id) = new_price_id {
             // Get the first subscription item
             if let Some(item) = current.items.data.first() {
-                update.items = Some(vec![stripe::UpdateSubscriptionItems {
+                update.items = Some(vec![stripe_rust::UpdateSubscriptionItems {
                     id: Some(item.id.to_string()),
                     price: Some(price_id.to_string()),
                     ..Default::default()
@@ -198,11 +198,11 @@ impl StripeService {
 
         update.proration_behavior = Some(match proration_behavior {
             ProrationBehavior::CreateProrations => {
-                stripe::SubscriptionProrationBehavior::CreateProrations
+                stripe_rust::SubscriptionProrationBehavior::CreateProrations
             }
-            ProrationBehavior::None => stripe::SubscriptionProrationBehavior::None,
+            ProrationBehavior::None => stripe_rust::SubscriptionProrationBehavior::None,
             ProrationBehavior::AlwaysInvoice => {
-                stripe::SubscriptionProrationBehavior::AlwaysInvoice
+                stripe_rust::SubscriptionProrationBehavior::AlwaysInvoice
             }
         });
 
@@ -232,7 +232,7 @@ impl StripeService {
             StripeSubscription::cancel(
                 &self.client,
                 &subscription_id_parsed,
-                stripe::CancelSubscription::default(),
+                stripe_rust::CancelSubscription::default(),
             )
             .await
             .context("Failed to cancel Stripe subscription")
@@ -331,7 +331,7 @@ impl StripeService {
 
     /// Retrieve a checkout session
     pub async fn get_checkout_session(&self, session_id: &str) -> Result<CheckoutSession> {
-        let session_id = stripe::CheckoutSessionId::from(session_id.to_string());
+        let session_id = stripe_rust::CheckoutSessionId::from(session_id.to_string());
         CheckoutSession::retrieve(&self.client, &session_id, &[])
             .await
             .context("Failed to retrieve checkout session")
@@ -423,10 +423,10 @@ impl StripeService {
         subscription_item_id: &str,
         quantity: i64,
         timestamp: Option<i64>,
-        action: stripe::UsageRecordAction,
+        action: stripe_rust::UsageRecordAction,
     ) -> Result<StripeUsageRecord> {
         let subscription_item_id =
-            stripe::SubscriptionItemId::from(subscription_item_id.to_string());
+            stripe_rust::SubscriptionItemId::from(subscription_item_id.to_string());
 
         let mut create_usage = CreateUsageRecord::new(quantity);
         create_usage.timestamp = timestamp;
@@ -467,7 +467,7 @@ impl StripeService {
                                 &item.id.to_string(),
                                 gb,
                                 Some(Utc::now().timestamp()),
-                                stripe::UsageRecordAction::Increment,
+                                stripe_rust::UsageRecordAction::Increment,
                             )
                             .await?;
 
@@ -520,7 +520,7 @@ impl StripeService {
                                 &item.id.to_string(),
                                 thousands,
                                 Some(Utc::now().timestamp()),
-                                stripe::UsageRecordAction::Increment,
+                                stripe_rust::UsageRecordAction::Increment,
                             )
                             .await?;
 
@@ -591,7 +591,7 @@ impl StripeService {
     /// Sync plans from Stripe
     pub async fn sync_plans_from_stripe(&self) -> Result<()> {
         // Get all products from Stripe
-        let products = Product::list(&self.client, &stripe::ListProducts::default())
+        let products = Product::list(&self.client, &stripe_rust::ListProducts::default())
             .await
             .context("Failed to list Stripe products")?;
 
@@ -601,8 +601,8 @@ impl StripeService {
             }
 
             // Get prices for this product
-            let mut list_prices = stripe::ListPrices::default();
-            list_prices.product = Some(stripe::IdOrCreate::Id(&product.id));
+            let mut list_prices = stripe_rust::ListPrices::default();
+            list_prices.product = Some(stripe_rust::IdOrCreate::Id(&product.id));
 
             let prices = Price::list(&self.client, &list_prices)
                 .await
@@ -618,10 +618,10 @@ impl StripeService {
 
                 if let Some(ref recurring) = price.recurring {
                     match recurring.interval {
-                        stripe::RecurringInterval::Month => {
+                        stripe_rust::RecurringInterval::Month => {
                             monthly_price = Some(price);
                         }
-                        stripe::RecurringInterval::Year => {
+                        stripe_rust::RecurringInterval::Year => {
                             yearly_price = Some(price);
                         }
                         _ => {}
@@ -821,8 +821,8 @@ impl StripeService {
 
         // Get customer ID
         let customer_id = match &stripe_sub.customer {
-            stripe::Expandable::Id(id) => id.to_string(),
-            stripe::Expandable::Object(customer) => customer.id.to_string(),
+            stripe_rust::Expandable::Id(id) => id.to_string(),
+            stripe_rust::Expandable::Object(customer) => customer.id.to_string(),
         };
 
         // Check if we have this subscription
@@ -978,8 +978,8 @@ impl StripeService {
     /// Store a local invoice record from Stripe
     pub async fn sync_invoice_from_stripe(&self, stripe_invoice: &StripeInvoice) -> Result<()> {
         let customer_id = match &stripe_invoice.customer {
-            Some(stripe::Expandable::Id(id)) => id.to_string(),
-            Some(stripe::Expandable::Object(customer)) => customer.id.to_string(),
+            Some(stripe_rust::Expandable::Id(id)) => id.to_string(),
+            Some(stripe_rust::Expandable::Object(customer)) => customer.id.to_string(),
             None => return Ok(()), // No customer, skip
         };
 
@@ -1023,8 +1023,8 @@ impl StripeService {
         };
 
         let payment_intent_id = stripe_invoice.payment_intent.as_ref().map(|pi| match pi {
-            stripe::Expandable::Id(id) => id.to_string(),
-            stripe::Expandable::Object(pi) => pi.id.to_string(),
+            stripe_rust::Expandable::Id(id) => id.to_string(),
+            stripe_rust::Expandable::Object(pi) => pi.id.to_string(),
         });
 
         sqlx::query(
@@ -1178,13 +1178,13 @@ impl StripeService {
             .unwrap_or(BillingPeriod::Monthly);
 
         let customer_id = session.customer.as_ref().map(|c| match c {
-            stripe::Expandable::Id(id) => id.to_string(),
-            stripe::Expandable::Object(customer) => customer.id.to_string(),
+            stripe_rust::Expandable::Id(id) => id.to_string(),
+            stripe_rust::Expandable::Object(customer) => customer.id.to_string(),
         });
 
         let stripe_subscription_id = session.subscription.as_ref().map(|s| match s {
-            stripe::Expandable::Id(id) => id.to_string(),
-            stripe::Expandable::Object(sub) => sub.id.to_string(),
+            stripe_rust::Expandable::Id(id) => id.to_string(),
+            stripe_rust::Expandable::Object(sub) => sub.id.to_string(),
         });
 
         // Get the plan details
