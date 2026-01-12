@@ -10,6 +10,7 @@ import {
   attackEvent,
   backend,
   connectionAttempt,
+  filter,
   ipScore,
   trafficMetric,
 } from "@/server/db/schema";
@@ -494,15 +495,46 @@ export const analyticsRouter = createTRPCRouter({
   lookupIpScore: protectedProcedure
     .input(z.object({ ip: z.string() }))
     .query(async ({ ctx, input }) => {
+      if (!input.ip || input.ip.length < 7) {
+        return {
+          ip: input.ip,
+          score: 50,
+          country: null,
+          asn: null,
+          isProxy: false,
+          isVpn: false,
+          isTor: false,
+          isDatacenter: false,
+        };
+      }
+
       const result = await ctx.db.query.ipScore.findFirst({
         where: eq(ipScore.ip, input.ip),
       });
 
       if (!result) {
-        return null;
+        return {
+          ip: input.ip,
+          score: 50, // Default neutral score
+          country: null,
+          asn: null,
+          isProxy: false,
+          isVpn: false,
+          isTor: false,
+          isDatacenter: false,
+        };
       }
 
-      return result;
+      return {
+        ip: result.ip,
+        score: result.score,
+        country: result.country,
+        asn: result.asn,
+        isProxy: result.isProxy,
+        isVpn: result.isVpn,
+        isTor: result.isTor,
+        isDatacenter: result.isDatacenter,
+      };
     }),
 
   // Lookup multiple IP scores
@@ -634,6 +666,16 @@ export const analyticsRouter = createTRPCRouter({
       .from(backend)
       .where(eq(backend.organizationId, input.organizationId));
 
+    // Get filter stats
+    const filterStats = await ctx.db
+      .select({
+        total: sql<number>`count(*)`,
+        active: sql<number>`count(*) filter (where ${filter.enabled} = true)`,
+        disabled: sql<number>`count(*) filter (where ${filter.enabled} = false)`,
+      })
+      .from(filter)
+      .where(eq(filter.organizationId, input.organizationId));
+
     return {
       traffic: trafficStats[0] ?? {
         totalRequests: 0,
@@ -650,6 +692,11 @@ export const analyticsRouter = createTRPCRouter({
         healthy: 0,
         degraded: 0,
         unhealthy: 0,
+      },
+      filters: filterStats[0] ?? {
+        total: 0,
+        active: 0,
+        disabled: 0,
       },
     };
   }),
@@ -699,4 +746,151 @@ export const analyticsRouter = createTRPCRouter({
         .orderBy(sql`count(*) desc`)
         .limit(20);
     }),
+
+  // Get traffic time series for charts
+  getTrafficTimeSeries: organizationProcedure
+    .input(
+      z.object({
+        hours: z.number().int().min(1).max(168).default(24),
+        interval: z.enum(["minute", "hour", "day"]).default("hour"),
+        backendId: z.string().uuid().optional(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const startDate = new Date(Date.now() - input.hours * 60 * 60 * 1000);
+
+      const conditions = [
+        eq(trafficMetric.organizationId, input.organizationId),
+        gte(trafficMetric.timestamp, startDate),
+      ];
+
+      if (input.backendId) {
+        conditions.push(eq(trafficMetric.backendId, input.backendId));
+      }
+
+      // Group by time interval
+      const intervalTrunc =
+        input.interval === "minute"
+          ? sql`date_trunc('minute', ${trafficMetric.timestamp})`
+          : input.interval === "hour"
+            ? sql`date_trunc('hour', ${trafficMetric.timestamp})`
+            : sql`date_trunc('day', ${trafficMetric.timestamp})`;
+
+      const result = await ctx.db
+        .select({
+          time: intervalTrunc,
+          total: sql<number>`coalesce(sum(${trafficMetric.requestsTotal}), 0)`,
+          allowed: sql<number>`coalesce(sum(${trafficMetric.requestsAllowed}), 0)`,
+          blocked: sql<number>`coalesce(sum(${trafficMetric.requestsBlocked}), 0)`,
+          challenged: sql<number>`coalesce(sum(${trafficMetric.requestsChallenged}), 0)`,
+          bytesIn: sql<number>`coalesce(sum(${trafficMetric.bytesIn}), 0)`,
+          bytesOut: sql<number>`coalesce(sum(${trafficMetric.bytesOut}), 0)`,
+        })
+        .from(trafficMetric)
+        .where(and(...conditions))
+        .groupBy(intervalTrunc)
+        .orderBy(asc(intervalTrunc));
+
+      // Format the time for display
+      return result.map((row) => ({
+        time: new Date(row.time as string).toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }),
+        total: Number(row.total),
+        allowed: Number(row.allowed),
+        blocked: Number(row.blocked),
+        challenged: Number(row.challenged),
+        bytesIn: Number(row.bytesIn),
+        bytesOut: Number(row.bytesOut),
+      }));
+    }),
+
+  // Get recent events for activity feed
+  getRecentEvents: organizationProcedure
+    .input(
+      z.object({
+        limit: z.number().int().min(1).max(100).default(10),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      // Get recent attack events
+      const attacks = await ctx.db.query.attackEvent.findMany({
+        where: eq(attackEvent.organizationId, input.organizationId),
+        orderBy: [desc(attackEvent.startedAt)],
+        limit: input.limit,
+        with: {
+          backend: {
+            columns: { id: true, name: true },
+          },
+        },
+      });
+
+      // Get recent connection attempts (blocked)
+      const blockedConnections = await ctx.db.query.connectionAttempt.findMany({
+        where: and(
+          eq(connectionAttempt.organizationId, input.organizationId),
+          eq(connectionAttempt.result, "blocked"),
+        ),
+        orderBy: [desc(connectionAttempt.timestamp)],
+        limit: input.limit,
+      });
+
+      // Combine and format events
+      const events: Array<{
+        type: string;
+        sourceIp: string;
+        action: string;
+        timestamp: Date;
+        timeAgo: string;
+      }> = [];
+
+      // Add attack events
+      for (const attack of attacks) {
+        events.push({
+          type: attack.attackType,
+          sourceIp: attack.sourceIps?.[0] ?? "Unknown",
+          action: attack.endedAt ? "mitigated" : "ongoing",
+          timestamp: attack.startedAt,
+          timeAgo: formatTimeAgo(attack.startedAt),
+        });
+      }
+
+      // Add blocked connections
+      for (const conn of blockedConnections) {
+        events.push({
+          type: conn.blockReason ?? "Connection blocked",
+          sourceIp: conn.sourceIp,
+          action: "blocked",
+          timestamp: conn.timestamp,
+          timeAgo: formatTimeAgo(conn.timestamp),
+        });
+      }
+
+      // Sort by timestamp and limit
+      return events
+        .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+        .slice(0, input.limit);
+    }),
 });
+
+// Helper function to format time ago
+function formatTimeAgo(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) {
+    return "Just now";
+  }
+  if (diffMins < 60) {
+    return `${diffMins}m ago`;
+  }
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+  return `${diffDays}d ago`;
+}

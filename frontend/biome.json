@@ -14,7 +14,9 @@
       "!.vinxi",
       "!dist",
       "!build",
-      "!coverage"
+      "!coverage",
+      "!.source",
+      "!**/routeTree.gen.ts"
     ]
   },
   "formatter": {
