@@ -541,6 +541,9 @@ jobs:
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo update
 
+      - name: Build Helm dependencies
+        run: helm dependency build charts/pistonprotection
+
       - name: Lint Helm chart
         run: helm lint charts/pistonprotection
 

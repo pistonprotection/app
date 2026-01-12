@@ -1,11 +1,10 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertTriangle,
   CheckCircle2,
-  Cloud,
   Clock,
+  Cloud,
   Database,
   FileWarning,
   Globe,
@@ -18,6 +17,7 @@ import {
   Wifi,
   XCircle,
 } from "lucide-react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -169,10 +169,7 @@ function IpLookupPage() {
                 className="w-full"
               />
             </div>
-            <Button
-              type="submit"
-              disabled={!searchIp || !validateIp(searchIp)}
-            >
+            <Button type="submit" disabled={!searchIp || !validateIp(searchIp)}>
               {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : (
@@ -454,7 +451,7 @@ function IpLookupPage() {
                           </TableCell>
                           <TableCell>
                             {formatBytes(
-                              (attempt.bytesIn ?? 0) + (attempt.bytesOut ?? 0)
+                              (attempt.bytesIn ?? 0) + (attempt.bytesOut ?? 0),
                             )}
                           </TableCell>
                         </TableRow>
