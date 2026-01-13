@@ -81,12 +81,12 @@ FROM rust:${RUST_VERSION}-${DEBIAN_VERSION} AS ebpf-builder
 WORKDIR /app
 
 # Install nightly toolchain with rust-src (required for -Z build-std)
-# Use nightly-2025-01-10 which supports edition2024 (required by aya-ebpf-cty)
-RUN rustup install nightly-2025-01-10 && \
-    rustup default nightly-2025-01-10 && \
+# Use nightly-2026-01-10 which supports edition2024 (required by aya-ebpf-cty)
+RUN rustup install nightly-2026-01-10 && \
+    rustup default nightly-2026-01-10 && \
     rustup component add rust-src
 
-# Install bpf-linker (latest version compatible with nightly-2025-01-10)
+# Install bpf-linker (latest version compatible with nightly-2026-01-10)
 RUN cargo install bpf-linker --locked
 
 # Copy eBPF source
@@ -95,7 +95,7 @@ COPY ebpf ./ebpf
 WORKDIR /app/ebpf
 
 # Build eBPF programs
-RUN cargo +nightly-2025-01-10 build \
+RUN cargo +nightly-2026-01-10 build \
     --target bpfel-unknown-none \
     -Z build-std=core \
     --release

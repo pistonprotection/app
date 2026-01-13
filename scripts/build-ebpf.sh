@@ -30,7 +30,7 @@ EBPF_DIR="$ROOT_DIR/ebpf"
 RELEASE_MODE=false
 INSTALL=false
 INSTALL_DIR="/opt/pistonprotection/ebpf"
-NIGHTLY_TOOLCHAIN="nightly-2025-01-10"
+NIGHTLY_TOOLCHAIN="nightly-2026-01-10"
 
 # Print colored message
 log_info() {

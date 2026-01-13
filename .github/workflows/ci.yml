@@ -349,8 +349,8 @@ jobs:
       - name: Install Rust nightly toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          # Use nightly-2025-01-10 which supports edition2024 (required by aya-ebpf-cty)
-          toolchain: nightly-2025-01-10
+          # Use nightly-2026-01-10 which supports edition2024 (required by aya-ebpf-cty)
+          toolchain: nightly-2026-01-10
           components: rust-src
 
       - name: Install LLVM and Clang
@@ -363,12 +363,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/bpf-linker
-          key: ${{ runner.os }}-bpf-linker-nightly-2025-01-10
+          key: ${{ runner.os }}-bpf-linker-nightly-2026-01-10
 
       - name: Install bpf-linker
         if: steps.cache-bpf-linker.outputs.cache-hit != 'true'
-        # Install latest bpf-linker compatible with nightly-2025-01-10
-        run: cargo +nightly-2025-01-10 install bpf-linker --locked
+        # Install latest bpf-linker compatible with nightly-2026-01-10
+        run: cargo +nightly-2026-01-10 install bpf-linker --locked
 
       - name: Cache cargo (eBPF)
         uses: actions/cache@v4
@@ -383,14 +383,14 @@ jobs:
             ${{ runner.os }}-cargo-ebpf-
 
       - name: Build eBPF programs (debug)
-        run: cargo +nightly-2025-01-10 build --target bpfel-unknown-none -Z build-std=core
+        run: cargo +nightly-2026-01-10 build --target bpfel-unknown-none -Z build-std=core
         working-directory: ebpf
         env:
           # Override RUSTFLAGS for eBPF - eBPF code has intentional unused items
           RUSTFLAGS: ""
 
       - name: Build eBPF programs (release)
-        run: cargo +nightly-2025-01-10 build --target bpfel-unknown-none -Z build-std=core --release
+        run: cargo +nightly-2026-01-10 build --target bpfel-unknown-none -Z build-std=core --release
         working-directory: ebpf
         env:
           RUSTFLAGS: ""
