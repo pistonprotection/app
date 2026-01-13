@@ -260,7 +260,6 @@ impl WorkerState {
 
 #[cfg(test)]
 mod tests {
-    
 
     // Tests would go here
 }

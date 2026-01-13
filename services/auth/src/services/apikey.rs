@@ -321,7 +321,6 @@ impl From<ApiKeyError> for tonic::Status {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_ip_allowed_exact_match() {

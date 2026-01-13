@@ -248,15 +248,16 @@ impl ProtocolAnalyzer for HttpAnalyzer {
 
             // Check user agent
             if let Some(user_agent) = get_header(payload, b"User-Agent")
-                && self.is_user_agent_blocked(user_agent) {
-                    debug!(
-                        src = %meta.src_ip,
-                        user_agent = %String::from_utf8_lossy(user_agent),
-                        "Blocked user agent"
-                    );
-                    stats.packets_dropped += 1;
-                    return Ok(Verdict::Drop);
-                }
+                && self.is_user_agent_blocked(user_agent)
+            {
+                debug!(
+                    src = %meta.src_ip,
+                    user_agent = %String::from_utf8_lossy(user_agent),
+                    "Blocked user agent"
+                );
+                stats.packets_dropped += 1;
+                return Ok(Verdict::Drop);
+            }
 
             // Check for suspicious paths
             let path_str = String::from_utf8_lossy(path);

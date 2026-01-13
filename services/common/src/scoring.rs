@@ -351,10 +351,11 @@ impl IPRecord {
     /// Check if block has expired
     pub fn check_block_expiry(&mut self) -> bool {
         if let Some(expires) = self.block_expires
-            && Utc::now() > expires {
-                self.unblock();
-                return true;
-            }
+            && Utc::now() > expires
+        {
+            self.unblock();
+            return true;
+        }
         false
     }
 }
@@ -493,12 +494,13 @@ impl ScoringEngine {
     /// Unblock an IP manually
     pub fn unblock_ip(&self, ip: &IpAddr) -> bool {
         if let Some(mut record) = self.records.get_mut(ip)
-            && record.is_blocked {
-                record.unblock();
-                self.blocked_ips.fetch_sub(1, Ordering::Relaxed);
-                info!(ip = %ip, "IP manually unblocked");
-                return true;
-            }
+            && record.is_blocked
+        {
+            record.unblock();
+            self.blocked_ips.fetch_sub(1, Ordering::Relaxed);
+            info!(ip = %ip, "IP manually unblocked");
+            return true;
+        }
         false
     }
 

@@ -266,10 +266,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     runtime.shutdown();
 
     // Shutdown control plane client
-    if !is_standalone
-        && let Err(e) = runtime.control_plane.shutdown().await {
-            warn!("Error during control plane shutdown: {}", e);
-        }
+    if !is_standalone && let Err(e) = runtime.control_plane.shutdown().await {
+        warn!("Error during control plane shutdown: {}", e);
+    }
 
     // Wait for tasks to complete (with timeout)
     let shutdown_timeout = tokio::time::Duration::from_secs(10);

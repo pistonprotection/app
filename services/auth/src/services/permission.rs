@@ -304,7 +304,8 @@ mod tests {
                 >= OrganizationRole::Admin.permission_level()
         );
         assert!(
-            (OrganizationRole::Member.permission_level() < OrganizationRole::Admin.permission_level())
+            (OrganizationRole::Member.permission_level()
+                < OrganizationRole::Admin.permission_level())
         );
     }
 }

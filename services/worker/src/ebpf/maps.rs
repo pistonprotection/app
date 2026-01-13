@@ -128,9 +128,10 @@ impl MapManager {
         if let Some(entry) = self.blocked_ips.get(ip) {
             // Check expiration
             if let Some(expires_at) = entry.expires_at
-                && chrono::Utc::now() > expires_at {
-                    return false;
-                }
+                && chrono::Utc::now() > expires_at
+            {
+                return false;
+            }
             true
         } else {
             false

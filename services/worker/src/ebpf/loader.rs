@@ -246,7 +246,10 @@ mod tests {
     #[test]
     fn test_xdp_mode_flags() {
         // XdpFlags doesn't implement PartialEq, so compare the underlying bits
-        assert_eq!(XdpMode::Generic.to_flags().bits(), XdpFlags::SKB_MODE.bits());
+        assert_eq!(
+            XdpMode::Generic.to_flags().bits(),
+            XdpFlags::SKB_MODE.bits()
+        );
         assert_eq!(XdpMode::Driver.to_flags().bits(), XdpFlags::DRV_MODE.bits());
         assert_eq!(XdpMode::Offload.to_flags().bits(), XdpFlags::HW_MODE.bits());
     }

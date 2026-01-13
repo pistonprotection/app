@@ -184,13 +184,15 @@ impl ConfigSyncManager {
 
         // Check version
         if let Some(current) = self.current_version.read().as_ref()
-            && config.version <= current.version && !config.config_id.is_empty() {
-                debug!(
-                    "Configuration version {} <= current {}, skipping",
-                    config.version, current.version
-                );
-                return Ok(());
-            }
+            && config.version <= current.version
+            && !config.config_id.is_empty()
+        {
+            debug!(
+                "Configuration version {} <= current {}, skipping",
+                config.version, current.version
+            );
+            return Ok(());
+        }
 
         // Get loader and map manager
         let loader = self.loader.write();
@@ -317,13 +319,14 @@ impl ConfigSyncManager {
             // Handle source IP blocking
             for ip_network in &filter_match.source_ip_blacklist {
                 if let Some(ref addr) = ip_network.address
-                    && let Ok(ip) = std::net::IpAddr::try_from(addr) {
-                        map_manager.block_ip(
-                            ip,
-                            &format!("rule:{}", rule.id),
-                            None, // Permanent block from rule
-                        )?;
-                    }
+                    && let Ok(ip) = std::net::IpAddr::try_from(addr)
+                {
+                    map_manager.block_ip(
+                        ip,
+                        &format!("rule:{}", rule.id),
+                        None, // Permanent block from rule
+                    )?;
+                }
             }
 
             // Handle country-based blocking (would need GeoIP lookup)
@@ -544,12 +547,13 @@ impl ConfigSyncManager {
             }
 
             if let Some(ref protection) = backend.protection
-                && protection.level > 5 {
-                    warnings.push(format!(
-                        "Backend {} has protection level > 5",
-                        backend.backend_id
-                    ));
-                }
+                && protection.level > 5
+            {
+                warnings.push(format!(
+                    "Backend {} has protection level > 5",
+                    backend.backend_id
+                ));
+            }
         }
 
         Ok(warnings)

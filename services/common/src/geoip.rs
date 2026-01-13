@@ -79,34 +79,36 @@ impl GeoIpService {
 
         // City/Country lookup
         if let Some(ref reader) = self.city_reader
-            && let Ok(city) = reader.lookup::<geoip2::City>(ip) {
-                if let Some(country) = city.country {
-                    info.country_code = country.iso_code.map(|s| s.to_string());
-                    info.country_name = country
-                        .names
-                        .and_then(|n| n.get("en").map(|s| s.to_string()));
-                }
-
-                if let Some(continent) = city.continent {
-                    info.continent_code = continent.code.map(|s| s.to_string());
-                }
-
-                if let Some(c) = city.city {
-                    info.city = c.names.and_then(|n| n.get("en").map(|s| s.to_string()));
-                }
-
-                if let Some(location) = city.location {
-                    info.latitude = location.latitude;
-                    info.longitude = location.longitude;
-                }
+            && let Ok(city) = reader.lookup::<geoip2::City>(ip)
+        {
+            if let Some(country) = city.country {
+                info.country_code = country.iso_code.map(|s| s.to_string());
+                info.country_name = country
+                    .names
+                    .and_then(|n| n.get("en").map(|s| s.to_string()));
             }
+
+            if let Some(continent) = city.continent {
+                info.continent_code = continent.code.map(|s| s.to_string());
+            }
+
+            if let Some(c) = city.city {
+                info.city = c.names.and_then(|n| n.get("en").map(|s| s.to_string()));
+            }
+
+            if let Some(location) = city.location {
+                info.latitude = location.latitude;
+                info.longitude = location.longitude;
+            }
+        }
 
         // ASN lookup
         if let Some(ref reader) = self.asn_reader
-            && let Ok(asn) = reader.lookup::<geoip2::Asn>(ip) {
-                info.asn = asn.autonomous_system_number;
-                info.as_org = asn.autonomous_system_organization.map(|s| s.to_string());
-            }
+            && let Ok(asn) = reader.lookup::<geoip2::Asn>(ip)
+        {
+            info.asn = asn.autonomous_system_number;
+            info.as_org = asn.autonomous_system_organization.map(|s| s.to_string());
+        }
 
         info
     }
