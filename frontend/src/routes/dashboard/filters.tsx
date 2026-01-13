@@ -9,6 +9,7 @@ import {
   MoreVertical,
   Pencil,
   Plus,
+  Power,
   Server,
   Shield,
   Trash2,
@@ -26,6 +27,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -96,6 +98,8 @@ function FiltersPage() {
   const [editingFilter, setEditingFilter] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"all" | FilterType>("all");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
 
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -178,6 +182,59 @@ function FiltersPage() {
       },
     }),
   );
+
+  // Bulk toggle mutation
+  const bulkToggleMutation = useMutation(
+    trpc.filters.bulkToggle.mutationOptions({
+      onSuccess: (data) => {
+        toast.success(
+          `${data.count} filters ${data.enabled ? "enabled" : "disabled"}`,
+        );
+        setSelectedIds(new Set());
+        queryClient.invalidateQueries({ queryKey: ["filters"] });
+      },
+      onError: (error) => {
+        toast.error(`Failed to bulk toggle: ${error.message}`);
+      },
+    }),
+  );
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation(
+    trpc.filters.bulkDelete.mutationOptions({
+      onSuccess: (data) => {
+        toast.success(`${data.count} filters deleted`);
+        setSelectedIds(new Set());
+        setBulkDeleteConfirm(false);
+        queryClient.invalidateQueries({ queryKey: ["filters"] });
+      },
+      onError: (error) => {
+        toast.error(`Failed to bulk delete: ${error.message}`);
+      },
+    }),
+  );
+
+  // Selection helpers
+  const toggleSelection = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    const filters = filtersData?.items ?? [];
+    if (selectedIds.size === filters.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filters.map((f) => f.id)));
+    }
+  };
 
   // Form for creating filters
   const form = useForm({
@@ -541,10 +598,58 @@ function FiltersPage() {
       {/* Filters Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Filter Rules</CardTitle>
-          <CardDescription>
-            Manage your protection filter rules by protocol type.
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Filter Rules</CardTitle>
+              <CardDescription>
+                Manage your protection filter rules by protocol type.
+              </CardDescription>
+            </div>
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  {selectedIds.size} selected
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    bulkToggleMutation.mutate({
+                      ids: Array.from(selectedIds),
+                      enabled: true,
+                    })
+                  }
+                  disabled={bulkToggleMutation.isPending}
+                >
+                  <Power className="mr-1 h-3 w-3" />
+                  Enable All
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    bulkToggleMutation.mutate({
+                      ids: Array.from(selectedIds),
+                      enabled: false,
+                    })
+                  }
+                  disabled={bulkToggleMutation.isPending}
+                >
+                  <Power className="mr-1 h-3 w-3" />
+                  Disable All
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteConfirm(true)}
+                  disabled={bulkDeleteMutation.isPending}
+                >
+                  <Trash2 className="mr-1 h-3 w-3" />
+                  Delete Selected
+                </Button>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <Tabs
@@ -580,6 +685,16 @@ function FiltersPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-[40px]">
+                        <Checkbox
+                          checked={
+                            filters.length > 0 &&
+                            selectedIds.size === filters.length
+                          }
+                          onCheckedChange={selectAll}
+                          aria-label="Select all filters"
+                        />
+                      </TableHead>
                       <TableHead className="w-[50px]">Active</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Type</TableHead>
@@ -593,6 +708,13 @@ function FiltersPage() {
                   <TableBody>
                     {filters.map((filter) => (
                       <TableRow key={filter.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(filter.id)}
+                            onCheckedChange={() => toggleSelection(filter.id)}
+                            aria-label={`Select ${filter.name}`}
+                          />
+                        </TableCell>
                         <TableCell>
                           <Switch
                             checked={filter.enabled}
@@ -902,6 +1024,41 @@ function FiltersPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={bulkDeleteConfirm} onOpenChange={setBulkDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {selectedIds.size} Filters</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {selectedIds.size} filter
+              {selectedIds.size > 1 ? "s" : ""}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setBulkDeleteConfirm(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() =>
+                bulkDeleteMutation.mutate({
+                  ids: Array.from(selectedIds),
+                })
+              }
+              disabled={bulkDeleteMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Delete {selectedIds.size} Filter{selectedIds.size > 1 ? "s" : ""}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
