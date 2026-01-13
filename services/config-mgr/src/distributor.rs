@@ -7,6 +7,7 @@ use pistonprotection_common::{error::Result, redis::CacheService};
 use pistonprotection_proto::worker::FilterConfig;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::broadcast;
 use tokio::time::{Duration, interval};
 use tracing::{debug, info, warn};
 
@@ -20,22 +21,43 @@ pub struct RegisteredWorker {
     pub config_version: u32,
 }
 
+/// Configuration update notification
+#[derive(Debug, Clone)]
+pub struct ConfigUpdate {
+    pub version: u32,
+    pub backend_id: Option<String>,
+}
+
 /// Configuration distributor
 pub struct ConfigDistributor {
     store: Arc<ConfigStore>,
     cache: Option<CacheService>,
     workers: RwLock<HashMap<String, RegisteredWorker>>,
+    /// Broadcast channel for config updates
+    config_tx: broadcast::Sender<ConfigUpdate>,
 }
 
 impl ConfigDistributor {
     pub fn new(store: Arc<ConfigStore>, redis: Option<RedisPool>) -> Self {
         let cache = redis.map(|pool| CacheService::new(pool, "piston:workers"));
+        let (config_tx, _) = broadcast::channel(16);
 
         Self {
             store,
             cache,
             workers: RwLock::new(HashMap::new()),
+            config_tx,
         }
+    }
+
+    /// Subscribe to configuration updates
+    pub fn subscribe(&self) -> broadcast::Receiver<ConfigUpdate> {
+        self.config_tx.subscribe()
+    }
+
+    /// Notify all subscribers of a config update
+    pub fn notify_update(&self, version: u32, backend_id: Option<String>) {
+        let _ = self.config_tx.send(ConfigUpdate { version, backend_id });
     }
 
     /// Register a worker

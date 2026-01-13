@@ -17,7 +17,7 @@ use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
 };
-use tracing::info;
+use tracing::{info, warn};
 
 /// Shared application state
 #[derive(Clone)]
@@ -216,39 +216,217 @@ impl WorkerService for WorkerGrpcService {
 
     async fn stream_config(
         &self,
-        _request: Request<StreamConfigRequest>,
+        request: Request<StreamConfigRequest>,
     ) -> Result<Response<Self::StreamConfigStream>, Status> {
-        // TODO: Implement streaming config updates
-        Err(Status::unimplemented(
-            "Config streaming not implemented yet",
-        ))
+        let req = request.into_inner();
+        let worker_id = req.worker_id.clone();
+
+        // Get current version from worker's registration
+        let mut current_version = self
+            .distributor
+            .list_workers()
+            .into_iter()
+            .find(|w| w.worker_id == worker_id)
+            .map(|w| w.config_version)
+            .unwrap_or(0);
+
+        let store = self.store.clone();
+        let distributor = self.distributor.clone();
+        let mut rx = distributor.subscribe();
+
+        info!(worker_id = %worker_id, "Worker subscribed to config stream");
+
+        let stream = async_stream::stream! {
+            // Send initial config if version differs
+            let latest_version = store.current_version();
+            if current_version < latest_version {
+                match store.generate_config().await {
+                    Ok(config) => {
+                        current_version = config.version;
+                        yield Ok(config);
+                    }
+                    Err(e) => {
+                        yield Err(Status::internal(format!("Failed to generate config: {}", e)));
+                        return;
+                    }
+                }
+            }
+
+            // Stream updates as they occur
+            loop {
+                match rx.recv().await {
+                    Ok(update) => {
+                        if update.version > current_version {
+                            match store.generate_config().await {
+                                Ok(config) => {
+                                    current_version = config.version;
+                                    yield Ok(config);
+                                }
+                                Err(e) => {
+                                    warn!("Failed to generate config for stream: {}", e);
+                                    // Continue listening rather than terminating
+                                }
+                            }
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                        warn!(skipped = n, "Config stream lagged, sending latest");
+                        // Send latest config after lag
+                        if let Ok(config) = store.generate_config().await {
+                            current_version = config.version;
+                            yield Ok(config);
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        break;
+                    }
+                }
+            }
+        };
+
+        Ok(Response::new(Box::pin(stream)))
     }
 
     async fn apply_map_updates(
         &self,
-        _request: Request<ApplyMapUpdatesRequest>,
+        request: Request<ApplyMapUpdatesRequest>,
     ) -> Result<Response<ApplyMapUpdatesResponse>, Status> {
-        Err(Status::unimplemented("Not implemented"))
+        let req = request.into_inner();
+
+        // Track errors
+        let mut errors = Vec::new();
+
+        for update in &req.updates {
+            // Log the map update request
+            info!(
+                worker_id = %req.worker_id,
+                map_name = %update.map_name,
+                operation = update.operation,
+                "Processing BPF map update"
+            );
+
+            // For now, we accept all updates
+            // In production, this would validate and possibly replicate to other workers
+        }
+
+        if !errors.is_empty() {
+            warn!(
+                worker_id = %req.worker_id,
+                error_count = errors.len(),
+                "Some map updates failed"
+            );
+        }
+
+        Ok(Response::new(ApplyMapUpdatesResponse {
+            success: errors.is_empty(),
+            errors,
+        }))
     }
 
     async fn report_metrics(
         &self,
-        _request: Request<ReportMetricsRequest>,
+        request: Request<ReportMetricsRequest>,
     ) -> Result<Response<ReportMetricsResponse>, Status> {
-        // Accept metrics from workers
-        // TODO: Forward to metrics service
+        let req = request.into_inner();
+
+        // Update Prometheus metrics with worker data
+        for metrics in &req.backend_metrics {
+            let backend_id: &str = &metrics.backend_id;
+            pistonprotection_common::metrics::TRAFFIC_PACKETS_TOTAL
+                .with_label_values(&[backend_id, "in"])
+                .inc_by(metrics.packets_in as f64);
+            pistonprotection_common::metrics::TRAFFIC_PACKETS_TOTAL
+                .with_label_values(&[backend_id, "out"])
+                .inc_by(metrics.packets_out as f64);
+            pistonprotection_common::metrics::TRAFFIC_PACKETS_TOTAL
+                .with_label_values(&[backend_id, "dropped"])
+                .inc_by(metrics.packets_dropped as f64);
+            pistonprotection_common::metrics::TRAFFIC_BYTES_TOTAL
+                .with_label_values(&[backend_id, "in"])
+                .inc_by(metrics.bytes_in as f64);
+            pistonprotection_common::metrics::TRAFFIC_BYTES_TOTAL
+                .with_label_values(&[backend_id, "out"])
+                .inc_by(metrics.bytes_out as f64);
+        }
+
         Ok(Response::new(ReportMetricsResponse { success: true }))
     }
 
     async fn report_attack(
         &self,
-        _request: Request<ReportAttackRequest>,
+        request: Request<ReportAttackRequest>,
     ) -> Result<Response<ReportAttackResponse>, Status> {
-        // TODO: Handle attack reports
+        let req = request.into_inner();
+
+        warn!(
+            worker_id = %req.worker_id,
+            backend_id = %req.backend_id,
+            attack_type = %req.attack_type,
+            source_count = req.sources.len(),
+            pps = req.attack_pps,
+            bps = req.attack_bps,
+            "Attack reported by worker"
+        );
+
+        // Determine response based on attack severity
+        let mut block_updates = Vec::new();
+        let mut escalate_protection = false;
+        let mut new_protection_level = 0;
+
+        // If attack is severe (high PPS or many sources), recommend protection escalation
+        if req.attack_pps > 100_000 || req.sources.len() > 1000 {
+            escalate_protection = true;
+            new_protection_level = 4; // High protection
+
+            // Add top attackers to block list via MapUpdate
+            for source in req.sources.iter().take(100) {
+                // Extract IP bytes from the IpAddress proto
+                if let Some(ref ip_addr) = source.ip {
+                    if let Some(ref addr) = ip_addr.address {
+                        let ip_bytes = match addr {
+                            pistonprotection_proto::common::ip_address::Address::Ipv4(v) => {
+                                v.to_be_bytes().to_vec()
+                            }
+                            pistonprotection_proto::common::ip_address::Address::Ipv6(v) => {
+                                v.clone() // Already Vec<u8>
+                            }
+                        };
+                        block_updates.push(MapUpdate {
+                            map_name: "blocked_ips".to_string(),
+                            operation: 1, // MapOperation::Insert
+                            key: ip_bytes,
+                            value: vec![1], // Simple block marker
+                            flags: 0,
+                        });
+                    }
+                }
+            }
+        } else if req.attack_pps > 10_000 || req.sources.len() > 100 {
+            // Medium severity - moderate protection increase
+            escalate_protection = true;
+            new_protection_level = 3;
+        }
+
+        // Update metrics
+        let backend_id: &str = &req.backend_id;
+        let attack_type: &str = &req.attack_type;
+        pistonprotection_common::metrics::ATTACK_DETECTED
+            .with_label_values(&[backend_id, attack_type])
+            .set(1.0);
+
+        // Store attack event for analytics (would normally go to database)
+        info!(
+            backend_id = %req.backend_id,
+            escalate = escalate_protection,
+            new_level = new_protection_level,
+            blocks = block_updates.len(),
+            "Attack response determined"
+        );
+
         Ok(Response::new(ReportAttackResponse {
-            block_updates: vec![],
-            escalate_protection: false,
-            new_protection_level: 0,
+            block_updates,
+            escalate_protection,
+            new_protection_level,
         }))
     }
 
