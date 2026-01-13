@@ -185,11 +185,16 @@ export function OrganizationSwitcher({ collapsed }: OrganizationSwitcherProps) {
           </DropdownMenuItem>
           {activeOrganization && (
             <DropdownMenuItem
-              render={<a href="/dashboard/settings" />}
-            >
-              <Settings className="mr-2 h-4 w-4" />
-              Organization Settings
-            </DropdownMenuItem>
+              render={
+                <a
+                  href="/dashboard/settings"
+                  aria-label="Organization Settings"
+                >
+                  <Settings className="mr-2 h-4 w-4" />
+                  Organization Settings
+                </a>
+              }
+            />
           )}
         </DropdownMenuContent>
       </DropdownMenu>

@@ -9,10 +9,7 @@ import {
 
 export const mdxComponents: MDXComponents = {
   h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h1
-      className="scroll-m-20 text-4xl font-bold tracking-tight"
-      {...props}
-    />
+    <h1 className="scroll-m-20 text-4xl font-bold tracking-tight" {...props} />
   ),
   h2: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
     <h2
@@ -113,7 +110,7 @@ export const mdxComponents: MDXComponents = {
     <hr className="my-8 border-border" {...props} />
   ),
   img: (props: React.ImgHTMLAttributes<HTMLImageElement>) => (
-    <img className="rounded-lg border my-6" {...props} />
+    <img className="rounded-lg border my-6" alt="" {...props} />
   ),
   // Custom components for documentation
   Cards: ({ children }: { children: React.ReactNode }) => (
@@ -156,9 +153,7 @@ export const mdxComponents: MDXComponents = {
     };
 
     return (
-      <div
-        className={`my-6 rounded-lg border-l-4 p-4 ${styles[type]}`}
-      >
+      <div className={`my-6 rounded-lg border-l-4 p-4 ${styles[type]}`}>
         {title && <div className="font-semibold mb-2">{title}</div>}
         <div className="text-sm">{children}</div>
       </div>
@@ -197,6 +192,7 @@ export const mdxComponents: MDXComponents = {
     children: React.ReactNode;
   }) => (
     <button
+      type="button"
       className="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-primary/50 data-[state=active]:border-primary transition-colors"
       data-value={value}
     >

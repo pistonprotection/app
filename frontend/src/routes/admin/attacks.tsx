@@ -406,7 +406,10 @@ function AdminAttacksPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value ?? "all")}>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => setStatusFilter(value ?? "all")}
+            >
               <SelectTrigger className="w-[140px]">
                 <SelectValue />
               </SelectTrigger>
@@ -417,7 +420,10 @@ function AdminAttacksPage() {
                 <SelectItem value="blocked">Blocked</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={severityFilter} onValueChange={(value) => setSeverityFilter(value ?? "all")}>
+            <Select
+              value={severityFilter}
+              onValueChange={(value) => setSeverityFilter(value ?? "all")}
+            >
               <SelectTrigger className="w-[140px]">
                 <SelectValue />
               </SelectTrigger>
@@ -429,7 +435,10 @@ function AdminAttacksPage() {
                 <SelectItem value="low">Low</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={layerFilter} onValueChange={(value) => setLayerFilter(value ?? "all")}>
+            <Select
+              value={layerFilter}
+              onValueChange={(value) => setLayerFilter(value ?? "all")}
+            >
               <SelectTrigger className="w-[120px]">
                 <SelectValue />
               </SelectTrigger>

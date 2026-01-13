@@ -6,8 +6,13 @@ declare module "@fontsource-variable/inter" {
 
 declare module "@tanstack/react-start/api" {
   export function createAPIFileRoute<TPath extends string>(
-    path: TPath
-  ): <TRoutes extends Record<string, (ctx: { request: Request }) => Promise<Response>>>(
-    routes: TRoutes
+    path: TPath,
+  ): <
+    TRoutes extends Record<
+      string,
+      (ctx: { request: Request }) => Promise<Response>
+    >,
+  >(
+    routes: TRoutes,
   ) => { APIRoute: TRoutes };
 }

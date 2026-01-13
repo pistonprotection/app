@@ -1,8 +1,8 @@
-import { createFileRoute, notFound, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { DocsLayout } from "@/components/docs/docs-layout";
 import { getMDXComponents } from "@/components/docs/mdx-components";
-import { source, getAllPages, getPageBySlug, getPageTree } from "@/lib/source";
+import { getAllPages, getPageBySlug, getPageTree, source } from "@/lib/source";
 
 // Type definitions for page tree nodes
 interface PageTreeNode {
@@ -59,7 +59,9 @@ function serializeTree(tree: unknown): PageTreeRoot {
         name: String(n.name || ""),
         url: n.url ? String(n.url) : undefined,
         children: Array.isArray(n.children)
-          ? n.children.map(serializeNode).filter((c): c is PageTreeNode => c !== null)
+          ? n.children
+              .map(serializeNode)
+              .filter((c): c is PageTreeNode => c !== null)
           : [],
       };
     }
@@ -73,7 +75,9 @@ function serializeTree(tree: unknown): PageTreeRoot {
 
   return {
     children: Array.isArray(treeObj.children)
-      ? treeObj.children.map(serializeNode).filter((c): c is PageTreeNode => c !== null)
+      ? treeObj.children
+          .map(serializeNode)
+          .filter((c): c is PageTreeNode => c !== null)
       : [],
   };
 }
@@ -95,7 +99,8 @@ const getDocsPage = createServerFn({ method: "GET" }).handler(
     const pages = getAllPages();
     const currentIndex = pages.findIndex((p) => p.url === page.url);
     const prevPage = currentIndex > 0 ? pages[currentIndex - 1] : null;
-    const nextPage = currentIndex < pages.length - 1 ? pages[currentIndex + 1] : null;
+    const nextPage =
+      currentIndex < pages.length - 1 ? pages[currentIndex + 1] : null;
 
     // Create a list of all pages for search
     const allPagesData = pages.map((p) => ({
@@ -109,13 +114,21 @@ const getDocsPage = createServerFn({ method: "GET" }).handler(
       url: page.url,
       title: page.data.title,
       description: page.data.description || null,
-      toc: (page.data.toc || []) as Array<{ title: string; url: string; depth: number }>,
+      toc: (page.data.toc || []) as Array<{
+        title: string;
+        url: string;
+        depth: number;
+      }>,
       tree: serializedTree,
-      prevPage: prevPage ? { url: prevPage.url, title: prevPage.data.title } : null,
-      nextPage: nextPage ? { url: nextPage.url, title: nextPage.data.title } : null,
+      prevPage: prevPage
+        ? { url: prevPage.url, title: prevPage.data.title }
+        : null,
+      nextPage: nextPage
+        ? { url: nextPage.url, title: nextPage.data.title }
+        : null,
       allPages: allPagesData,
     };
-  }
+  },
 );
 
 export const Route = createFileRoute("/docs/$")({
@@ -157,7 +170,11 @@ function DocsPageComponent() {
       >
         <p>This documentation page could not be found.</p>
         <p className="mt-4">
-          <Link to="/docs/$" params={{ _splat: "" }} className="text-primary underline">
+          <Link
+            to="/docs/$"
+            params={{ _splat: "" }}
+            className="text-primary underline"
+          >
             Go to documentation home
           </Link>
         </p>

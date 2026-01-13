@@ -291,7 +291,10 @@ function BackendsPage() {
       editForm.setFieldValue("name", backendToEdit.name);
       editForm.setFieldValue("description", backendToEdit.description ?? "");
       editForm.setFieldValue("enabled", backendToEdit.enabled);
-      editForm.setFieldValue("protectionLevel", backendToEdit.protectionLevel ?? 50);
+      editForm.setFieldValue(
+        "protectionLevel",
+        backendToEdit.protectionLevel ?? 50,
+      );
     }
   }, [backendToEdit?.id]);
 

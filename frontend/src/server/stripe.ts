@@ -209,12 +209,8 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
           .set({
             status: subscription.status,
             cancelAtPeriodEnd: subscription.cancel_at_period_end,
-            periodStart: periodStart
-              ? new Date(periodStart * 1000)
-              : null,
-            periodEnd: periodEnd
-              ? new Date(periodEnd * 1000)
-              : null,
+            periodStart: periodStart ? new Date(periodStart * 1000) : null,
+            periodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
           })
           .where(
             eq(authSchema.subscription.stripeSubscriptionId, subscription.id),
@@ -290,7 +286,8 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
         // Reset usage counters on successful billing cycle
         // In newer Stripe API, subscription is accessed via parent.subscription_details
         const parentSub = invoice.parent?.subscription_details;
-        const subscriptionId = (parentSub?.subscription as string | null) ?? null;
+        const subscriptionId =
+          (parentSub?.subscription as string | null) ?? null;
         if (subscriptionId) {
           const sub = await db.query.subscription.findFirst({
             where: (s, { eq }) => eq(s.stripeSubscriptionId, subscriptionId),
@@ -339,10 +336,12 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
         // Log the event
         // In newer Stripe API, subscription is accessed via parent.subscription_details
         const parentSubFailed = invoice.parent?.subscription_details;
-        const subscriptionIdFailed = (parentSubFailed?.subscription as string | null) ?? null;
+        const subscriptionIdFailed =
+          (parentSubFailed?.subscription as string | null) ?? null;
         if (subscriptionIdFailed) {
           const sub = await db.query.subscription.findFirst({
-            where: (s, { eq }) => eq(s.stripeSubscriptionId, subscriptionIdFailed),
+            where: (s, { eq }) =>
+              eq(s.stripeSubscriptionId, subscriptionIdFailed),
           });
 
           if (sub?.referenceId) {

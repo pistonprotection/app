@@ -729,7 +729,9 @@ function BillingPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => viewInvoice(invoice.hostedInvoiceUrl ?? null)}
+                        onClick={() =>
+                          viewInvoice(invoice.hostedInvoiceUrl ?? null)
+                        }
                       >
                         <ExternalLink className="mr-2 h-4 w-4" />
                         View
@@ -738,7 +740,10 @@ function BillingPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() =>
-                          downloadInvoice(invoice.invoicePdf ?? null, invoice.number ?? null)
+                          downloadInvoice(
+                            invoice.invoicePdf ?? null,
+                            invoice.number ?? null,
+                          )
                         }
                       >
                         <Download className="mr-2 h-4 w-4" />

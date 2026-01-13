@@ -398,7 +398,9 @@ function AnalyticsPage() {
                     outerRadius={80}
                     innerRadius={50}
                     paddingAngle={2}
-                    label={({ percent }: { percent?: number }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
+                    label={({ percent }: { percent?: number }) =>
+                      `${((percent ?? 0) * 100).toFixed(0)}%`
+                    }
                   >
                     {attackTypes.map((_entry, index) => (
                       <Cell

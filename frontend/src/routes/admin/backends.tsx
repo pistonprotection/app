@@ -356,7 +356,10 @@ function AdminBackendsPage() {
                 aria-label="Search backends, organizations, and domains"
               />
             </div>
-            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value ?? "all")}>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => setStatusFilter(value ?? "all")}
+            >
               <SelectTrigger className="w-[150px]">
                 <SelectValue />
               </SelectTrigger>
@@ -367,7 +370,10 @@ function AdminBackendsPage() {
                 <SelectItem value="offline">Offline</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={protocolFilter} onValueChange={(value) => setProtocolFilter(value ?? "all")}>
+            <Select
+              value={protocolFilter}
+              onValueChange={(value) => setProtocolFilter(value ?? "all")}
+            >
               <SelectTrigger className="w-[180px]">
                 <SelectValue />
               </SelectTrigger>

@@ -1,6 +1,13 @@
 import { Link } from "@tanstack/react-router";
-import { Book, ChevronRight, ExternalLink, Menu, Search, X } from "lucide-react";
-import { useState, useMemo } from "react";
+import {
+  Book,
+  ChevronRight,
+  ExternalLink,
+  Menu,
+  Search,
+  X,
+} from "lucide-react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -51,7 +58,7 @@ export function DocsLayout({
     return allPages.filter(
       (page) =>
         page.title.toLowerCase().includes(query) ||
-        page.description?.toLowerCase().includes(query)
+        page.description?.toLowerCase().includes(query),
     );
   }, [searchQuery, allPages]);
 
@@ -140,9 +147,11 @@ export function DocsLayout({
           {/* Mobile Sidebar */}
           {sidebarOpen && (
             <div className="fixed inset-0 z-50 lg:hidden">
-              <div
-                className="fixed inset-0 bg-background/80 backdrop-blur-sm"
+              <button
+                type="button"
+                className="fixed inset-0 bg-background/80 backdrop-blur-sm cursor-default"
                 onClick={() => setSidebarOpen(false)}
+                aria-label="Close sidebar"
               />
               <div className="fixed inset-y-0 left-0 w-72 bg-background border-r p-6 shadow-lg">
                 <div className="flex items-center justify-between mb-6">

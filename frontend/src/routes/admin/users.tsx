@@ -296,7 +296,10 @@ function AdminUsers() {
               />
             </div>
 
-            <Select value={roleFilter} onValueChange={(value) => setRoleFilter(value ?? "all")}>
+            <Select
+              value={roleFilter}
+              onValueChange={(value) => setRoleFilter(value ?? "all")}
+            >
               <SelectTrigger className="w-[150px]">
                 <SelectValue />
               </SelectTrigger>
@@ -307,7 +310,10 @@ function AdminUsers() {
               </SelectContent>
             </Select>
 
-            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value ?? "all")}>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => setStatusFilter(value ?? "all")}
+            >
               <SelectTrigger className="w-[150px]">
                 <SelectValue />
               </SelectTrigger>

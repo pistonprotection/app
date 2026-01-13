@@ -131,7 +131,8 @@ function AdminOverview() {
               {formatNumber(platformStats?.traffic?.requestsLast24h ?? 0)}
             </div>
             <p className="text-xs text-muted-foreground">
-              {formatNumber(platformStats?.traffic?.blockedLast24h ?? 0)} blocked
+              {formatNumber(platformStats?.traffic?.blockedLast24h ?? 0)}{" "}
+              blocked
             </p>
           </CardContent>
         </Card>
@@ -158,9 +159,7 @@ function AdminOverview() {
             <Globe className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatNumber(0)}
-            </div>
+            <div className="text-2xl font-bold">{formatNumber(0)}</div>
           </CardContent>
         </Card>
       </div>
