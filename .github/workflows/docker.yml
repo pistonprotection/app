@@ -23,6 +23,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
 
 permissions:
   contents: read
@@ -43,15 +44,10 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       push: ${{ steps.meta.outputs.push }}
       is_tag: ${{ steps.meta.outputs.is_tag }}
-      image_prefix: ${{ steps.meta.outputs.image_prefix }}
     steps:
       - name: Extract metadata
         id: meta
         run: |
-          # Docker image names must be lowercase
-          IMAGE_PREFIX=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "image_prefix=$IMAGE_PREFIX" >> $GITHUB_OUTPUT
-
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
             echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -198,7 +194,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_prefix }}/${{ matrix.component }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.component }}
           tags: |
             # Tag events - create semver tags
             type=semver,pattern={{version}},enable=${{ needs.prepare.outputs.is_tag == 'true' }}
@@ -217,7 +213,7 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           platforms: ${{ matrix.platform }}
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_prefix }}/${{ matrix.component }},push-by-digest=true,name-canonical=true,push=${{ needs.prepare.outputs.push == 'true' }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.component }},push-by-digest=true,name-canonical=true,push=${{ needs.prepare.outputs.push == 'true' }}
           cache-from: type=gha,scope=${{ matrix.component }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component }}-${{ matrix.arch }}
           build-args: |
@@ -282,7 +278,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_prefix }}/${{ matrix.component }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.component }}
           tags: |
             type=semver,pattern={{version}},enable=${{ needs.prepare.outputs.is_tag == 'true' }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ needs.prepare.outputs.is_tag == 'true' }}
@@ -295,11 +291,11 @@ jobs:
         working-directory: /tmp/digests/${{ matrix.component }}
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_prefix }}/${{ matrix.component }}@sha256:%s ' *)
+            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.component }}@sha256:%s ' *)
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_prefix }}/${{ matrix.component }}:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.component }}:${{ steps.meta.outputs.version }}
 
       - name: Export merged tags
         run: |
@@ -345,7 +341,7 @@ jobs:
       - name: Sign image with cosign
         run: |
           cosign sign --yes \
-            ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_prefix }}/${{ matrix.component }}:${{ needs.prepare.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.component }}:${{ needs.prepare.outputs.version }}
 
   # ===========================================================================
   # Generate SBOM for all images
@@ -377,7 +373,7 @@ jobs:
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_prefix }}/${{ matrix.component }}:${{ needs.prepare.outputs.version }}
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.component }}:${{ needs.prepare.outputs.version }}
           artifact-name: sbom-${{ matrix.component }}.spdx.json
           output-file: sbom-${{ matrix.component }}.spdx.json
         continue-on-error: true
@@ -423,7 +419,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_prefix }}/${{ matrix.component }}:${{ needs.prepare.outputs.version }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.component }}:${{ needs.prepare.outputs.version }}
           severity: 'CRITICAL,HIGH'
           format: 'sarif'
           output: 'trivy-${{ matrix.component }}.sarif'
@@ -477,6 +473,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           for component in gateway worker config-mgr metrics auth operator frontend; do
-            echo "docker pull ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_prefix }}/$component:${{ needs.prepare.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/$component:${{ needs.prepare.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           done
           echo '```' >> $GITHUB_STEP_SUMMARY
