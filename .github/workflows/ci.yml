@@ -382,10 +382,15 @@ jobs:
       - name: Build eBPF programs (debug)
         run: cargo +nightly build --target bpfel-unknown-none -Z build-std=core
         working-directory: ebpf
+        env:
+          # Override RUSTFLAGS for eBPF - eBPF code has intentional unused items
+          RUSTFLAGS: ""
 
       - name: Build eBPF programs (release)
         run: cargo +nightly build --target bpfel-unknown-none -Z build-std=core --release
         working-directory: ebpf
+        env:
+          RUSTFLAGS: ""
 
       - name: Upload eBPF artifacts
         uses: actions/upload-artifact@v4
@@ -424,6 +429,9 @@ jobs:
       - name: Run eBPF packet filter tests
         run: cargo test --all-features
         working-directory: ebpf-tests
+        env:
+          # Override RUSTFLAGS for eBPF tests - test code has intentional unused items
+          RUSTFLAGS: ""
 
   # ===========================================================================
   # Frontend - Lint
