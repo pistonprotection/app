@@ -295,6 +295,9 @@ pub struct HeartbeatRequest {
     pub status: i32,
     #[prost(message, optional, tag = "3")]
     pub metrics: ::core::option::Option<WorkerMetrics>,
+    /// Current config version for checking if update is needed
+    #[prost(uint32, tag = "4")]
+    pub current_config_version: u32,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]

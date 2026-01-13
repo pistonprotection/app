@@ -167,14 +167,19 @@ impl WorkerService for WorkerGrpcService {
     ) -> Result<Response<HeartbeatResponse>, Status> {
         let req = request.into_inner();
 
-        // Update heartbeat
-        self.distributor.update_heartbeat(&req.worker_id, 0); // TODO: track version
+        // Update heartbeat with worker's current version
+        let worker_version = req.current_config_version;
+        self.distributor
+            .update_heartbeat(&req.worker_id, worker_version);
 
-        // Check if config update is needed
+        // Check if config update is needed by comparing versions
         let latest_version = self.store.current_version();
 
+        // Config update is available if worker's version is older than latest
+        let config_update_available = worker_version < latest_version;
+
         Ok(Response::new(HeartbeatResponse {
-            config_update_available: false, // TODO: compare versions
+            config_update_available,
             latest_config_version: latest_version,
         }))
     }

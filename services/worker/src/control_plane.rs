@@ -514,6 +514,9 @@ impl ControlPlaneClient {
                         // Collect metrics
                         let metrics = collect_worker_metrics(&loader, &interfaces);
 
+                        // Get current config version for update check
+                        let current_version = config_version.load(Ordering::SeqCst);
+
                         let heartbeat = HeartbeatRequest {
                             worker_id: wid.clone(),
                             status: WorkerStatus::Ready.into(),
@@ -535,6 +538,7 @@ impl ControlPlaneClient {
                                     })
                                     .collect(),
                             }),
+                            current_config_version: current_version,
                         };
 
                         let mut client_guard = client.lock().await;
