@@ -210,7 +210,7 @@ impl ProxyHeader {
         }
 
         match (self.source, self.destination) {
-            (Some(src), Some(dst)) => {
+            (Some(src), Some(_dst)) => {
                 let ip_len = match src.ip() {
                     IpAddr::V4(_) => 15 + 15, // max IPv4 len * 2
                     IpAddr::V6(_) => 39 + 39, // max IPv6 len * 2
