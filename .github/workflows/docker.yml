@@ -270,6 +270,7 @@ jobs:
             type=semver,pattern={{major}},enable=${{ needs.prepare.outputs.is_tag == 'true' }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,prefix=sha-,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=main-${{ github.sha }},enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,format=long
 
       - name: Create manifest list and push
