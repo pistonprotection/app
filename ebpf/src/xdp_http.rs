@@ -963,11 +963,13 @@ fn parse_content_length(payload: &[u8]) -> Option<u64> {
             }
 
             // Parse digits
+            // Use bit shifts to avoid 128-bit multiply: x*10 = x*8 + x*2 = (x<<3) + (x<<1)
             let mut value: u64 = 0;
             while pos < scan_limit {
                 if let Some(&c) = payload.get(pos) {
                     if c >= b'0' && c <= b'9' {
-                        value = value.saturating_mul(10).saturating_add((c - b'0') as u64);
+                        let digit = (c - b'0') as u64;
+                        value = ((value << 3).saturating_add(value << 1)).saturating_add(digit);
                         pos += 1;
                     } else {
                         break;
@@ -1174,13 +1176,15 @@ fn parse_header_value_u64(payload: &[u8], start: usize, limit: usize) -> Option<
     }
 
     // Parse digits
+    // Use bit shifts to avoid 128-bit multiply: x*10 = x*8 + x*2 = (x<<3) + (x<<1)
     let mut value: u64 = 0;
     let mut found_digit = false;
 
     while pos < limit {
         let c = payload.get(pos)?;
         if *c >= b'0' && *c <= b'9' {
-            value = value.saturating_mul(10).saturating_add((*c - b'0') as u64);
+            let digit = (*c - b'0') as u64;
+            value = ((value << 3).saturating_add(value << 1)).saturating_add(digit);
             found_digit = true;
             pos += 1;
         } else {
