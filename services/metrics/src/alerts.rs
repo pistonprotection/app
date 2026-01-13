@@ -515,10 +515,10 @@ impl AlertManager {
                     continue;
                 }
 
-                if let Some(ref condition) = alert.condition
-                    && let Some(&current_value) = metrics.get(&condition.metric)
-                {
-                    self.evaluate_single_alert(&alert, current_value).await?;
+                if let Some(ref condition) = alert.condition {
+                    if let Some(&current_value) = metrics.get(&condition.metric) {
+                        self.evaluate_single_alert(&alert, current_value).await?;
+                    }
                 }
             }
         }

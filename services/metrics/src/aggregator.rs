@@ -610,10 +610,10 @@ impl MetricsAggregator {
         backend_id: &str,
     ) -> Result<TrafficMetrics, AggregatorError> {
         // Check in-memory cache first
-        if let Some(entry) = self.traffic_metrics.get(backend_id)
-            && !entry.is_stale(self.config.stale_threshold)
-        {
-            return Ok(entry.metrics.clone());
+        if let Some(entry) = self.traffic_metrics.get(backend_id) {
+            if !entry.is_stale(self.config.stale_threshold) {
+                return Ok(entry.metrics.clone());
+            }
         }
 
         // Check Redis cache
@@ -641,10 +641,10 @@ impl MetricsAggregator {
         backend_id: &str,
     ) -> Result<AttackMetrics, AggregatorError> {
         // Check in-memory cache
-        if let Some(entry) = self.attack_metrics.get(backend_id)
-            && !entry.is_stale(self.config.stale_threshold)
-        {
-            return Ok(entry.metrics.clone());
+        if let Some(entry) = self.attack_metrics.get(backend_id) {
+            if !entry.is_stale(self.config.stale_threshold) {
+                return Ok(entry.metrics.clone());
+            }
         }
 
         // Check Redis cache
@@ -675,10 +675,10 @@ impl MetricsAggregator {
         let key = format!("{}:{}", backend_id, origin_id);
 
         // Check in-memory cache
-        if let Some(entry) = self.origin_metrics.get(&key)
-            && !entry.is_stale(self.config.stale_threshold)
-        {
-            return Ok(entry.metrics.clone());
+        if let Some(entry) = self.origin_metrics.get(&key) {
+            if !entry.is_stale(self.config.stale_threshold) {
+                return Ok(entry.metrics.clone());
+            }
         }
 
         // Check Redis cache
@@ -707,10 +707,10 @@ impl MetricsAggregator {
         worker_id: &str,
     ) -> Result<WorkerMetrics, AggregatorError> {
         // Check in-memory cache
-        if let Some(entry) = self.worker_metrics.get(worker_id)
-            && !entry.is_stale(self.config.stale_threshold)
-        {
-            return Ok(entry.metrics.clone());
+        if let Some(entry) = self.worker_metrics.get(worker_id) {
+            if !entry.is_stale(self.config.stale_threshold) {
+                return Ok(entry.metrics.clone());
+            }
         }
 
         // Check Redis cache
@@ -838,13 +838,14 @@ impl MetricsAggregator {
         for entry in self.geo_traffic.iter() {
             let key = entry.key();
             let parts: Vec<&str> = key.split(':').collect();
-            if parts.len() == 2
-                && let Err(e) = self
+            if parts.len() == 2 {
+                if let Err(e) = self
                     .storage
                     .store_geo_traffic(parts[0], parts[1], entry.value())
                     .await
-            {
-                warn!(key = %key, "Failed to flush geo traffic: {}", e);
+                {
+                    warn!(key = %key, "Failed to flush geo traffic: {}", e);
+                }
             }
         }
 

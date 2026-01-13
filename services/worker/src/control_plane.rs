@@ -110,22 +110,22 @@ impl ControlPlaneConfig {
             config.node_name = name;
         }
 
-        if let Ok(timeout_secs) = std::env::var("PISTON_CONNECT_TIMEOUT")
-            && let Ok(secs) = timeout_secs.parse::<u64>()
-        {
-            config.connect_timeout = Duration::from_secs(secs);
+        if let Ok(timeout_secs) = std::env::var("PISTON_CONNECT_TIMEOUT") {
+            if let Ok(secs) = timeout_secs.parse::<u64>() {
+                config.connect_timeout = Duration::from_secs(secs);
+            }
         }
 
-        if let Ok(interval_secs) = std::env::var("PISTON_HEARTBEAT_INTERVAL")
-            && let Ok(secs) = interval_secs.parse::<u64>()
-        {
-            config.heartbeat_interval = Duration::from_secs(secs);
+        if let Ok(interval_secs) = std::env::var("PISTON_HEARTBEAT_INTERVAL") {
+            if let Ok(secs) = interval_secs.parse::<u64>() {
+                config.heartbeat_interval = Duration::from_secs(secs);
+            }
         }
 
-        if let Ok(interval_secs) = std::env::var("PISTON_METRICS_INTERVAL")
-            && let Ok(secs) = interval_secs.parse::<u64>()
-        {
-            config.metrics_interval = Duration::from_secs(secs);
+        if let Ok(interval_secs) = std::env::var("PISTON_METRICS_INTERVAL") {
+            if let Ok(secs) = interval_secs.parse::<u64>() {
+                config.metrics_interval = Duration::from_secs(secs);
+            }
         }
 
         // Parse labels from PISTON_WORKER_LABELS (format: key1=value1,key2=value2)

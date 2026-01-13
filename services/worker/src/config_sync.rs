@@ -183,15 +183,14 @@ impl ConfigSyncManager {
         );
 
         // Check version
-        if let Some(current) = self.current_version.read().as_ref()
-            && config.version <= current.version
-            && !config.config_id.is_empty()
-        {
-            debug!(
-                "Configuration version {} <= current {}, skipping",
-                config.version, current.version
-            );
-            return Ok(());
+        if let Some(current) = self.current_version.read().as_ref() {
+            if config.version <= current.version && !config.config_id.is_empty() {
+                debug!(
+                    "Configuration version {} <= current {}, skipping",
+                    config.version, current.version
+                );
+                return Ok(());
+            }
         }
 
         // Get loader and map manager
@@ -318,14 +317,14 @@ impl ConfigSyncManager {
         if let Some(ref filter_match) = rule.r#match {
             // Handle source IP blocking
             for ip_network in &filter_match.source_ip_blacklist {
-                if let Some(ref addr) = ip_network.address
-                    && let Ok(ip) = std::net::IpAddr::try_from(addr)
-                {
-                    map_manager.block_ip(
-                        ip,
-                        &format!("rule:{}", rule.id),
-                        None, // Permanent block from rule
-                    )?;
+                if let Some(ref addr) = ip_network.address {
+                    if let Ok(ip) = std::net::IpAddr::try_from(addr) {
+                        map_manager.block_ip(
+                            ip,
+                            &format!("rule:{}", rule.id),
+                            None, // Permanent block from rule
+                        )?;
+                    }
                 }
             }
 
@@ -546,13 +545,13 @@ impl ConfigSyncManager {
                 warnings.push("Backend with empty ID found".to_string());
             }
 
-            if let Some(ref protection) = backend.protection
-                && protection.level > 5
-            {
-                warnings.push(format!(
-                    "Backend {} has protection level > 5",
-                    backend.backend_id
-                ));
+            if let Some(ref protection) = backend.protection {
+                if protection.level > 5 {
+                    warnings.push(format!(
+                        "Backend {} has protection level > 5",
+                        backend.backend_id
+                    ));
+                }
             }
         }
 

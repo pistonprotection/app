@@ -118,23 +118,27 @@ impl UserService {
             .ok_or(UserError::NotFound)?;
 
         // Check email uniqueness if changing
-        if let Some(ref email) = request.email
-            && email != &existing.email
-            && let Some(_) = db::get_user_by_email(&self.db, email)
-                .await
-                .map_err(|e| UserError::DatabaseError(e.to_string()))?
-        {
-            return Err(UserError::EmailExists);
+        if let Some(ref email) = request.email {
+            if email != &existing.email {
+                if let Some(_) = db::get_user_by_email(&self.db, email)
+                    .await
+                    .map_err(|e| UserError::DatabaseError(e.to_string()))?
+                {
+                    return Err(UserError::EmailExists);
+                }
+            }
         }
 
         // Check username uniqueness if changing
-        if let Some(ref username) = request.username
-            && username != &existing.username
-            && let Some(_) = db::get_user_by_username(&self.db, username)
-                .await
-                .map_err(|e| UserError::DatabaseError(e.to_string()))?
-        {
-            return Err(UserError::UsernameExists);
+        if let Some(ref username) = request.username {
+            if username != &existing.username {
+                if let Some(_) = db::get_user_by_username(&self.db, username)
+                    .await
+                    .map_err(|e| UserError::DatabaseError(e.to_string()))?
+                {
+                    return Err(UserError::UsernameExists);
+                }
+            }
         }
 
         // Update user

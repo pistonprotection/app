@@ -381,24 +381,24 @@ impl WorkerService for WorkerGrpcService {
             // Add top attackers to block list via MapUpdate
             for source in req.sources.iter().take(100) {
                 // Extract IP bytes from the IpAddress proto
-                if let Some(ref ip_addr) = source.ip
-                    && let Some(ref addr) = ip_addr.address
-                {
-                    let ip_bytes = match addr {
-                        pistonprotection_proto::common::ip_address::Address::Ipv4(v) => {
-                            v.to_be_bytes().to_vec()
-                        }
-                        pistonprotection_proto::common::ip_address::Address::Ipv6(v) => {
-                            v.clone() // Already Vec<u8>
-                        }
-                    };
-                    block_updates.push(MapUpdate {
-                        map_name: "blocked_ips".to_string(),
-                        operation: 1, // MapOperation::Insert
-                        key: ip_bytes,
-                        value: vec![1], // Simple block marker
-                        flags: 0,
-                    });
+                if let Some(ref ip_addr) = source.ip {
+                    if let Some(ref addr) = ip_addr.address {
+                        let ip_bytes = match addr {
+                            pistonprotection_proto::common::ip_address::Address::Ipv4(v) => {
+                                v.to_be_bytes().to_vec()
+                            }
+                            pistonprotection_proto::common::ip_address::Address::Ipv6(v) => {
+                                v.clone() // Already Vec<u8>
+                            }
+                        };
+                        block_updates.push(MapUpdate {
+                            map_name: "blocked_ips".to_string(),
+                            operation: 1, // MapOperation::Insert
+                            key: ip_bytes,
+                            value: vec![1], // Simple block marker
+                            flags: 0,
+                        });
+                    }
                 }
             }
         } else if req.attack_pps > 10_000 || req.sources.len() > 100 {

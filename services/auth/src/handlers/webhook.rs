@@ -463,13 +463,13 @@ async fn get_checkout_email(
     }
 
     // Try from customer_details
-    if let Some(details) = &session.customer_details
-        && let Some(email) = &details.email
-    {
-        return Some(EmailRecipient {
-            email: email.clone(),
-            name: details.name.clone(),
-        });
+    if let Some(details) = &session.customer_details {
+        if let Some(email) = &details.email {
+            return Some(EmailRecipient {
+                email: email.clone(),
+                name: details.name.clone(),
+            });
+        }
     }
 
     None
@@ -500,11 +500,12 @@ fn format_amount(amount: Option<i64>, currency: &Option<stripe_rust::Currency>) 
 /// Extract plan name from invoice
 fn get_invoice_plan_name(invoice: &StripeInvoice) -> String {
     // Try to get from invoice lines
-    if let Some(lines) = &invoice.lines
-        && let Some(first_line) = lines.data.first()
-        && let Some(description) = &first_line.description
-    {
-        return description.clone();
+    if let Some(lines) = &invoice.lines {
+        if let Some(first_line) = lines.data.first() {
+            if let Some(description) = &first_line.description {
+                return description.clone();
+            }
+        }
     }
 
     "PistonProtection Plan".to_string()
@@ -724,12 +725,13 @@ async fn handle_invoice_paid(
             .stripe_service
             .get_subscription_by_stripe_id(&sub_id)
             .await
-            && local_sub.status == SubscriptionStatus::PastDue
         {
-            state
-                .stripe_service
-                .update_subscription_status(&sub_id, SubscriptionStatus::Active)
-                .await?;
+            if local_sub.status == SubscriptionStatus::PastDue {
+                state
+                    .stripe_service
+                    .update_subscription_status(&sub_id, SubscriptionStatus::Active)
+                    .await?;
+            }
         }
     }
 

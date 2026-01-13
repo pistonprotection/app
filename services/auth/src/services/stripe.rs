@@ -298,11 +298,12 @@ impl StripeService {
         create_session.cancel_url = Some(&request.cancel_url);
 
         // Set customer if exists
-        if let Some(ref sub) = subscription
-            && let Some(ref customer_id) = sub.stripe_customer_id
-            && let Ok(cid) = customer_id.parse::<CustomerId>()
-        {
-            create_session.customer = Some(cid);
+        if let Some(ref sub) = subscription {
+            if let Some(ref customer_id) = sub.stripe_customer_id {
+                if let Ok(cid) = customer_id.parse::<CustomerId>() {
+                    create_session.customer = Some(cid);
+                }
+            }
         }
 
         create_session.line_items = Some(vec![CreateCheckoutSessionLineItems {
@@ -483,32 +484,33 @@ impl StripeService {
 
         // Find the metered subscription item for bandwidth
         for item in stripe_sub.items.data {
-            if let Some(price) = &item.price
-                && let Some(ref metadata) = price.metadata
-                && metadata.get("metric_type") == Some(&"bandwidth".to_string())
-            {
-                // Report usage in GB
-                let gb = bytes / 1_073_741_824;
-                if gb > 0 {
-                    self.report_usage(
-                        item.id.as_ref(),
-                        gb as u64,
-                        Some(Utc::now().timestamp()),
-                        stripe_rust::UsageRecordAction::Increment,
-                    )
-                    .await?;
+            if let Some(price) = &item.price {
+                if let Some(ref metadata) = price.metadata {
+                    if metadata.get("metric_type") == Some(&"bandwidth".to_string()) {
+                        // Report usage in GB
+                        let gb = bytes / 1_073_741_824;
+                        if gb > 0 {
+                            self.report_usage(
+                                item.id.as_ref(),
+                                gb as u64,
+                                Some(Utc::now().timestamp()),
+                                stripe_rust::UsageRecordAction::Increment,
+                            )
+                            .await?;
 
-                    // Store locally
-                    self.store_usage_record(
-                        organization_id,
-                        &subscription.id,
-                        UsageMetricType::BandwidthBytes,
-                        bytes,
-                        Some(item.id.as_ref()),
-                    )
-                    .await?;
+                            // Store locally
+                            self.store_usage_record(
+                                organization_id,
+                                &subscription.id,
+                                UsageMetricType::BandwidthBytes,
+                                bytes,
+                                Some(item.id.as_ref()),
+                            )
+                            .await?;
+                        }
+                        break;
+                    }
                 }
-                break;
             }
         }
 
@@ -535,32 +537,33 @@ impl StripeService {
 
         // Find the metered subscription item for requests
         for item in stripe_sub.items.data {
-            if let Some(price) = &item.price
-                && let Some(ref metadata) = price.metadata
-                && metadata.get("metric_type") == Some(&"requests".to_string())
-            {
-                // Report in thousands
-                let thousands = request_count / 1000;
-                if thousands > 0 {
-                    self.report_usage(
-                        item.id.as_ref(),
-                        thousands as u64,
-                        Some(Utc::now().timestamp()),
-                        stripe_rust::UsageRecordAction::Increment,
-                    )
-                    .await?;
+            if let Some(price) = &item.price {
+                if let Some(ref metadata) = price.metadata {
+                    if metadata.get("metric_type") == Some(&"requests".to_string()) {
+                        // Report in thousands
+                        let thousands = request_count / 1000;
+                        if thousands > 0 {
+                            self.report_usage(
+                                item.id.as_ref(),
+                                thousands as u64,
+                                Some(Utc::now().timestamp()),
+                                stripe_rust::UsageRecordAction::Increment,
+                            )
+                            .await?;
 
-                    // Store locally
-                    self.store_usage_record(
-                        organization_id,
-                        &subscription.id,
-                        UsageMetricType::Requests,
-                        request_count,
-                        Some(item.id.as_ref()),
-                    )
-                    .await?;
+                            // Store locally
+                            self.store_usage_record(
+                                organization_id,
+                                &subscription.id,
+                                UsageMetricType::Requests,
+                                request_count,
+                                Some(item.id.as_ref()),
+                            )
+                            .await?;
+                        }
+                        break;
+                    }
                 }
-                break;
             }
         }
 
@@ -934,12 +937,13 @@ impl StripeService {
         }
 
         // Update organization limits based on plan
-        if let Some(item) = stripe_sub.items.data.first()
-            && let Some(price) = &item.price
-            && let Ok(plan) = self.get_plan_by_stripe_price(price.id.as_ref()).await
-        {
-            self.update_organization_limits_from_plan(stripe_sub.id.as_ref(), &plan)
-                .await?;
+        if let Some(item) = stripe_sub.items.data.first() {
+            if let Some(price) = &item.price {
+                if let Ok(plan) = self.get_plan_by_stripe_price(price.id.as_ref()).await {
+                    self.update_organization_limits_from_plan(stripe_sub.id.as_ref(), &plan)
+                        .await?;
+                }
+            }
         }
 
         Ok(())

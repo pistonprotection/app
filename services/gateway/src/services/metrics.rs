@@ -20,12 +20,13 @@ impl MetricsService {
     #[instrument(skip(self))]
     pub async fn get_traffic_metrics(&self, backend_id: &str) -> Result<TrafficMetrics> {
         // Try to get from Redis (real-time metrics)
-        if let Some(cache) = &self.state.cache
-            && let Ok(Some(metrics)) = cache
+        if let Some(cache) = &self.state.cache {
+            if let Ok(Some(metrics)) = cache
                 .get::<TrafficMetrics>(&format!("metrics:traffic:{}", backend_id))
                 .await
-        {
-            return Ok(metrics);
+            {
+                return Ok(metrics);
+            }
         }
 
         // Fallback to default/empty metrics
@@ -39,12 +40,13 @@ impl MetricsService {
     /// Get attack metrics for a backend
     #[instrument(skip(self))]
     pub async fn get_attack_metrics(&self, backend_id: &str) -> Result<AttackMetrics> {
-        if let Some(cache) = &self.state.cache
-            && let Ok(Some(metrics)) = cache
+        if let Some(cache) = &self.state.cache {
+            if let Ok(Some(metrics)) = cache
                 .get::<AttackMetrics>(&format!("metrics:attack:{}", backend_id))
                 .await
-        {
-            return Ok(metrics);
+            {
+                return Ok(metrics);
+            }
         }
 
         Ok(AttackMetrics {
@@ -296,12 +298,13 @@ impl MetricsService {
         backend_id: &str,
         origin_id: &str,
     ) -> Result<OriginMetrics> {
-        if let Some(cache) = &self.state.cache
-            && let Ok(Some(metrics)) = cache
+        if let Some(cache) = &self.state.cache {
+            if let Ok(Some(metrics)) = cache
                 .get::<OriginMetrics>(&format!("metrics:origin:{}:{}", backend_id, origin_id))
                 .await
-        {
-            return Ok(metrics);
+            {
+                return Ok(metrics);
+            }
         }
 
         Ok(OriginMetrics {
@@ -315,12 +318,13 @@ impl MetricsService {
     /// Get worker metrics
     #[instrument(skip(self))]
     pub async fn get_worker_metrics(&self, worker_id: &str) -> Result<WorkerMetrics> {
-        if let Some(cache) = &self.state.cache
-            && let Ok(Some(metrics)) = cache
+        if let Some(cache) = &self.state.cache {
+            if let Ok(Some(metrics)) = cache
                 .get::<WorkerMetrics>(&format!("metrics:worker:{}", worker_id))
                 .await
-        {
-            return Ok(metrics);
+            {
+                return Ok(metrics);
+            }
         }
 
         Ok(WorkerMetrics {

@@ -596,11 +596,13 @@ impl FilterService {
                     if let Ok(Some(update_json)) = cache
                         .get::<String>(&format!("filter_update:{}", backend_id))
                         .await
-                        && let Ok(update) = serde_json::from_str::<RuleUpdate>(&update_json)
-                        && tx.send(update).is_err()
                     {
-                        // No receivers left
-                        break;
+                        if let Ok(update) = serde_json::from_str::<RuleUpdate>(&update_json) {
+                            if tx.send(update).is_err() {
+                                // No receivers left
+                                break;
+                            }
+                        }
                     }
                 }
             }

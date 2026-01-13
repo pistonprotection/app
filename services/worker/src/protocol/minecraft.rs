@@ -262,17 +262,18 @@ impl ProtocolAnalyzer for MinecraftJavaAnalyzer {
         stats.bytes_analyzed += payload.len() as u64;
 
         // Try to parse as handshake
-        if self.validate_handshake
-            && let Some(handshake) = self.parse_handshake(payload)
-            && !self.validate_handshake(&handshake)
-        {
-            debug!(
-                src = %meta.src_ip,
-                protocol_version = handshake.protocol_version,
-                "Invalid Minecraft handshake"
-            );
-            stats.packets_dropped += 1;
-            return Ok(Verdict::Drop);
+        if self.validate_handshake {
+            if let Some(handshake) = self.parse_handshake(payload) {
+                if !self.validate_handshake(&handshake) {
+                    debug!(
+                        src = %meta.src_ip,
+                        protocol_version = handshake.protocol_version,
+                        "Invalid Minecraft handshake"
+                    );
+                    stats.packets_dropped += 1;
+                    return Ok(Verdict::Drop);
+                }
+            }
         }
 
         stats.packets_passed += 1;

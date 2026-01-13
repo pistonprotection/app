@@ -145,13 +145,15 @@ impl OrganizationService {
             .ok_or(OrganizationError::NotFound)?;
 
         // Check slug uniqueness if changing
-        if let Some(ref slug) = request.slug
-            && slug != &existing.slug
-            && let Some(_) = db::get_organization_by_slug(&self.db, slug)
-                .await
-                .map_err(|e| OrganizationError::DatabaseError(e.to_string()))?
-        {
-            return Err(OrganizationError::SlugExists);
+        if let Some(ref slug) = request.slug {
+            if slug != &existing.slug {
+                if let Some(_) = db::get_organization_by_slug(&self.db, slug)
+                    .await
+                    .map_err(|e| OrganizationError::DatabaseError(e.to_string()))?
+                {
+                    return Err(OrganizationError::SlugExists);
+                }
+            }
         }
 
         // Update organization
@@ -306,9 +308,10 @@ impl OrganizationService {
         if let Some(member) = db::get_organization_member(&self.db, org_id, user_id)
             .await
             .map_err(|e| OrganizationError::DatabaseError(e.to_string()))?
-            && member.role == OrganizationRole::Owner
         {
-            return Err(OrganizationError::CannotRemoveOwner);
+            if member.role == OrganizationRole::Owner {
+                return Err(OrganizationError::CannotRemoveOwner);
+            }
         }
 
         let removed = db::remove_organization_member(&self.db, org_id, user_id)
