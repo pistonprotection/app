@@ -71,9 +71,11 @@ where
                         // Fall back to a minimal response
                         http::Response::builder()
                             .status(http::StatusCode::TOO_MANY_REQUESTS)
-                            .body(http_body_util::Empty::<Bytes>::new()
-                                .map_err(|_| tonic::Status::internal("body error"))
-                                .boxed_unsync())
+                            .body(
+                                http_body_util::Empty::<Bytes>::new()
+                                    .map_err(|_| tonic::Status::internal("body error"))
+                                    .boxed_unsync(),
+                            )
                             .expect("minimal response should always build")
                     }
                 };
