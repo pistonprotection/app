@@ -618,7 +618,12 @@ fn process_tcp_http(
                 // Check minimum transfer rate (bytes per second)
                 if body_elapsed > 1_000_000_000 {
                     // After 1 second, check rate
-                    let elapsed_secs = body_elapsed / 1_000_000_000;
+                    // Use >> 30 to approximate division by 1 billion (2^30 ≈ 1.07B)
+                    // This avoids 128-bit math that eBPF doesn't support
+                    let elapsed_secs = body_elapsed >> 30;
+                    if elapsed_secs == 0 {
+                        return Ok(xdp_action::XDP_PASS); // Avoid division by zero
+                    }
                     let min_rate = if config.min_body_rate_bps != 0 {
                         config.min_body_rate_bps
                     } else {
@@ -672,7 +677,7 @@ fn process_tcp_http(
         HttpValidation::InvalidRequest => {
             update_stats_invalid();
             if config.protection_level >= 3 {
-                block_ip_v4(src_ip, config.block_duration_ns / 2);
+                block_ip_v4(src_ip, (config.block_duration_ns >> 1));
             }
             Ok(xdp_action::XDP_DROP)
         }
@@ -684,7 +689,7 @@ fn process_tcp_http(
                 state.flags |= FLAG_SMUGGLING_DETECTED;
             }
             // Block IP for longer duration - smuggling is a serious attack
-            block_ip_v4(src_ip, config.block_duration_ns * 2);
+            block_ip_v4(src_ip, (config.block_duration_ns << 1));
             Ok(xdp_action::XDP_DROP)
         }
         HttpValidation::Suspicious => {
@@ -833,7 +838,7 @@ fn process_http2_frames(
 
                 if h2_state.rst_stream_count > max_rst {
                     update_stats_http2_rapid_reset();
-                    block_ip_v4(src_ip, config.block_duration_ns * 2); // Longer block for rapid reset
+                    block_ip_v4(src_ip, (config.block_duration_ns << 1)); // Longer block for rapid reset
                     return Ok(xdp_action::XDP_DROP);
                 }
 
@@ -841,7 +846,7 @@ fn process_http2_frames(
                 // If more streams are being reset than opened, suspicious
                 if h2_state.streams_reset > h2_state.streams_opened && h2_state.streams_reset > 10 {
                     update_stats_http2_rapid_reset();
-                    block_ip_v4(src_ip, config.block_duration_ns * 2);
+                    block_ip_v4(src_ip, (config.block_duration_ns << 1));
                     return Ok(xdp_action::XDP_DROP);
                 }
             }

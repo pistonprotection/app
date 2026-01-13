@@ -381,7 +381,7 @@ fn process_minecraft_java(
                 };
                 // If seq differs by more than payload size, this is likely an attack
                 // or severely out-of-order delivery - drop to be safe
-                if seq_diff > payload_len as u32 * 2 {
+                if seq_diff > (payload_len as u32) << 1 {
                     return Ok(xdp_action::XDP_DROP);
                 }
             }

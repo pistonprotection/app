@@ -331,7 +331,7 @@ fn check_rate_limit_v4(src_ip: u32) -> bool {
 
         // Token bucket algorithm
         let elapsed = now - entry.last_update;
-        let tokens_to_add = elapsed / 1_000_000; // 1 token per millisecond
+        let tokens_to_add = (elapsed >> 20); // 1 token per millisecond
 
         entry.tokens = core::cmp::min(entry.tokens + tokens_to_add, 1000); // Max 1000 tokens
         entry.last_update = now;
@@ -364,7 +364,7 @@ fn check_rate_limit_v6(src_ip: [u8; 16]) -> bool {
         let entry = unsafe { &mut *entry };
 
         let elapsed = now - entry.last_update;
-        let tokens_to_add = elapsed / 1_000_000;
+        let tokens_to_add = (elapsed >> 20);
 
         entry.tokens = core::cmp::min(entry.tokens + tokens_to_add, 1000);
         entry.last_update = now;

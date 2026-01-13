@@ -280,15 +280,17 @@ fn check_token_bucket_v6(ip: [u8; 16], packet_size: u64, config: &RateLimitConfi
 fn check_subnet_bucket(subnet: &SubnetKey, packet_size: u64, config: &RateLimitConfig) -> bool {
     let now = unsafe { aya_ebpf::helpers::bpf_ktime_get_ns() };
 
-    // Subnet limits are 100x the per-IP limit
-    let subnet_tokens_per_sec = config.tokens_per_second * 100;
-    let subnet_bucket_size = config.bucket_size * 100;
+    // Subnet limits are 128x the per-IP limit (using bit shift to avoid 128-bit math)
+    let subnet_tokens_per_sec = config.tokens_per_second << 7;
+    let subnet_bucket_size = config.bucket_size << 7;
 
     if let Some(bucket) = unsafe { SUBNET_BUCKETS.get_ptr_mut(subnet) } {
         let bucket = unsafe { &mut *bucket };
 
         let elapsed = now.saturating_sub(bucket.last_update);
-        let tokens_to_add = (elapsed * subnet_tokens_per_sec) / NANOS_PER_SEC;
+        // Avoid 128-bit multiply: first convert to seconds (>> 30 ≈ /1B), then multiply
+        let elapsed_secs = elapsed >> 30;
+        let tokens_to_add = elapsed_secs.saturating_mul(subnet_tokens_per_sec);
 
         bucket.tokens = core::cmp::min(bucket.tokens + tokens_to_add, subnet_bucket_size);
         bucket.last_update = now;
@@ -323,8 +325,10 @@ fn process_bucket(
     config: &RateLimitConfig,
 ) -> bool {
     // Calculate tokens to add based on elapsed time
+    // Avoid 128-bit multiply: first convert to seconds (>> 30 ≈ /1B), then multiply
     let elapsed = now.saturating_sub(bucket.last_update);
-    let tokens_to_add = (elapsed * config.tokens_per_second) / NANOS_PER_SEC;
+    let elapsed_secs = elapsed >> 30;
+    let tokens_to_add = elapsed_secs.saturating_mul(config.tokens_per_second);
 
     // Refill bucket (capped at bucket_size)
     bucket.tokens = core::cmp::min(bucket.tokens + tokens_to_add, config.bucket_size);
