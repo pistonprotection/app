@@ -321,20 +321,26 @@ jobs:
           helm package charts/pistonprotection -d .cr-release-packages
 
       - name: Checkout gh-pages
+        id: checkout-gh-pages
         uses: actions/checkout@v4
         with:
           ref: gh-pages
           path: gh-pages
         continue-on-error: true
 
-      - name: Create gh-pages branch if not exists
+      - name: Initialize gh-pages branch if not exists
+        if: steps.checkout-gh-pages.outcome == 'failure'
         run: |
-          if [ ! -d "gh-pages" ]; then
-            mkdir gh-pages
-            cd gh-pages
-            git init
-            git checkout -b gh-pages
-          fi
+          mkdir -p gh-pages
+          cd gh-pages
+          git init
+          git remote add origin https://github.com/${{ github.repository }}.git
+          git checkout --orphan gh-pages
+          touch .gitkeep
+          git add .gitkeep
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Initialize gh-pages branch"
 
       - name: Update Helm repo index
         run: |
@@ -388,9 +394,16 @@ jobs:
           cd gh-pages
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Ensure remote is set correctly
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git 2>/dev/null || \
+            git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
           git add .
           git diff --staged --quiet || git commit -m "Update Helm repository - ${{ steps.chart.outputs.version }}"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages --force
+
+          # Push (force needed for initial push or updates)
+          git push -u origin gh-pages --force
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
