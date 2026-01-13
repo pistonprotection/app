@@ -4,13 +4,18 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
   external_labels:
-    cluster: 'pistonprotection-local'
-    env: 'development'
+    # Environment-specific labels - override via PROMETHEUS_CLUSTER and PROMETHEUS_ENV
+    cluster: '${PROMETHEUS_CLUSTER:-pistonprotection-local}'
+    env: '${PROMETHEUS_ENV:-development}'
 
 alerting:
   alertmanagers:
     - static_configs:
-        - targets: []
+        - targets: ['alertmanager:9093']
+      # Optional authentication for AlertManager
+      # basic_auth:
+      #   username: '${ALERTMANAGER_USER}'
+      #   password: '${ALERTMANAGER_PASSWORD}'
 
 rule_files:
   - /etc/prometheus/alerts.yaml

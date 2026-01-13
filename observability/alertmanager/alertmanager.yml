@@ -1,0 +1,157 @@
+# PistonProtection AlertManager Configuration
+# Routes alerts to appropriate receivers based on severity and type
+
+global:
+  # SMTP configuration for email alerts (configure via environment variables)
+  smtp_smarthost: '${SMTP_HOST:-localhost:25}'
+  smtp_from: '${SMTP_FROM:-alertmanager@pistonprotection.local}'
+  smtp_require_tls: false
+
+  # Slack webhook for instant notifications
+  slack_api_url: '${SLACK_WEBHOOK_URL:-}'
+
+  # PagerDuty integration for critical alerts
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+  # Resolve timeout - how long to wait before marking alert as resolved
+  resolve_timeout: 5m
+
+# Templates for notification messages
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Inhibition rules - prevent duplicate alerts
+inhibit_rules:
+  # If a critical alert is firing, suppress warnings for the same service
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'service', 'instance']
+
+  # If cluster is down, suppress individual service alerts
+  - source_match:
+      alertname: 'ClusterDown'
+    target_match:
+      severity: 'warning'
+    equal: ['cluster']
+
+# Routing tree
+route:
+  # Default receiver
+  receiver: 'default-receiver'
+
+  # Group alerts by these labels
+  group_by: ['alertname', 'service', 'severity']
+
+  # Wait before sending first notification
+  group_wait: 30s
+
+  # Wait before sending notification about new alerts in same group
+  group_interval: 5m
+
+  # Wait before re-sending notification
+  repeat_interval: 4h
+
+  # Child routes for specific alert types
+  routes:
+    # Critical DDoS alerts - immediate notification
+    - match:
+        severity: critical
+        type: ddos
+      receiver: 'ddos-critical'
+      group_wait: 10s
+      repeat_interval: 15m
+      continue: true
+
+    # All critical alerts also go to PagerDuty
+    - match:
+        severity: critical
+      receiver: 'pagerduty-critical'
+      group_wait: 10s
+      repeat_interval: 1h
+
+    # Security-related alerts
+    - match_re:
+        alertname: '.*Attack.*|.*Intrusion.*|.*Unauthorized.*'
+      receiver: 'security-team'
+      group_wait: 10s
+
+    # Warning level alerts
+    - match:
+        severity: warning
+      receiver: 'ops-warnings'
+      repeat_interval: 6h
+
+    # Info/low priority alerts
+    - match:
+        severity: info
+      receiver: 'ops-info'
+      repeat_interval: 24h
+
+# Receivers
+receivers:
+  # Default receiver - sends to ops channel
+  - name: 'default-receiver'
+    slack_configs:
+      - channel: '#pistonprotection-alerts'
+        send_resolved: true
+        title: '{{ template "slack.default.title" . }}'
+        text: '{{ template "slack.default.text" . }}'
+        color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+    webhook_configs:
+      - url: '${WEBHOOK_URL:-http://localhost:9095/webhook}'
+        send_resolved: true
+
+  # DDoS critical alerts
+  - name: 'ddos-critical'
+    slack_configs:
+      - channel: '#pistonprotection-ddos'
+        send_resolved: true
+        title: ':rotating_light: DDoS Attack Detected!'
+        text: |
+          *Alert:* {{ .GroupLabels.alertname }}
+          *Severity:* {{ .CommonLabels.severity }}
+          *Service:* {{ .CommonLabels.service }}
+          *Description:* {{ .CommonAnnotations.description }}
+          *Runbook:* {{ .CommonAnnotations.runbook_url }}
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_DDOS_KEY:-}'
+        severity: critical
+        description: 'DDoS Attack: {{ .GroupLabels.alertname }}'
+
+  # PagerDuty for all critical alerts
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_SERVICE_KEY:-}'
+        severity: critical
+        description: '{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+        details:
+          service: '{{ .CommonLabels.service }}'
+          instance: '{{ .CommonLabels.instance }}'
+          cluster: '{{ .CommonLabels.cluster }}'
+
+  # Security team
+  - name: 'security-team'
+    slack_configs:
+      - channel: '#security-alerts'
+        send_resolved: true
+        title: ':shield: Security Alert'
+        color: '#ff0000'
+    email_configs:
+      - to: '${SECURITY_EMAIL:-security@pistonprotection.local}'
+        send_resolved: true
+
+  # Ops warnings
+  - name: 'ops-warnings'
+    slack_configs:
+      - channel: '#pistonprotection-ops'
+        send_resolved: true
+        color: '#ffa500'
+
+  # Ops info (low priority)
+  - name: 'ops-info'
+    slack_configs:
+      - channel: '#pistonprotection-ops'
+        send_resolved: false
+        color: '#0000ff'

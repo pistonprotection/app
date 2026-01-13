@@ -1,0 +1,120 @@
+# PistonProtection Grafana Tempo Configuration
+# Distributed tracing backend
+
+# Server configuration
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 9095
+  log_level: info
+
+# Distributor receives traces from collectors
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+    # Also support Jaeger format
+    jaeger:
+      protocols:
+        thrift_http:
+          endpoint: 0.0.0.0:14268
+        grpc:
+          endpoint: 0.0.0.0:14250
+    # Zipkin format
+    zipkin:
+      endpoint: 0.0.0.0:9411
+
+# Ingester configuration
+ingester:
+  # Max size of a block before cutting to disk
+  max_block_bytes: 5_000_000
+  # Max duration of a block before cutting
+  max_block_duration: 5m
+
+# Query configuration
+querier:
+  max_retries: 2
+
+# Query frontend for search
+query_frontend:
+  search:
+    max_duration: 0s # No limit
+    concurrent_jobs: 5
+
+# Compactor configuration
+compactor:
+  compaction:
+    # Compaction window
+    compaction_window: 1h
+    # Max compacted block size (100MB)
+    max_compaction_objects: 1000000
+    block_retention: 168h # 7 days retention
+  ring:
+    kvstore:
+      store: inmemory
+
+# Storage backend
+storage:
+  trace:
+    backend: local
+    local:
+      path: /tmp/tempo/blocks
+    # Write ahead log configuration
+    wal:
+      path: /tmp/tempo/wal
+      encoding: snappy
+    # Block configuration
+    block:
+      version: vParquet3
+      # Use row-group for better search
+      row_group_size_bytes: 100_000
+    pool:
+      max_workers: 100
+      queue_depth: 10000
+
+# Metrics generator for Prometheus metrics from traces
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+      cluster: pistonprotection
+  storage:
+    path: /tmp/tempo/generator/wal
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
+  processor:
+    service_graphs:
+      dimensions:
+        - service.namespace
+        - service.name
+      wait: 10s
+      max_items: 10000
+    span_metrics:
+      dimensions:
+        - service.namespace
+        - service.name
+        - http.method
+        - http.status_code
+      histogram_buckets: [0.002, 0.004, 0.008, 0.016, 0.032, 0.064, 0.128, 0.256, 0.512, 1.024, 2.048, 4.096, 8.192, 16.384]
+
+# Override configuration for multi-tenancy
+overrides:
+  defaults:
+    ingestion:
+      rate_strategy: local
+      rate_limit_bytes: 15_000_000 # 15MB/s
+      burst_size_bytes: 20_000_000 # 20MB burst
+      max_traces_per_user: 10000
+    search:
+      max_bytes_per_tag_values_query: 5_000_000
+    metrics_generator:
+      processors: [service-graphs, span-metrics]
+      max_active_series: 50000
+
+# Usage report disabled for local
+usage_report:
+  reporting_enabled: false

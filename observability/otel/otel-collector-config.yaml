@@ -64,7 +64,7 @@ exporters:
     endpoint: "0.0.0.0:8889"
     namespace: pistonprotection
     const_labels:
-      env: development
+      env: ${OTEL_ENV:-development}
     resource_to_telemetry_conversion:
       enabled: true
 
@@ -77,6 +77,18 @@ exporters:
         level: "level"
       resource:
         host.name: "host"
+
+  # Grafana Tempo for distributed tracing
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  # Jaeger alternative for tracing (comment out otlp/tempo if using this)
+  # otlp/jaeger:
+  #   endpoint: jaeger:4317
+  #   tls:
+  #     insecure: true
 
   debug:
     verbosity: detailed
@@ -100,7 +112,7 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, resourcedetection, attributes, filter, batch]
-      exporters: [debug]
+      exporters: [otlp/tempo, debug]
 
     metrics:
       receivers: [otlp, prometheus, hostmetrics]
