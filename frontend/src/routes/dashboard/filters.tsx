@@ -14,7 +14,7 @@ import {
   Trash2,
   Zap,
 } from "lucide-react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
@@ -93,7 +93,7 @@ const filterSchema = z.object({
 
 function FiltersPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [_editingFilter, setEditingFilter] = useState<string | null>(null);
+  const [editingFilter, setEditingFilter] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"all" | FilterType>("all");
 
@@ -126,11 +126,12 @@ function FiltersPage() {
   );
 
   // Update filter mutation
-  const _updateMutation = useMutation(
+  const updateMutation = useMutation(
     trpc.filters.update.mutationOptions({
       onSuccess: () => {
         toast.success("Filter updated");
         setEditingFilter(null);
+        editForm.reset();
         queryClient.invalidateQueries({ queryKey: ["filters"] });
       },
       onError: (error) => {
@@ -208,6 +209,38 @@ function FiltersPage() {
     },
   });
 
+  // Form for editing filters
+  const editForm = useForm({
+    defaultValues: {
+      name: "",
+      type: "tcp" as FilterType,
+      action: "block" as FilterAction,
+      priority: 100,
+      enabled: true,
+      conditions: "",
+      rateLimit: 1000,
+      rateLimitWindow: 60,
+    },
+    onSubmit: async ({ value }) => {
+      if (!editingFilter) return;
+      await updateMutation.mutateAsync({
+        id: editingFilter,
+        name: value.name,
+        type: value.type,
+        action: value.action,
+        priority: value.priority,
+        enabled: value.enabled,
+        conditions: value.conditions || undefined,
+        rateLimit: value.action === "rate_limit" ? value.rateLimit : undefined,
+        rateLimitWindow:
+          value.action === "rate_limit" ? value.rateLimitWindow : undefined,
+      });
+    },
+    validators: {
+      onChange: filterSchema,
+    },
+  });
+
   const getActionBadge = (action: string) => {
     switch (action) {
       case "allow":
@@ -224,6 +257,24 @@ function FiltersPage() {
   };
 
   const filters = filtersData?.items ?? [];
+
+  // Get the filter being edited and populate form
+  const filterToEdit = editingFilter
+    ? filters.find((f) => f.id === editingFilter)
+    : null;
+
+  // Update edit form when filter selection changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Reset form when filter changes
+  React.useEffect(() => {
+    if (filterToEdit) {
+      editForm.setFieldValue("name", filterToEdit.name);
+      editForm.setFieldValue("type", filterToEdit.type as FilterType);
+      editForm.setFieldValue("action", filterToEdit.action as FilterAction);
+      editForm.setFieldValue("priority", filterToEdit.priority);
+      editForm.setFieldValue("enabled", filterToEdit.enabled);
+      editForm.setFieldValue("conditions", filterToEdit.conditions ?? "");
+    }
+  }, [filterToEdit?.id]);
 
   return (
     <div className="space-y-6">
@@ -643,6 +694,214 @@ function FiltersPage() {
               Delete
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Filter Dialog */}
+      <Dialog
+        open={!!editingFilter}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingFilter(null);
+            editForm.reset();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[600px]">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              editForm.handleSubmit();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Edit Filter Rule</DialogTitle>
+              <DialogDescription>
+                Update this filter rule&apos;s configuration.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <editForm.Field name="name">
+                {(field) => (
+                  <div className="grid gap-2">
+                    <Label>Rule Name</Label>
+                    <Input
+                      placeholder="Block SYN Flood"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                    />
+                    {field.state.meta.errors.length > 0 && (
+                      <p className="text-sm text-destructive">
+                        {field.state.meta.errors[0]}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </editForm.Field>
+              <div className="grid grid-cols-2 gap-4">
+                <editForm.Field name="type">
+                  {(field) => (
+                    <div className="grid gap-2">
+                      <Label>Type</Label>
+                      <Select
+                        value={field.state.value}
+                        onValueChange={(v) =>
+                          field.handleChange(v as FilterType)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="tcp">TCP</SelectItem>
+                          <SelectItem value="udp">UDP</SelectItem>
+                          <SelectItem value="http">HTTP</SelectItem>
+                          <SelectItem value="quic">QUIC</SelectItem>
+                          <SelectItem value="minecraft_java">
+                            Minecraft Java
+                          </SelectItem>
+                          <SelectItem value="minecraft_bedrock">
+                            Minecraft Bedrock
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </editForm.Field>
+                <editForm.Field name="action">
+                  {(field) => (
+                    <div className="grid gap-2">
+                      <Label>Action</Label>
+                      <Select
+                        value={field.state.value}
+                        onValueChange={(v) =>
+                          field.handleChange(v as FilterAction)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="allow">Allow</SelectItem>
+                          <SelectItem value="block">Block</SelectItem>
+                          <SelectItem value="rate_limit">Rate Limit</SelectItem>
+                          <SelectItem value="challenge">Challenge</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </editForm.Field>
+              </div>
+              <editForm.Field name="priority">
+                {(field) => (
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-filter-priority">
+                      Priority (0-1000, higher = processed first)
+                    </Label>
+                    <Input
+                      id="edit-filter-priority"
+                      type="number"
+                      min={0}
+                      max={1000}
+                      value={field.state.value}
+                      onChange={(e) =>
+                        field.handleChange(Number(e.target.value))
+                      }
+                      aria-describedby="edit-priority-description"
+                    />
+                    <p id="edit-priority-description" className="sr-only">
+                      Filter rules with higher priority values are processed
+                      first
+                    </p>
+                  </div>
+                )}
+              </editForm.Field>
+              <editForm.Field name="conditions">
+                {(field) => (
+                  <div className="grid gap-2">
+                    <Label>Conditions (JSON expression)</Label>
+                    <Textarea
+                      placeholder='{"source_ip": {"not_in": ["10.0.0.0/8"]}}'
+                      rows={3}
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Use JSON to define match conditions. See documentation for
+                      syntax.
+                    </p>
+                  </div>
+                )}
+              </editForm.Field>
+              <editForm.Subscribe selector={(state) => state.values.action}>
+                {(action) =>
+                  action === "rate_limit" && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <editForm.Field name="rateLimit">
+                        {(field) => (
+                          <div className="grid gap-2">
+                            <Label>Rate Limit (requests)</Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={field.state.value}
+                              onChange={(e) =>
+                                field.handleChange(Number(e.target.value))
+                              }
+                            />
+                          </div>
+                        )}
+                      </editForm.Field>
+                      <editForm.Field name="rateLimitWindow">
+                        {(field) => (
+                          <div className="grid gap-2">
+                            <Label>Window (seconds)</Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={field.state.value}
+                              onChange={(e) =>
+                                field.handleChange(Number(e.target.value))
+                              }
+                            />
+                          </div>
+                        )}
+                      </editForm.Field>
+                    </div>
+                  )
+                }
+              </editForm.Subscribe>
+              <editForm.Field name="enabled">
+                {(field) => (
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      checked={field.state.value}
+                      onCheckedChange={field.handleChange}
+                    />
+                    <Label>Enabled</Label>
+                  </div>
+                )}
+              </editForm.Field>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEditingFilter(null);
+                  editForm.reset();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={updateMutation.isPending}>
+                {updateMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
