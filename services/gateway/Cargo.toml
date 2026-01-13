@@ -71,6 +71,9 @@ lazy_static = "1.4"
 # HTTP body utils
 bytes = "1"
 
+# Async streaming
+async-stream = "0.3"
+
 # JWT validation
 jsonwebtoken = "9.3"
 

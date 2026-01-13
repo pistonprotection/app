@@ -636,21 +636,65 @@ impl MetricsServiceTrait for MetricsGrpcService {
         }))
     }
 
+    #[instrument(skip(self, request))]
     async fn get_traffic_time_series(
         &self,
-        _request: Request<TimeSeriesQuery>,
+        request: Request<TimeSeriesQuery>,
     ) -> Result<Response<GetTimeSeriesResponse>, Status> {
-        Err(Status::unimplemented("Not implemented yet"))
+        let req = request.into_inner();
+
+        let start_time: chrono::DateTime<chrono::Utc> = req
+            .start_time
+            .as_ref()
+            .map(chrono::DateTime::from)
+            .ok_or_else(|| Status::invalid_argument("start_time is required"))?;
+        let end_time: chrono::DateTime<chrono::Utc> = req
+            .end_time
+            .as_ref()
+            .map(chrono::DateTime::from)
+            .ok_or_else(|| Status::invalid_argument("end_time is required"))?;
+
+        let granularity = TimeGranularity::try_from(req.granularity)
+            .unwrap_or(TimeGranularity::FiveMinutes);
+
+        let mut series = Vec::new();
+        for metric_name in &req.metrics {
+            let ts = self
+                .service
+                .get_time_series(&req.backend_id, metric_name, start_time, end_time, granularity)
+                .await
+                .map_err(|e| Status::from(e))?;
+            series.push(ts);
+        }
+
+        Ok(Response::new(GetTimeSeriesResponse { series }))
     }
 
     type StreamTrafficMetricsStream =
         Pin<Box<dyn Stream<Item = Result<TrafficMetrics, Status>> + Send>>;
 
+    #[instrument(skip(self, request))]
     async fn stream_traffic_metrics(
         &self,
-        _request: Request<StreamTrafficMetricsRequest>,
+        request: Request<StreamTrafficMetricsRequest>,
     ) -> Result<Response<Self::StreamTrafficMetricsStream>, Status> {
-        Err(Status::unimplemented("Not implemented yet"))
+        let req = request.into_inner();
+        let backend_id = req.backend_id;
+        let interval = req.interval_seconds.max(1);
+        let service = self.service.clone();
+
+        let stream = async_stream::stream! {
+            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval as u64));
+            loop {
+                ticker.tick().await;
+                match service.get_traffic_metrics(&backend_id).await {
+                    Ok(metrics) => yield Ok(metrics),
+                    Err(e) => yield Err(Status::from(e)),
+                }
+            }
+        };
+
+        Ok(Response::new(Box::pin(stream)))
     }
 
     #[instrument(skip(self, request))]
@@ -671,98 +715,254 @@ impl MetricsServiceTrait for MetricsGrpcService {
         }))
     }
 
+    #[instrument(skip(self, request))]
     async fn get_attack_time_series(
         &self,
-        _request: Request<TimeSeriesQuery>,
+        request: Request<TimeSeriesQuery>,
     ) -> Result<Response<GetTimeSeriesResponse>, Status> {
-        Err(Status::unimplemented("Not implemented yet"))
+        let req = request.into_inner();
+
+        let start_time: chrono::DateTime<chrono::Utc> = req
+            .start_time
+            .as_ref()
+            .map(chrono::DateTime::from)
+            .ok_or_else(|| Status::invalid_argument("start_time is required"))?;
+        let end_time: chrono::DateTime<chrono::Utc> = req
+            .end_time
+            .as_ref()
+            .map(chrono::DateTime::from)
+            .ok_or_else(|| Status::invalid_argument("end_time is required"))?;
+
+        let granularity = TimeGranularity::try_from(req.granularity)
+            .unwrap_or(TimeGranularity::FiveMinutes);
+
+        let mut series = Vec::new();
+        for metric_name in &req.metrics {
+            let ts = self
+                .service
+                .get_time_series(&req.backend_id, metric_name, start_time, end_time, granularity)
+                .await
+                .map_err(|e| Status::from(e))?;
+            series.push(ts);
+        }
+
+        Ok(Response::new(GetTimeSeriesResponse { series }))
     }
 
     type StreamAttackMetricsStream =
         Pin<Box<dyn Stream<Item = Result<AttackMetrics, Status>> + Send>>;
 
+    #[instrument(skip(self, request))]
     async fn stream_attack_metrics(
         &self,
-        _request: Request<StreamAttackMetricsRequest>,
+        request: Request<StreamAttackMetricsRequest>,
     ) -> Result<Response<Self::StreamAttackMetricsStream>, Status> {
-        Err(Status::unimplemented("Not implemented yet"))
+        let req = request.into_inner();
+        let backend_id = req.backend_id;
+        let interval = req.interval_seconds.max(1);
+        let service = self.service.clone();
+
+        let stream = async_stream::stream! {
+            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval as u64));
+            loop {
+                ticker.tick().await;
+                match service.get_attack_metrics(&backend_id).await {
+                    Ok(metrics) => yield Ok(metrics),
+                    Err(e) => yield Err(Status::from(e)),
+                }
+            }
+        };
+
+        Ok(Response::new(Box::pin(stream)))
     }
 
+    #[instrument(skip(self, request))]
     async fn get_origin_metrics(
         &self,
-        _request: Request<GetOriginMetricsRequest>,
+        request: Request<GetOriginMetricsRequest>,
     ) -> Result<Response<GetOriginMetricsResponse>, Status> {
-        Err(Status::unimplemented("Not implemented yet"))
+        let req = request.into_inner();
+
+        let metrics = self
+            .service
+            .get_origin_metrics(&req.backend_id, &req.origin_id)
+            .await
+            .map_err(|e| Status::from(e))?;
+
+        Ok(Response::new(GetOriginMetricsResponse {
+            metrics: Some(metrics),
+        }))
     }
 
+    #[instrument(skip(self, request))]
     async fn get_worker_metrics(
         &self,
-        _request: Request<GetWorkerMetricsRequest>,
+        request: Request<GetWorkerMetricsRequest>,
     ) -> Result<Response<GetWorkerMetricsResponse>, Status> {
-        Err(Status::unimplemented("Not implemented yet"))
+        let req = request.into_inner();
+
+        let metrics = self
+            .service
+            .get_worker_metrics(&req.worker_id)
+            .await
+            .map_err(|e| Status::from(e))?;
+
+        Ok(Response::new(GetWorkerMetricsResponse {
+            metrics: Some(metrics),
+        }))
     }
 
+    #[instrument(skip(self, request))]
     async fn list_worker_metrics(
         &self,
-        _request: Request<ListWorkerMetricsRequest>,
+        request: Request<ListWorkerMetricsRequest>,
     ) -> Result<Response<ListWorkerMetricsResponse>, Status> {
-        Err(Status::unimplemented("Not implemented yet"))
+        let req = request.into_inner();
+        let (page, page_size) = req
+            .pagination
+            .map(|p| (p.page.max(1), p.page_size.clamp(1, 100)))
+            .unwrap_or((1, 20));
+
+        let workers = self
+            .service
+            .list_worker_metrics(page, page_size)
+            .await
+            .map_err(|e| Status::from(e))?;
+
+        Ok(Response::new(ListWorkerMetricsResponse {
+            workers,
+            pagination: Some(pistonprotection_proto::common::PaginationInfo {
+                page,
+                page_size,
+                total_count: 0, // TODO: implement proper pagination
+                has_next: false,
+                next_cursor: String::new(),
+            }),
+        }))
     }
 
+    #[instrument(skip(self, request))]
     async fn get_geo_metrics(
         &self,
-        _request: Request<GetGeoMetricsRequest>,
+        request: Request<GetGeoMetricsRequest>,
     ) -> Result<Response<GetGeoMetricsResponse>, Status> {
-        Err(Status::unimplemented("Not implemented yet"))
+        let req = request.into_inner();
+
+        let start_time: chrono::DateTime<chrono::Utc> = req
+            .start_time
+            .as_ref()
+            .map(chrono::DateTime::from)
+            .ok_or_else(|| Status::invalid_argument("start_time is required"))?;
+        let end_time: chrono::DateTime<chrono::Utc> = req
+            .end_time
+            .as_ref()
+            .map(chrono::DateTime::from)
+            .ok_or_else(|| Status::invalid_argument("end_time is required"))?;
+
+        let metrics = self
+            .service
+            .get_geo_metrics(&req.backend_id, start_time, end_time)
+            .await
+            .map_err(|e| Status::from(e))?;
+
+        Ok(Response::new(GetGeoMetricsResponse {
+            metrics: Some(metrics),
+        }))
     }
 
+    // Alert CRUD - these require a separate AlertService implementation
     async fn create_alert(
         &self,
         _request: Request<CreateAlertRequest>,
     ) -> Result<Response<CreateAlertResponse>, Status> {
-        Err(Status::unimplemented("Not implemented yet"))
+        // TODO: Implement alert service
+        Err(Status::unimplemented("Alert management not yet implemented"))
     }
 
     async fn get_alert(
         &self,
         _request: Request<GetAlertRequest>,
     ) -> Result<Response<GetAlertResponse>, Status> {
-        Err(Status::unimplemented("Not implemented yet"))
+        Err(Status::unimplemented("Alert management not yet implemented"))
     }
 
     async fn update_alert(
         &self,
         _request: Request<UpdateAlertRequest>,
     ) -> Result<Response<UpdateAlertResponse>, Status> {
-        Err(Status::unimplemented("Not implemented yet"))
+        Err(Status::unimplemented("Alert management not yet implemented"))
     }
 
     async fn delete_alert(
         &self,
         _request: Request<DeleteAlertRequest>,
     ) -> Result<Response<DeleteAlertResponse>, Status> {
-        Err(Status::unimplemented("Not implemented yet"))
+        Err(Status::unimplemented("Alert management not yet implemented"))
     }
 
     async fn list_alerts(
         &self,
         _request: Request<ListAlertsRequest>,
     ) -> Result<Response<ListAlertsResponse>, Status> {
-        Err(Status::unimplemented("Not implemented yet"))
+        Err(Status::unimplemented("Alert management not yet implemented"))
     }
 
+    #[instrument(skip(self, request))]
     async fn get_attack_event(
         &self,
-        _request: Request<GetAttackEventRequest>,
+        request: Request<GetAttackEventRequest>,
     ) -> Result<Response<GetAttackEventResponse>, Status> {
-        Err(Status::unimplemented("Not implemented yet"))
+        let req = request.into_inner();
+
+        let event = self
+            .service
+            .get_attack_event(&req.event_id)
+            .await
+            .map_err(|e| Status::from(e))?
+            .ok_or_else(|| Status::not_found("Attack event not found"))?;
+
+        Ok(Response::new(GetAttackEventResponse { event: Some(event) }))
     }
 
+    #[instrument(skip(self, request))]
     async fn list_attack_events(
         &self,
-        _request: Request<ListAttackEventsRequest>,
+        request: Request<ListAttackEventsRequest>,
     ) -> Result<Response<ListAttackEventsResponse>, Status> {
-        Err(Status::unimplemented("Not implemented yet"))
+        let req = request.into_inner();
+
+        let start_time: chrono::DateTime<chrono::Utc> = req
+            .start_time
+            .as_ref()
+            .map(chrono::DateTime::from)
+            .ok_or_else(|| Status::invalid_argument("start_time is required"))?;
+        let end_time: chrono::DateTime<chrono::Utc> = req
+            .end_time
+            .as_ref()
+            .map(chrono::DateTime::from)
+            .ok_or_else(|| Status::invalid_argument("end_time is required"))?;
+
+        let (page, page_size) = req
+            .pagination
+            .map(|p| (p.page.max(1), p.page_size.clamp(1, 100)))
+            .unwrap_or((1, 20));
+
+        let events = self
+            .service
+            .list_attack_events(&req.backend_id, start_time, end_time, page, page_size)
+            .await
+            .map_err(|e| Status::from(e))?;
+
+        Ok(Response::new(ListAttackEventsResponse {
+            events,
+            pagination: Some(pistonprotection_proto::common::PaginationInfo {
+                page,
+                page_size,
+                total_count: 0, // TODO: implement proper count
+                has_next: false,
+                next_cursor: String::new(),
+            }),
+        }))
     }
 }
 

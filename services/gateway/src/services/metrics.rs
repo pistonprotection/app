@@ -290,4 +290,118 @@ impl MetricsService {
 
         Ok(())
     }
+
+    /// Get origin health metrics
+    #[instrument(skip(self))]
+    pub async fn get_origin_metrics(&self, backend_id: &str, origin_id: &str) -> Result<OriginMetrics> {
+        if let Some(cache) = &self.state.cache {
+            if let Ok(Some(metrics)) = cache
+                .get::<OriginMetrics>(&format!("metrics:origin:{}:{}", backend_id, origin_id))
+                .await
+            {
+                return Ok(metrics);
+            }
+        }
+
+        Ok(OriginMetrics {
+            backend_id: backend_id.to_string(),
+            origin_id: origin_id.to_string(),
+            timestamp: Some(chrono::Utc::now().into()),
+            ..Default::default()
+        })
+    }
+
+    /// Get worker metrics
+    #[instrument(skip(self))]
+    pub async fn get_worker_metrics(&self, worker_id: &str) -> Result<WorkerMetrics> {
+        if let Some(cache) = &self.state.cache {
+            if let Ok(Some(metrics)) = cache
+                .get::<WorkerMetrics>(&format!("metrics:worker:{}", worker_id))
+                .await
+            {
+                return Ok(metrics);
+            }
+        }
+
+        Ok(WorkerMetrics {
+            worker_id: worker_id.to_string(),
+            timestamp: Some(chrono::Utc::now().into()),
+            ..Default::default()
+        })
+    }
+
+    /// List all worker metrics
+    #[instrument(skip(self))]
+    pub async fn list_worker_metrics(&self, _page: u32, _page_size: u32) -> Result<Vec<WorkerMetrics>> {
+        if let Some(cache) = &self.state.cache {
+            // Get all worker IDs from cache
+            if let Ok(Some(worker_ids)) = cache
+                .get::<Vec<String>>("workers:active")
+                .await
+            {
+                let mut workers = Vec::new();
+                for id in &worker_ids {
+                    if let Ok(metrics) = self.get_worker_metrics(id).await {
+                        workers.push(metrics);
+                    }
+                }
+                return Ok(workers);
+            }
+        }
+
+        Ok(vec![])
+    }
+
+    /// Get single attack event
+    #[instrument(skip(self))]
+    pub async fn get_attack_event(&self, event_id: &str) -> Result<Option<AttackEvent>> {
+        let db = self.state.db()?;
+
+        let row = sqlx::query(
+            r#"
+            SELECT id, backend_id, started_at, ended_at, duration_seconds,
+                   attack_type, severity, peak_pps, peak_bps,
+                   total_packets, total_bytes, packets_mitigated,
+                   mitigation_rate, unique_sources
+            FROM attack_events
+            WHERE id = $1
+            "#,
+        )
+        .bind(event_id)
+        .fetch_optional(db)
+        .await?;
+
+        if let Some(row) = row {
+            let started_at: chrono::DateTime<chrono::Utc> = row.get("started_at");
+            let ended_at: Option<chrono::DateTime<chrono::Utc>> = row.get("ended_at");
+
+            return Ok(Some(AttackEvent {
+                id: row.get("id"),
+                backend_id: row.get("backend_id"),
+                started_at: Some(started_at.into()),
+                ended_at: ended_at.map(|t| t.into()),
+                duration_seconds: row.get::<i32, _>("duration_seconds") as u32,
+                attack_type: row.get("attack_type"),
+                severity: row.get::<i32, _>("severity"),
+                peak_pps: row.get::<i64, _>("peak_pps") as u64,
+                peak_bps: row.get::<i64, _>("peak_bps") as u64,
+                total_packets: row.get::<i64, _>("total_packets") as u64,
+                total_bytes: row.get::<i64, _>("total_bytes") as u64,
+                packets_mitigated: row.get::<i64, _>("packets_mitigated") as u64,
+                mitigation_rate: row.get("mitigation_rate"),
+                unique_sources: row.get::<i32, _>("unique_sources") as u32,
+                ..Default::default()
+            }));
+        }
+
+        Ok(None)
+    }
+}
+
+impl Clone for MetricsService {
+    fn clone(&self) -> Self {
+        Self {
+            state: self.state.clone(),
+        }
+    }
 }
