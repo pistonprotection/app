@@ -161,6 +161,10 @@ pub struct BedrockRateState {
     pub ping_count: u32,
     /// Connection request packets in current window
     pub conn_req_count: u32,
+    /// NAK packets in current window (for NAK flood protection)
+    pub nak_count: u32,
+    /// Padding for alignment
+    pub _padding: u32,
     /// Total bytes received in window
     pub bytes_in: u64,
     /// Estimated response bytes in window
@@ -916,7 +920,9 @@ const RAKNET_MAX_MTU: u16 = 1500;
 const RAKNET_MAX_AMPLIFICATION_RATIO: u32 = 10; // Max 10x amplification allowed
 const RAKNET_PING_FLOOD_THRESHOLD: u32 = 50; // Max pings per second per IP
 const RAKNET_CONN_REQ_FLOOD_THRESHOLD: u32 = 20; // Max connection requests per second per IP
+const RAKNET_NAK_FLOOD_THRESHOLD: u32 = 100; // Max NAK packets per second per IP
 const RAKNET_MAX_ACK_RECORDS: u16 = 500; // Max ACK/NACK records per packet (DoS protection)
+const RAKNET_MAX_NAK_SEQUENCE_RANGE: u32 = 1000; // Max sequence range in a single NAK record
 
 /// RakNet connection state for Bedrock
 #[repr(C)]
@@ -1208,11 +1214,13 @@ fn process_minecraft_bedrock(
             let _seq_num =
                 (payload[1] as u32) | ((payload[2] as u32) << 8) | ((payload[3] as u32) << 16);
 
-            // STATE VALIDATION: Should only come after connection is established
+            // STATE VALIDATION: Data packets require established connection
+            // SECURITY: Strict enforcement - no data packets without proper handshake
             if let Some(state) = unsafe { MC_BEDROCK_CONNECTIONS.get(&connection_key) } {
                 if state.state < 3 {
-                    // Not in connected state - suspicious
-                    // In strict mode this would be dropped
+                    // Not in connected state - drop
+                    // This prevents attackers from sending data without handshake
+                    return Ok(xdp_action::XDP_DROP);
                 }
 
                 // Validate encapsulated frame structure if we have data after sequence number
@@ -1238,6 +1246,10 @@ fn process_minecraft_bedrock(
 
                 // Update state
                 update_bedrock_connection_state(&connection_key, payload_len, now);
+            } else {
+                // No connection state - data packet without handshake
+                // SECURITY: Drop to prevent state bypass attacks
+                return Ok(xdp_action::XDP_DROP);
             }
         }
 
@@ -1245,7 +1257,25 @@ fn process_minecraft_bedrock(
             // NACK - Negative acknowledgment
             // Format: [0xa0] [2 bytes record count (LE)] [records...]
             // Each record: [1 byte flag] [3 bytes sequence number] [optional 3 bytes end sequence]
+            // SECURITY: NAK floods can cause amplification - server retransmits data for each NAK
             if payload_len < 3 {
+                return Ok(xdp_action::XDP_DROP);
+            }
+
+            // STATE VALIDATION: NAK should only come from established connections
+            if let Some(state) = unsafe { MC_BEDROCK_CONNECTIONS.get(&connection_key) } {
+                if state.state < 3 {
+                    // NAK from non-connected client - suspicious
+                    return Ok(xdp_action::XDP_DROP);
+                }
+            } else {
+                // No connection state - NAK without handshake is definitely suspicious
+                return Ok(xdp_action::XDP_DROP);
+            }
+
+            // RATE LIMIT: NAK flood protection - excessive NAKs can cause amplification
+            // Use dedicated NAK rate limiter with stricter thresholds
+            if !check_bedrock_nak_rate_limit(src_ip, now) {
                 return Ok(xdp_action::XDP_DROP);
             }
 
@@ -1265,12 +1295,68 @@ fn process_minecraft_bedrock(
                 // Insufficient data for claimed records
                 return Ok(xdp_action::XDP_DROP);
             }
+
+            // SECURITY: Validate sequence ranges within records
+            // NAK records with large ranges can cause massive retransmission amplification
+            // CVE-2024-30249 style attack prevention
+            let mut offset = 3usize;
+            let mut record_idx = 0u16;
+            while record_idx < record_count && offset + 4 <= payload_len {
+                let is_range = payload[offset] != 0;
+                let start_seq = (payload[offset + 1] as u32)
+                    | ((payload[offset + 2] as u32) << 8)
+                    | ((payload[offset + 3] as u32) << 16);
+
+                if is_range {
+                    // Range record: [flag] [start_seq] [end_seq]
+                    if offset + 7 > payload_len {
+                        return Ok(xdp_action::XDP_DROP);
+                    }
+                    let end_seq = (payload[offset + 4] as u32)
+                        | ((payload[offset + 5] as u32) << 8)
+                        | ((payload[offset + 6] as u32) << 16);
+
+                    // Validate sequence range isn't absurdly large
+                    // Large ranges = many retransmissions = amplification
+                    let range_size = if end_seq >= start_seq {
+                        end_seq - start_seq
+                    } else {
+                        // Wrapped sequence number - also suspicious if very large
+                        0x00FFFFFF_u32.saturating_sub(start_seq) + end_seq
+                    };
+
+                    if range_size > RAKNET_MAX_NAK_SEQUENCE_RANGE {
+                        // Amplification attack attempt - drop
+                        return Ok(xdp_action::XDP_DROP);
+                    }
+
+                    offset += 7;
+                } else {
+                    // Single sequence record
+                    offset += 4;
+                }
+                record_idx += 1;
+            }
+
+            // Update connection state
+            update_bedrock_connection_state(&connection_key, payload_len, now);
         }
 
         0xc0 => {
             // ACK - Acknowledgment
             // Format same as NACK
             if payload_len < 3 {
+                return Ok(xdp_action::XDP_DROP);
+            }
+
+            // STATE VALIDATION: ACK should only come from established connections
+            if let Some(state) = unsafe { MC_BEDROCK_CONNECTIONS.get(&connection_key) } {
+                if state.state < 3 {
+                    // ACK from non-connected client - suspicious
+                    return Ok(xdp_action::XDP_DROP);
+                }
+            } else {
+                // No connection state - ACK without handshake
                 return Ok(xdp_action::XDP_DROP);
             }
 
@@ -1287,6 +1373,9 @@ fn process_minecraft_bedrock(
             if payload_len < 3 + min_records_size {
                 return Ok(xdp_action::XDP_DROP);
             }
+
+            // Update connection state
+            update_bedrock_connection_state(&connection_key, payload_len, now);
         }
 
         0x09 => {
@@ -1420,6 +1509,7 @@ fn check_bedrock_rate_limit(src_ip: u32, packet_len: usize, is_ping: bool, now: 
             state.window_start = now;
             state.ping_count = 0;
             state.conn_req_count = 0;
+            state.nak_count = 0;
             state.bytes_in = 0;
             state.bytes_out_estimate = 0;
         }
@@ -1465,8 +1555,61 @@ fn check_bedrock_rate_limit(src_ip: u32, packet_len: usize, is_ping: bool, now: 
         let state = BedrockRateState {
             ping_count: if is_ping { 1 } else { 0 },
             conn_req_count: if is_ping { 0 } else { 1 },
+            nak_count: 0,
+            _padding: 0,
             bytes_in: packet_len as u64,
             bytes_out_estimate: if is_ping { 1000 } else { 100 },
+            window_start: now,
+            blocked_until: 0,
+        };
+        let _ = MC_BEDROCK_RATE.insert(&src_ip, &state, 0);
+        true
+    }
+}
+
+/// Check NAK rate limit specifically - NAK floods can cause amplification attacks
+/// by forcing retransmission of many packets
+#[inline(always)]
+fn check_bedrock_nak_rate_limit(src_ip: u32, now: u64) -> bool {
+    let window_ns: u64 = 1_000_000_000; // 1 second window
+
+    if let Some(state) = unsafe { MC_BEDROCK_RATE.get_ptr_mut(&src_ip) } {
+        let state = unsafe { &mut *state };
+
+        // Check if blocked
+        if state.blocked_until > now {
+            return false;
+        }
+
+        // Check if in new window
+        if now.saturating_sub(state.window_start) > window_ns {
+            // Reset window
+            state.window_start = now;
+            state.ping_count = 0;
+            state.conn_req_count = 0;
+            state.nak_count = 0;
+            state.bytes_in = 0;
+            state.bytes_out_estimate = 0;
+        }
+
+        state.nak_count += 1;
+
+        // NAK flood protection - too many NAKs can cause retransmission flood
+        if state.nak_count > RAKNET_NAK_FLOOD_THRESHOLD {
+            state.blocked_until = now + 60_000_000_000; // 60 second block
+            return false;
+        }
+
+        true
+    } else {
+        // First packet from this IP - create state for NAK tracking
+        let state = BedrockRateState {
+            ping_count: 0,
+            conn_req_count: 0,
+            nak_count: 1,
+            _padding: 0,
+            bytes_in: 0,
+            bytes_out_estimate: 0,
             window_start: now,
             blocked_until: 0,
         };
