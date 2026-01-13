@@ -310,6 +310,73 @@ export const backendsRouter = createTRPCRouter({
       return updated;
     }),
 
+  // Bulk toggle backends enabled status
+  bulkToggle: organizationAdminProcedure
+    .input(
+      z.object({
+        ids: z.array(z.string().uuid()).min(1),
+        enabled: z.boolean(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Verify all backends belong to organization
+      const existingBackends = await ctx.db.query.backend.findMany({
+        where: and(eq(backend.organizationId, input.organizationId)),
+        columns: { id: true },
+      });
+
+      const existingIds = new Set(existingBackends.map((b) => b.id));
+      const invalidIds = input.ids.filter((id) => !existingIds.has(id));
+
+      if (invalidIds.length > 0) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `Some backends not found: ${invalidIds.join(", ")}`,
+        });
+      }
+
+      // Update all backends
+      const updated = await Promise.all(
+        input.ids.map((id) =>
+          ctx.db
+            .update(backend)
+            .set({ enabled: input.enabled, updatedAt: new Date() })
+            .where(eq(backend.id, id))
+            .returning(),
+        ),
+      );
+
+      return { count: updated.length, enabled: input.enabled };
+    }),
+
+  // Bulk delete backends
+  bulkDelete: organizationAdminProcedure
+    .input(z.object({ ids: z.array(z.string().uuid()).min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify all backends belong to organization
+      const existingBackends = await ctx.db.query.backend.findMany({
+        where: and(eq(backend.organizationId, input.organizationId)),
+        columns: { id: true },
+      });
+
+      const existingIds = new Set(existingBackends.map((b) => b.id));
+      const invalidIds = input.ids.filter((id) => !existingIds.has(id));
+
+      if (invalidIds.length > 0) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `Some backends not found: ${invalidIds.join(", ")}`,
+        });
+      }
+
+      // Delete all backends (cascade will handle related records)
+      await Promise.all(
+        input.ids.map((id) => ctx.db.delete(backend).where(eq(backend.id, id))),
+      );
+
+      return { count: input.ids.length };
+    }),
+
   // ==================== ORIGINS ====================
 
   // List origins for a backend
