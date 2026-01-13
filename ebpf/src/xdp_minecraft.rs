@@ -109,6 +109,11 @@ const MC_FLAG_ENCRYPTION_ENABLED: u32 = 0x0002; // Encryption is active (can't i
 const MC_FLAG_COMPRESSION_ENABLED: u32 = 0x0004; // Compression is active
 const MC_FLAG_VALIDATED: u32 = 0x0008; // Connection has been validated
 const MC_FLAG_FRAGMENTED_PENDING: u32 = 0x0010; // Partial packet pending (TCP fragmentation)
+const MC_FLAG_LOGIN_START_RECEIVED: u32 = 0x0020; // Login Start packet received (required before Encryption Response)
+
+// Protocol version thresholds for packet ID range changes
+const MC_PROTO_1_20_2: u32 = 764; // Configuration state added
+const MC_PROTO_1_20_5: u32 = 766; // Transfer state added
 
 // Maximum VarInt bytes (5 for 32-bit values)
 const MAX_VARINT_BYTES: usize = 5;
@@ -340,21 +345,44 @@ fn process_minecraft_java(
     // TCP FRAGMENTATION HANDLING:
     // Minecraft packets can be split across multiple TCP segments.
     // This is a known limitation of XDP - we can't do full TCP reassembly.
-    // However, we can track partial packets and be cautious.
+    // However, we can track partial packets and validate sequence numbers.
     let remaining_len = payload_len.saturating_sub(len_bytes);
+
+    // Get TCP sequence number for fragment validation
+    let tcp_seq = u32::from_be(tcp.seq);
 
     // Check if this is a continuation of a fragmented packet
     if let Some(state) = unsafe { MC_JAVA_CONNECTIONS.get(&connection_key) } {
         if state.flags & MC_FLAG_FRAGMENTED_PENDING != 0 && state.pending_packet_bytes > 0 {
             // We're expecting continuation data from a previous fragment
-            // For safety, if we have pending fragment state, pass through
-            // and update tracking. We can't validate partial packet content.
+            // SECURITY: Validate TCP sequence number matches expected
+            // This prevents attackers from injecting out-of-order fragments
+            let expected_seq = state.pending_seq;
+            if expected_seq != 0 && tcp_seq != expected_seq {
+                // Sequence number mismatch - potential injection attack or retransmit
+                // Allow some tolerance for TCP retransmissions (same seq is OK)
+                // But completely different seq is suspicious
+                let seq_diff = if tcp_seq > expected_seq {
+                    tcp_seq - expected_seq
+                } else {
+                    expected_seq - tcp_seq
+                };
+                // If seq differs by more than payload size, this is likely an attack
+                // or severely out-of-order delivery - drop to be safe
+                if seq_diff > payload_len as u32 * 2 {
+                    return Ok(xdp_action::XDP_DROP);
+                }
+            }
+
             let pending_bytes = state.pending_packet_bytes as usize;
             if payload_len < pending_bytes {
                 // Still fragmented, more data coming
+                // Calculate expected sequence for next fragment
+                let next_expected_seq = tcp_seq.wrapping_add(payload_len as u32);
                 if let Some(state) = unsafe { MC_JAVA_CONNECTIONS.get_ptr_mut(&connection_key) } {
                     let state = unsafe { &mut *state };
                     state.pending_packet_bytes = (pending_bytes - payload_len) as u32;
+                    state.pending_seq = next_expected_seq;
                     state.packets += 1;
                     state.bytes += payload_len as u64;
                     state.last_seen = unsafe { aya_ebpf::helpers::bpf_ktime_get_ns() };
@@ -366,6 +394,7 @@ fn process_minecraft_java(
                     let state = unsafe { &mut *state };
                     state.flags &= !MC_FLAG_FRAGMENTED_PENDING;
                     state.pending_packet_bytes = 0;
+                    state.pending_seq = 0;
                     state.packets += 1;
                     state.bytes += payload_len as u64;
                     state.last_seen = unsafe { aya_ebpf::helpers::bpf_ktime_get_ns() };
@@ -379,11 +408,13 @@ fn process_minecraft_java(
 
     if remaining_len == 0 {
         // No packet data after length - incomplete, let TCP handle it
-        // Mark as having pending fragment
+        // Mark as having pending fragment and track sequence number
+        let next_expected_seq = tcp_seq.wrapping_add(payload_len as u32);
         if let Some(state) = unsafe { MC_JAVA_CONNECTIONS.get_ptr_mut(&connection_key) } {
             let state = unsafe { &mut *state };
             state.flags |= MC_FLAG_FRAGMENTED_PENDING;
             state.pending_packet_bytes = packet_len as u32;
+            state.pending_seq = next_expected_seq;
         }
         return Ok(xdp_action::XDP_PASS);
     }
@@ -393,10 +424,12 @@ fn process_minecraft_java(
         // Packet is fragmented - track how much data is remaining
         // SECURITY NOTE: We still validate the packet ID we can see,
         // but the full packet validation happens when we have all data.
+        let next_expected_seq = tcp_seq.wrapping_add(payload_len as u32);
         if let Some(state) = unsafe { MC_JAVA_CONNECTIONS.get_ptr_mut(&connection_key) } {
             let state = unsafe { &mut *state };
             state.flags |= MC_FLAG_FRAGMENTED_PENDING;
             state.pending_packet_bytes = (packet_len as usize - remaining_len) as u32;
+            state.pending_seq = next_expected_seq;
         }
         // Continue to validate what we can see (packet ID at minimum)
     }
@@ -493,12 +526,46 @@ fn process_minecraft_java(
                 return Ok(xdp_action::XDP_DROP);
             }
 
+            // Get connection state for validation
+            let (current_flags, proto_version) =
+                if let Some(state) = unsafe { MC_JAVA_CONNECTIONS.get(&connection_key) } {
+                    (state.flags, state.protocol_version)
+                } else {
+                    // No state - shouldn't happen in LOGIN state
+                    return Ok(xdp_action::XDP_DROP);
+                };
+
+            // SECURITY: Protocol version awareness for packet ID ranges
+            // Login Acknowledged (0x03) only exists in 1.20.2+ (protocol 764+)
+            if packet_id == 0x03 && proto_version < MC_PROTO_1_20_2 {
+                return Ok(xdp_action::XDP_DROP);
+            }
+
             // Track encryption state transitions
             // After Login Acknowledged (0x03), the connection enters Configuration state (1.20.2+)
             // or Play state (pre-1.20.2). We transition to Configuration first.
             // Once encryption is enabled (after Encryption Response 0x01), we can't inspect packets.
+
+            if packet_id == 0x00 {
+                // Login Start - mark that we received it (required before Encryption Response)
+                if let Some(state) = unsafe { MC_JAVA_CONNECTIONS.get_ptr_mut(&connection_key) } {
+                    let state = unsafe { &mut *state };
+                    state.flags |= MC_FLAG_LOGIN_START_RECEIVED;
+                    state.packets += 1;
+                    state.bytes += payload_len as u64;
+                    state.last_seen = unsafe { aya_ebpf::helpers::bpf_ktime_get_ns() };
+                }
+                return Ok(xdp_action::XDP_PASS);
+            }
+
             if packet_id == 0x01 {
                 // Encryption Response - encryption will be enabled immediately
+                // SECURITY: Must have received Login Start first
+                if current_flags & MC_FLAG_LOGIN_START_RECEIVED == 0 {
+                    // Encryption Response without Login Start - protocol violation
+                    return Ok(xdp_action::XDP_DROP);
+                }
+
                 // Mark connection to skip deep inspection for subsequent packets
                 if let Some(state) = unsafe { MC_JAVA_CONNECTIONS.get_ptr_mut(&connection_key) } {
                     let state = unsafe { &mut *state };
@@ -513,7 +580,11 @@ fn process_minecraft_java(
 
             if packet_id == 0x03 {
                 // Login Acknowledged - transition to Configuration state (1.20.2+)
-                // Note: For pre-1.20.2 clients, this packet doesn't exist and they go directly to Play
+                // SECURITY: Must have received Login Start first
+                if current_flags & MC_FLAG_LOGIN_START_RECEIVED == 0 {
+                    return Ok(xdp_action::XDP_DROP);
+                }
+
                 if let Some(state) = unsafe { MC_JAVA_CONNECTIONS.get_ptr_mut(&connection_key) } {
                     let state = unsafe { &mut *state };
                     state.state = MC_STATE_CONFIGURATION;
@@ -524,18 +595,30 @@ fn process_minecraft_java(
                 return Ok(xdp_action::XDP_PASS);
             }
 
-            // Update connection state
+            // Update connection state (for Login Plugin Response 0x02)
             update_connection_state(&connection_key, payload_len);
         }
         MC_STATE_CONFIGURATION => {
             // Configuration state (1.20.2+) - limited packet IDs
+            // Get connection state for validation
+            let (current_flags, proto_version) =
+                if let Some(state) = unsafe { MC_JAVA_CONNECTIONS.get(&connection_key) } {
+                    (state.flags, state.protocol_version)
+                } else {
+                    return Ok(xdp_action::XDP_DROP);
+                };
+
+            // SECURITY: Configuration state shouldn't be reached for pre-1.20.2 clients
+            // This is a backwards state transition protection
+            if proto_version < MC_PROTO_1_20_2 {
+                return Ok(xdp_action::XDP_DROP);
+            }
+
             // Check if encryption is enabled - if so, we can't inspect packets
-            if let Some(state) = unsafe { MC_JAVA_CONNECTIONS.get(&connection_key) } {
-                if state.flags & MC_FLAG_ENCRYPTION_ENABLED != 0 {
-                    // Encrypted connection - just pass through and update stats
-                    update_connection_state(&connection_key, payload_len);
-                    return Ok(xdp_action::XDP_PASS);
-                }
+            if current_flags & MC_FLAG_ENCRYPTION_ENABLED != 0 {
+                // Encrypted connection - just pass through and update stats
+                update_connection_state(&connection_key, payload_len);
+                return Ok(xdp_action::XDP_PASS);
             }
 
             // Configuration state packet IDs (client -> server):
@@ -548,7 +631,13 @@ fn process_minecraft_java(
             // 0x06: Resource Pack Response
             // 0x07: Known Packs (1.21+)
             // SECURITY: Validate packet ID is in the valid configuration state range
-            // Note: packet_id < 0 is already checked at line 359
+            // Note: packet_id < 0 is already checked earlier
+
+            // Cookie Response (0x01) only in 1.20.5+
+            if packet_id == 0x01 && proto_version < MC_PROTO_1_20_5 {
+                return Ok(xdp_action::XDP_DROP);
+            }
+
             if packet_id > 0x07 {
                 return Ok(xdp_action::XDP_DROP);
             }
@@ -595,12 +684,23 @@ fn process_minecraft_java(
         MC_STATE_TRANSFER => {
             // Transfer state (1.20.5+) - client is being transferred to another server
             // In this state, the client expects server to send transfer packet
+            // Get connection state for validation
+            let (current_flags, proto_version) =
+                if let Some(state) = unsafe { MC_JAVA_CONNECTIONS.get(&connection_key) } {
+                    (state.flags, state.protocol_version)
+                } else {
+                    return Ok(xdp_action::XDP_DROP);
+                };
+
+            // SECURITY: Transfer state only exists in 1.20.5+ (protocol 766+)
+            if proto_version < MC_PROTO_1_20_5 {
+                return Ok(xdp_action::XDP_DROP);
+            }
+
             // Client-to-server packets in transfer state are limited
-            if let Some(state) = unsafe { MC_JAVA_CONNECTIONS.get(&connection_key) } {
-                if state.flags & MC_FLAG_ENCRYPTION_ENABLED != 0 {
-                    update_connection_state(&connection_key, payload_len);
-                    return Ok(xdp_action::XDP_PASS);
-                }
+            if current_flags & MC_FLAG_ENCRYPTION_ENABLED != 0 {
+                update_connection_state(&connection_key, payload_len);
+                return Ok(xdp_action::XDP_PASS);
             }
 
             // Transfer state has very few valid client-to-server packets
@@ -1553,18 +1653,23 @@ fn read_varint_at(buf: &[u8], offset: usize) -> Option<(i32, usize)> {
 
         // If high bit is not set, we're done
         if byte & 0x80 == 0 {
+            // On the 5th byte (i=4, position=28), validate that only bits 0-3 are used
+            // Bits 4-6 would represent bits 32-34 of the value, which overflows i32
+            // Valid 5th byte values are 0x00-0x0F (no continuation bit, bits 4-6 clear)
+            if position == 28 && (byte & 0x70) != 0 {
+                // Overflow: 5th byte has bits set that would exceed 32-bit range
+                return None;
+            }
             return Some((value, bytes_read));
         }
 
         position += 7;
 
-        // VarInt overflow check (32 bits = 5 bytes max, but position would be 35 on 5th)
-        if position >= 32 {
-            // Only valid if this is the 5th byte and it only uses 4 bits
-            // For negative numbers, the 5th byte can be 0x0f (15) max for sign extension
-            if i == 4 && (byte & 0xf0) != 0 {
-                return None;
-            }
+        // If we've processed 4 bytes (position now 28) and the 5th byte has continuation set,
+        // that would mean a 6th byte is coming, which is invalid for 32-bit VarInt
+        if position >= 28 && i >= 4 {
+            // 5th byte has continuation bit set - invalid
+            return None;
         }
     }
 
