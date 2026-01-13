@@ -53,7 +53,7 @@ impl UdpAnalyzer {
             return false;
         }
 
-        let version = (payload[0] >> 3) & 0x07;
+        let _version = (payload[0] >> 3) & 0x07;
         let mode = payload[0] & 0x07;
 
         // Mode 7 is often used in amplification attacks
@@ -155,7 +155,7 @@ pub enum UdpAttackType {
 }
 
 /// Detect potential UDP attack type based on source port
-pub fn detect_attack_type(src_port: u16, payload: &[u8]) -> Option<UdpAttackType> {
+pub fn detect_attack_type(src_port: u16, _payload: &[u8]) -> Option<UdpAttackType> {
     match src_port {
         53 => Some(UdpAttackType::DnsAmplification),
         123 => Some(UdpAttackType::NtpAmplification),

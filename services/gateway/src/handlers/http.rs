@@ -100,18 +100,16 @@ async fn readiness_check(State(state): State<AppState>) -> impl IntoResponse {
     let mut ready = true;
 
     // If database is configured, it must be reachable
-    if let Some(ref db) = state.db {
-        if sqlx::query("SELECT 1").fetch_one(db).await.is_err() {
+    if let Some(ref db) = state.db
+        && sqlx::query("SELECT 1").fetch_one(db).await.is_err() {
             ready = false;
         }
-    }
 
     // If Redis is configured, it must be reachable
-    if let Some(ref cache) = state.cache {
-        if cache.exists("ready_check").await.is_err() {
+    if let Some(ref cache) = state.cache
+        && cache.exists("ready_check").await.is_err() {
             ready = false;
         }
-    }
 
     if ready {
         (StatusCode::OK, "READY")

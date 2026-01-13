@@ -109,3 +109,6 @@ path = "src/tests/mod.rs"
 [[bench]]
 name = "auth_benchmarks"
 harness = false
+
+[lints]
+workspace = true

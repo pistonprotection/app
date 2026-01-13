@@ -98,3 +98,6 @@ path = "src/tests/mod.rs"
 [[bench]]
 name = "gateway_benchmarks"
 harness = false
+
+[lints]
+workspace = true

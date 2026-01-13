@@ -215,7 +215,7 @@ impl ProtocolAnalyzer for HttpAnalyzer {
         L7Protocol::Http
     }
 
-    fn can_handle(&self, meta: &PacketMeta, payload: &[u8]) -> bool {
+    fn can_handle(&self, _meta: &PacketMeta, payload: &[u8]) -> bool {
         is_http(payload)
     }
 
@@ -232,7 +232,7 @@ impl ProtocolAnalyzer for HttpAnalyzer {
         }
 
         // Parse request line
-        if let Some((method, path, version)) = parse_request_line(payload) {
+        if let Some((method, path, _version)) = parse_request_line(payload) {
             // Check if method is allowed
             if !self.allowed_methods.contains(&method) {
                 debug!(src = %meta.src_ip, method = ?method, "HTTP method not allowed");
@@ -293,7 +293,7 @@ impl ProtocolAnalyzer for Http2Analyzer {
         is_http2(payload)
     }
 
-    fn analyze(&self, meta: &PacketMeta, payload: &[u8]) -> Result<Verdict> {
+    fn analyze(&self, _meta: &PacketMeta, payload: &[u8]) -> Result<Verdict> {
         let mut stats = self.stats.write();
         stats.packets_analyzed += 1;
         stats.bytes_analyzed += payload.len() as u64;

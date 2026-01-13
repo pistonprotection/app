@@ -943,8 +943,8 @@ pub async fn list_audit_logs(
     .bind(&filter.user_id)
     .bind(&filter.resource_type)
     .bind(&filter.action)
-    .bind(&filter.start_time)
-    .bind(&filter.end_time)
+    .bind(filter.start_time)
+    .bind(filter.end_time)
     .bind(page_size as i32)
     .bind(offset as i32)
     .fetch_all(pool)
@@ -965,8 +965,8 @@ pub async fn list_audit_logs(
     .bind(&filter.user_id)
     .bind(&filter.resource_type)
     .bind(&filter.action)
-    .bind(&filter.start_time)
-    .bind(&filter.end_time)
+    .bind(filter.start_time)
+    .bind(filter.end_time)
     .fetch_one(pool)
     .await?;
 

@@ -10,7 +10,7 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio_stream::Stream;
 use tokio_stream::wrappers::BroadcastStream;
-use tracing::{info, instrument, warn};
+use tracing::{info, instrument};
 use uuid::Uuid;
 
 /// Filter service implementation
@@ -36,7 +36,7 @@ impl FilterService {
             .map_err(|e| Error::Internal(format!("Failed to serialize match: {}", e)))?;
 
         // Serialize rate limit to JSON
-        let rate_limit_json = serde_json::to_value(&rule.rate_limit)
+        let rate_limit_json = serde_json::to_value(rule.rate_limit)
             .map_err(|e| Error::Internal(format!("Failed to serialize rate_limit: {}", e)))?;
 
         sqlx::query(
@@ -54,7 +54,7 @@ impl FilterService {
         .bind(&rule.description)
         .bind(rule.priority as i32)
         .bind(&match_json)
-        .bind(rule.action as i32)
+        .bind(rule.action)
         .bind(&rate_limit_json)
         .bind(rule.enabled)
         .bind(now)
@@ -142,7 +142,7 @@ impl FilterService {
         let match_json = serde_json::to_value(&rule.r#match)
             .map_err(|e| Error::Internal(format!("Failed to serialize match: {}", e)))?;
 
-        let rate_limit_json = serde_json::to_value(&rule.rate_limit)
+        let rate_limit_json = serde_json::to_value(rule.rate_limit)
             .map_err(|e| Error::Internal(format!("Failed to serialize rate_limit: {}", e)))?;
 
         // First get the backend_id for cache invalidation
@@ -168,7 +168,7 @@ impl FilterService {
         .bind(&rule.description)
         .bind(rule.priority as i32)
         .bind(&match_json)
-        .bind(rule.action as i32)
+        .bind(rule.action)
         .bind(&rate_limit_json)
         .bind(rule.enabled)
         .bind(now)
@@ -322,7 +322,7 @@ impl FilterService {
             };
 
             // Serialize rate limit to JSON
-            let rate_limit_json = match serde_json::to_value(&rule.rate_limit) {
+            let rate_limit_json = match serde_json::to_value(rule.rate_limit) {
                 Ok(json) => json,
                 Err(e) => {
                     errors.push(common::Error {
@@ -359,7 +359,7 @@ impl FilterService {
             .bind(&rule.description)
             .bind(rule.priority as i32)
             .bind(&match_json)
-            .bind(rule.action as i32)
+            .bind(rule.action)
             .bind(&rate_limit_json)
             .bind(rule.enabled)
             .bind(now)
@@ -587,7 +587,7 @@ impl FilterService {
             if let Some(cache) = &state.cache {
                 // Poll for updates (in production, use Redis SUBSCRIBE)
                 let mut interval = tokio::time::interval(Duration::from_secs(1));
-                let mut last_update_key = format!("filter_last_update:{}", backend_id);
+                let _last_update_key = format!("filter_last_update:{}", backend_id);
 
                 loop {
                     interval.tick().await;
@@ -596,14 +596,11 @@ impl FilterService {
                     if let Ok(Some(update_json)) = cache
                         .get::<String>(&format!("filter_update:{}", backend_id))
                         .await
-                    {
-                        if let Ok(update) = serde_json::from_str::<RuleUpdate>(&update_json) {
-                            if tx.send(update).is_err() {
+                        && let Ok(update) = serde_json::from_str::<RuleUpdate>(&update_json)
+                            && tx.send(update).is_err() {
                                 // No receivers left
                                 break;
                             }
-                        }
-                    }
                 }
             }
         });

@@ -42,7 +42,7 @@ impl BackendService {
         .bind(org_id)
         .bind(&backend.name)
         .bind(&backend.description)
-        .bind(backend.r#type as i32)
+        .bind(backend.r#type)
         .bind(now)
         .bind(now)
         .execute(db)
@@ -63,11 +63,10 @@ impl BackendService {
     #[instrument(skip(self))]
     pub async fn get(&self, id: &str) -> Result<Backend> {
         // Try cache first
-        if let Some(cache) = &self.state.cache {
-            if let Ok(Some(backend)) = cache.get::<Backend>(&format!("backend:{}", id)).await {
+        if let Some(cache) = &self.state.cache
+            && let Ok(Some(backend)) = cache.get::<Backend>(&format!("backend:{}", id)).await {
                 return Ok(backend);
             }
-        }
 
         let db = self.state.db()?;
 
@@ -159,7 +158,7 @@ impl BackendService {
         .bind(&backend.id)
         .bind(&backend.name)
         .bind(&backend.description)
-        .bind(backend.r#type as i32)
+        .bind(backend.r#type)
         .bind(now)
         .execute(db)
         .await?;
@@ -597,12 +596,11 @@ impl BackendService {
     async fn check_redis_verification(&self, domain: &str, expected_value: &str) -> bool {
         if let Some(cache) = &self.state.cache {
             let key = format!("domain_verify:{}", domain);
-            if let Ok(Some(token)) = cache.get::<String>(&key).await {
-                if token == expected_value {
+            if let Ok(Some(token)) = cache.get::<String>(&key).await
+                && token == expected_value {
                     tracing::info!(domain = %domain, "Domain verification successful via Redis");
                     return true;
                 }
-            }
         }
         false
     }
@@ -802,14 +800,13 @@ impl BackendService {
     #[instrument(skip(self))]
     pub async fn get_status(&self, backend_id: &str) -> Result<BackendStatus> {
         // Try to get from Redis (real-time status)
-        if let Some(cache) = &self.state.cache {
-            if let Ok(Some(status)) = cache
+        if let Some(cache) = &self.state.cache
+            && let Ok(Some(status)) = cache
                 .get::<BackendStatus>(&format!("backend_status:{}", backend_id))
                 .await
             {
                 return Ok(status);
             }
-        }
 
         // Get origin health info from database
         let db = self.state.db()?;
@@ -872,17 +869,14 @@ impl BackendService {
                 interval.tick().await;
 
                 // Get current status from cache
-                if let Some(cache) = &state.cache {
-                    if let Ok(Some(status)) = cache
+                if let Some(cache) = &state.cache
+                    && let Ok(Some(status)) = cache
                         .get::<BackendStatus>(&format!("backend_status:{}", backend_id))
                         .await
-                    {
-                        if tx.send(status).is_err() {
+                        && tx.send(status).is_err() {
                             // No receivers left, stop the task
                             break;
                         }
-                    }
-                }
             }
         });
 

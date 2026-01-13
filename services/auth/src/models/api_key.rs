@@ -187,7 +187,7 @@ impl ApiKey {
                 .permissions
                 .iter()
                 .filter_map(|p| ApiKeyPermission::from_str(p))
-                .map(|p| i32::from(p))
+                .map(i32::from)
                 .collect(),
             allowed_ips: self.allowed_ips.clone(),
             enabled: self.enabled,

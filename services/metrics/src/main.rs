@@ -278,7 +278,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let http_addr: SocketAddr = config.http_addr().parse()?;
 
     // Setup health reporter
-    let (mut health_reporter, health_service) = health_reporter();
+    let (health_reporter, health_service) = health_reporter();
     health_reporter
         .set_serving::<MetricsServiceServer<MetricsGrpcService>>()
         .await;
@@ -344,11 +344,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Flush ClickHouse events
-    if let Some(ref ch) = clickhouse {
-        if let Err(e) = ch.flush_all().await {
+    if let Some(ref ch) = clickhouse
+        && let Err(e) = ch.flush_all().await {
             error!("Failed to flush ClickHouse events during shutdown: {}", e);
         }
-    }
 
     telemetry::shutdown();
 

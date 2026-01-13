@@ -4,13 +4,12 @@ use pistonprotection_proto::auth::{
     auth_service_server::{AuthService as ProtoAuthService, AuthServiceServer},
     *,
 };
-use pistonprotection_proto::{PaginationInfo, Timestamp};
+use pistonprotection_proto::PaginationInfo;
 use tonic::{Request, Response, Status};
 use tracing::{error, info};
 
 use crate::models::{
-    AuditLogFilter, CreateApiKeyRequest as ModelCreateApiKeyRequest,
-    CreateInvitationRequest as ModelCreateInvitationRequest, InvitationStatus,
+    AuditLogFilter, CreateApiKeyRequest as ModelCreateApiKeyRequest, InvitationStatus,
     InvitationTokenGenerator, OrganizationRole,
 };
 use crate::services::AppState;
@@ -43,7 +42,7 @@ impl ProtoAuthService for AuthServiceImpl {
             .user_service()
             .get_user_internal(&req.user_id)
             .await
-            .map_err(|e| Status::from(e))?
+            .map_err(Status::from)?
             .ok_or_else(|| Status::not_found("User not found"))?;
 
         Ok(Response::new(GetUserResponse {
@@ -61,14 +60,14 @@ impl ProtoAuthService for AuthServiceImpl {
         let user = user_service
             .get_user_by_email(&req.email)
             .await
-            .map_err(|e| Status::from(e))?
+            .map_err(Status::from)?
             .ok_or_else(|| Status::not_found("User not found"))?;
 
         // Get internal user for proto conversion
         let internal_user = user_service
             .get_user_internal(&user.id)
             .await
-            .map_err(|e| Status::from(e))?
+            .map_err(Status::from)?
             .ok_or_else(|| Status::not_found("User not found"))?;
 
         Ok(Response::new(GetUserResponse {
@@ -91,23 +90,23 @@ impl ProtoAuthService for AuthServiceImpl {
         let org = org_service
             .get_organization(&req.organization_id)
             .await
-            .map_err(|e| Status::from(e))?
+            .map_err(Status::from)?
             .ok_or_else(|| Status::not_found("Organization not found"))?;
 
         let subscription = org_service
             .get_subscription(&req.organization_id)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         let limits = org_service
             .get_limits(&req.organization_id)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         let usage = org_service
             .get_usage(&req.organization_id)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(GetOrganizationResponse {
             organization: Some(org.to_proto(
@@ -129,7 +128,7 @@ impl ProtoAuthService for AuthServiceImpl {
             .organization_service()
             .list_user_organizations(&req.user_id)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(ListUserOrganizationsResponse {
             organizations: orgs
@@ -150,7 +149,7 @@ impl ProtoAuthService for AuthServiceImpl {
             .organization_service()
             .get_member(&req.organization_id, &req.user_id)
             .await
-            .map_err(|e| Status::from(e))?
+            .map_err(Status::from)?
             .ok_or_else(|| Status::not_found("Member not found"))?;
 
         // Get user details
@@ -159,7 +158,7 @@ impl ProtoAuthService for AuthServiceImpl {
             .user_service()
             .get_user_internal(&req.user_id)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(GetOrganizationMemberResponse {
             member: Some(member.to_proto(user.as_ref())),
@@ -181,7 +180,7 @@ impl ProtoAuthService for AuthServiceImpl {
             .organization_service()
             .list_members(&req.organization_id, page, page_size)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         // Get user details for each member
         let user_service = self.state.user_service();
@@ -191,7 +190,7 @@ impl ProtoAuthService for AuthServiceImpl {
             let user = user_service
                 .get_user_internal(&member.user_id)
                 .await
-                .map_err(|e| Status::from(e))?;
+                .map_err(Status::from)?;
             proto_members.push(member.to_proto(user.as_ref()));
         }
 
@@ -228,7 +227,7 @@ impl ProtoAuthService for AuthServiceImpl {
                 &req.action,
             )
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(CheckPermissionResponse {
             allowed,
@@ -289,7 +288,7 @@ impl ProtoAuthService for AuthServiceImpl {
                     .organization_service()
                     .get_organization(&key.organization_id)
                     .await
-                    .map_err(|e| Status::from(e))?;
+                    .map_err(Status::from)?;
 
                 Ok(Response::new(ValidateApiKeyResponse {
                     valid: true,
@@ -355,7 +354,7 @@ impl ProtoAuthService for AuthServiceImpl {
             .api_key_service()
             .create_key(&req.organization_id, &user_id, model_request)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         // Log the action
         let _ = self
@@ -411,7 +410,7 @@ impl ProtoAuthService for AuthServiceImpl {
             .api_key_service()
             .list_keys(&req.organization_id, page, page_size)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(ListApiKeysResponse {
             keys: keys
@@ -456,7 +455,7 @@ impl ProtoAuthService for AuthServiceImpl {
             .api_key_service()
             .revoke_key(&req.key_id)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(RevokeApiKeyResponse { success }))
     }
@@ -513,7 +512,7 @@ impl ProtoAuthService for AuthServiceImpl {
             .audit_service()
             .log(model_entry)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(CreateAuditLogResponse {
             entry: Some(created_entry.to_proto()),
@@ -558,7 +557,7 @@ impl ProtoAuthService for AuthServiceImpl {
             .audit_service()
             .list(&filter, page, page_size)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(ListAuditLogsResponse {
             entries: entries.into_iter().map(|e| e.to_proto()).collect(),
@@ -1119,7 +1118,7 @@ impl ProtoAuthService for AuthServiceImpl {
             status: stripe_invoice
                 .status
                 .map(|s| {
-                    crate::models::subscription::InvoiceStatus::from_stripe_status(&s.to_string())
+                    crate::models::subscription::InvoiceStatus::from_stripe_status(s.as_ref())
                 })
                 .map(i32::from)
                 .unwrap_or(0),
@@ -1215,7 +1214,7 @@ impl ProtoAuthService for AuthServiceImpl {
             .organization_service()
             .get_limits(&req.organization_id)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(GetUsageSummaryResponse {
             summary: summary.map(|s| pistonprotection_proto::auth::UsageSummary {
@@ -1338,7 +1337,7 @@ pub async fn create_server(
         .register_encoded_file_descriptor_set(pistonprotection_proto::FILE_DESCRIPTOR_SET)
         .build_v1()?;
 
-    let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
+    let (health_reporter, health_service) = tonic_health::server::health_reporter();
     health_reporter
         .set_serving::<AuthServiceServer<AuthServiceImpl>>()
         .await;

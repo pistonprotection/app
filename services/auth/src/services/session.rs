@@ -192,7 +192,7 @@ impl SessionService {
         user_id: &str,
     ) -> Result<(), SessionError> {
         let session_key = format!("session:{}", session_id);
-        let user_key = format!("user:{}:sessions", user_id);
+        let _user_key = format!("user:{}:sessions", user_id);
 
         // Delete session from cache
         self.cache

@@ -8,18 +8,15 @@ use std::fmt;
 /// Subscription plan types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "plan_type", rename_all = "lowercase")]
+#[derive(Default)]
 pub enum PlanType {
+    #[default]
     Free,
     Starter,
     Pro,
     Enterprise,
 }
 
-impl Default for PlanType {
-    fn default() -> Self {
-        Self::Free
-    }
-}
 
 impl fmt::Display for PlanType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -156,16 +153,13 @@ pub struct PlanLimits {
 /// Billing period
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "billing_period", rename_all = "lowercase")]
+#[derive(Default)]
 pub enum BillingPeriod {
+    #[default]
     Monthly,
     Yearly,
 }
 
-impl Default for BillingPeriod {
-    fn default() -> Self {
-        Self::Monthly
-    }
-}
 
 impl From<BillingPeriod> for i32 {
     fn from(period: BillingPeriod) -> Self {
@@ -191,7 +185,9 @@ impl TryFrom<i32> for BillingPeriod {
 /// Invoice status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "invoice_status", rename_all = "lowercase")]
+#[derive(Default)]
 pub enum InvoiceStatus {
+    #[default]
     Draft,
     Open,
     Paid,
@@ -199,11 +195,6 @@ pub enum InvoiceStatus {
     Void,
 }
 
-impl Default for InvoiceStatus {
-    fn default() -> Self {
-        Self::Draft
-    }
-}
 
 impl From<InvoiceStatus> for i32 {
     fn from(status: InvoiceStatus) -> Self {
@@ -249,7 +240,9 @@ impl InvoiceStatus {
 /// Payment intent status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "payment_status", rename_all = "lowercase")]
+#[derive(Default)]
 pub enum PaymentStatus {
+    #[default]
     RequiresPaymentMethod,
     RequiresConfirmation,
     RequiresAction,
@@ -259,11 +252,6 @@ pub enum PaymentStatus {
     RequiresCapture,
 }
 
-impl Default for PaymentStatus {
-    fn default() -> Self {
-        Self::RequiresPaymentMethod
-    }
-}
 
 impl PaymentStatus {
     /// Convert from Stripe payment intent status string
@@ -377,18 +365,15 @@ pub struct UsageRecord {
 /// Usage metric types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "usage_metric_type", rename_all = "snake_case")]
+#[derive(Default)]
 pub enum UsageMetricType {
+    #[default]
     Requests,
     BandwidthBytes,
     BlockedRequests,
     ChallengesServed,
 }
 
-impl Default for UsageMetricType {
-    fn default() -> Self {
-        Self::Requests
-    }
-}
 
 impl From<UsageMetricType> for i32 {
     fn from(metric: UsageMetricType) -> Self {
@@ -479,17 +464,14 @@ pub struct UpdateSubscriptionRequest {
 
 /// Proration behavior for subscription changes
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum ProrationBehavior {
+    #[default]
     CreateProrations,
     None,
     AlwaysInvoice,
 }
 
-impl Default for ProrationBehavior {
-    fn default() -> Self {
-        Self::CreateProrations
-    }
-}
 
 impl ProrationBehavior {
     pub fn as_stripe_str(&self) -> &'static str {

@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Configuration for connection pools
 #[derive(Debug, Clone)]

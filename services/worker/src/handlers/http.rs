@@ -127,7 +127,7 @@ async fn readiness_check(State(state): State<WorkerState>) -> impl IntoResponse 
 async fn metrics(State(state): State<WorkerState>) -> impl IntoResponse {
     // Collect additional worker-specific metrics
     let map_stats = state.map_stats();
-    let sync_stats = state.sync_stats();
+    let _sync_stats = state.sync_stats();
 
     // Update custom metrics
     pistonprotection_common::metrics::ACTIVE_CONNECTIONS

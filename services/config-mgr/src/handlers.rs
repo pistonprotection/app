@@ -294,7 +294,7 @@ impl WorkerService for WorkerGrpcService {
         let req = request.into_inner();
 
         // Track errors
-        let mut errors = Vec::new();
+        let errors = Vec::new();
 
         for update in &req.updates {
             // Log the map update request
@@ -381,8 +381,8 @@ impl WorkerService for WorkerGrpcService {
             // Add top attackers to block list via MapUpdate
             for source in req.sources.iter().take(100) {
                 // Extract IP bytes from the IpAddress proto
-                if let Some(ref ip_addr) = source.ip {
-                    if let Some(ref addr) = ip_addr.address {
+                if let Some(ref ip_addr) = source.ip
+                    && let Some(ref addr) = ip_addr.address {
                         let ip_bytes = match addr {
                             pistonprotection_proto::common::ip_address::Address::Ipv4(v) => {
                                 v.to_be_bytes().to_vec()
@@ -399,7 +399,6 @@ impl WorkerService for WorkerGrpcService {
                             flags: 0,
                         });
                     }
-                }
             }
         } else if req.attack_pps > 10_000 || req.sources.len() > 100 {
             // Medium severity - moderate protection increase
@@ -481,7 +480,7 @@ impl WorkerService for WorkerGrpcService {
 pub async fn create_grpc_server(
     state: AppState,
 ) -> Result<tonic::transport::server::Router, Box<dyn std::error::Error + Send + Sync>> {
-    let (mut health_reporter, health_service) = health_reporter();
+    let (health_reporter, health_service) = health_reporter();
     health_reporter
         .set_serving::<WorkerServiceServer<WorkerGrpcService>>()
         .await;

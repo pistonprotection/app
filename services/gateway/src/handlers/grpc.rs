@@ -53,7 +53,7 @@ impl BackendServiceTrait for BackendGrpcService {
             .service
             .create(&req.organization_id, backend)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(CreateBackendResponse {
             backend: Some(created),
@@ -71,7 +71,7 @@ impl BackendServiceTrait for BackendGrpcService {
             .service
             .get(&req.backend_id)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(GetBackendResponse {
             backend: Some(backend),
@@ -92,7 +92,7 @@ impl BackendServiceTrait for BackendGrpcService {
             .service
             .update(backend)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(UpdateBackendResponse {
             backend: Some(updated),
@@ -109,7 +109,7 @@ impl BackendServiceTrait for BackendGrpcService {
         self.service
             .delete(&req.backend_id)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(DeleteBackendResponse { success: true }))
     }
@@ -130,7 +130,7 @@ impl BackendServiceTrait for BackendGrpcService {
                 pagination.page_size.max(1).min(100),
             )
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(ListBackendsResponse {
             backends,
@@ -379,7 +379,7 @@ impl FilterServiceTrait for FilterGrpcService {
             .service
             .create(&req.backend_id, rule)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(CreateRuleResponse {
             rule: Some(created),
@@ -397,7 +397,7 @@ impl FilterServiceTrait for FilterGrpcService {
             .service
             .get(&req.rule_id)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(GetRuleResponse { rule: Some(rule) }))
     }
@@ -416,7 +416,7 @@ impl FilterServiceTrait for FilterGrpcService {
             .service
             .update(rule)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(UpdateRuleResponse {
             rule: Some(updated),
@@ -433,7 +433,7 @@ impl FilterServiceTrait for FilterGrpcService {
         self.service
             .delete(&req.rule_id)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(DeleteRuleResponse { success: true }))
     }
@@ -455,7 +455,7 @@ impl FilterServiceTrait for FilterGrpcService {
                 pagination.page_size.max(1).min(100),
             )
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(ListRulesResponse {
             rules,
@@ -629,7 +629,7 @@ impl MetricsServiceTrait for MetricsGrpcService {
             .service
             .get_traffic_metrics(&req.backend_id)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(GetTrafficMetricsResponse {
             metrics: Some(metrics),
@@ -663,7 +663,7 @@ impl MetricsServiceTrait for MetricsGrpcService {
                 .service
                 .get_time_series(&req.backend_id, metric_name, start_time, end_time, granularity)
                 .await
-                .map_err(|e| Status::from(e))?;
+                .map_err(Status::from)?;
             series.push(ts);
         }
 
@@ -708,7 +708,7 @@ impl MetricsServiceTrait for MetricsGrpcService {
             .service
             .get_attack_metrics(&req.backend_id)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(GetAttackMetricsResponse {
             metrics: Some(metrics),
@@ -742,7 +742,7 @@ impl MetricsServiceTrait for MetricsGrpcService {
                 .service
                 .get_time_series(&req.backend_id, metric_name, start_time, end_time, granularity)
                 .await
-                .map_err(|e| Status::from(e))?;
+                .map_err(Status::from)?;
             series.push(ts);
         }
 
@@ -787,7 +787,7 @@ impl MetricsServiceTrait for MetricsGrpcService {
             .service
             .get_origin_metrics(&req.backend_id, &req.origin_id)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(GetOriginMetricsResponse {
             metrics: Some(metrics),
@@ -805,7 +805,7 @@ impl MetricsServiceTrait for MetricsGrpcService {
             .service
             .get_worker_metrics(&req.worker_id)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(GetWorkerMetricsResponse {
             metrics: Some(metrics),
@@ -827,7 +827,7 @@ impl MetricsServiceTrait for MetricsGrpcService {
             .service
             .list_worker_metrics(page, page_size)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(ListWorkerMetricsResponse {
             workers,
@@ -863,7 +863,7 @@ impl MetricsServiceTrait for MetricsGrpcService {
             .service
             .get_geo_metrics(&req.backend_id, start_time, end_time)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(GetGeoMetricsResponse {
             metrics: Some(metrics),
@@ -918,7 +918,7 @@ impl MetricsServiceTrait for MetricsGrpcService {
             .service
             .get_attack_event(&req.event_id)
             .await
-            .map_err(|e| Status::from(e))?
+            .map_err(Status::from)?
             .ok_or_else(|| Status::not_found("Attack event not found"))?;
 
         Ok(Response::new(GetAttackEventResponse { event: Some(event) }))
@@ -951,7 +951,7 @@ impl MetricsServiceTrait for MetricsGrpcService {
             .service
             .list_attack_events(&req.backend_id, start_time, end_time, page, page_size)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(ListAttackEventsResponse {
             events,
@@ -971,7 +971,7 @@ pub async fn create_server(
     state: AppState,
 ) -> Result<tonic::transport::server::Router, Box<dyn std::error::Error + Send + Sync>> {
     // Health service
-    let (mut health_reporter, health_service) = health_reporter();
+    let (health_reporter, health_service) = health_reporter();
     health_reporter
         .set_serving::<BackendServiceServer<BackendGrpcService>>()
         .await;

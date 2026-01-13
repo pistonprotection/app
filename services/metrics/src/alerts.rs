@@ -10,14 +10,14 @@ use pistonprotection_proto::{
     metrics::*,
 };
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::sync::{RwLock, broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -515,11 +515,10 @@ impl AlertManager {
                     continue;
                 }
 
-                if let Some(ref condition) = alert.condition {
-                    if let Some(&current_value) = metrics.get(&condition.metric) {
+                if let Some(ref condition) = alert.condition
+                    && let Some(&current_value) = metrics.get(&condition.metric) {
                         self.evaluate_single_alert(&alert, current_value).await?;
                     }
-                }
             }
         }
 

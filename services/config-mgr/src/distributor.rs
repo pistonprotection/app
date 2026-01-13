@@ -142,7 +142,7 @@ impl ConfigDistributor {
     }
 
     /// Check if worker needs config update
-    pub fn needs_update(&self, worker_id: &str, worker_version: u32) -> bool {
+    pub fn needs_update(&self, _worker_id: &str, worker_version: u32) -> bool {
         self.store.current_version() > worker_version
     }
 

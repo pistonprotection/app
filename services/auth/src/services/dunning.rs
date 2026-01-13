@@ -7,8 +7,8 @@
 //! 4. Final notice after 7 days before account downgrade
 //! 5. Account downgrade after 10 days if payment not recovered
 
-use crate::models::{Organization, Subscription, SubscriptionStatus};
-use crate::services::email::{EmailRecipient, EmailService, EmailTemplate};
+use crate::models::SubscriptionStatus;
+use crate::services::email::{EmailRecipient, EmailService};
 use crate::services::stripe::StripeService;
 use chrono::{DateTime, Duration, Utc};
 use pistonprotection_common::error::{Error, Result};

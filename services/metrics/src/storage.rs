@@ -15,10 +15,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 /// Storage errors
@@ -562,13 +561,13 @@ impl TimeSeriesStorage {
         let start_time = query
             .start_time
             .as_ref()
-            .map(|ts| DateTime::<Utc>::from(ts))
+            .map(DateTime::<Utc>::from)
             .unwrap_or_else(|| Utc::now() - ChronoDuration::hours(1));
 
         let end_time = query
             .end_time
             .as_ref()
-            .map(|ts| DateTime::<Utc>::from(ts))
+            .map(DateTime::<Utc>::from)
             .unwrap_or_else(Utc::now);
 
         let metrics_to_fetch = if query.metrics.is_empty() {
@@ -616,13 +615,13 @@ impl TimeSeriesStorage {
         let start_time = query
             .start_time
             .as_ref()
-            .map(|ts| DateTime::<Utc>::from(ts))
+            .map(DateTime::<Utc>::from)
             .unwrap_or_else(|| Utc::now() - ChronoDuration::hours(1));
 
         let end_time = query
             .end_time
             .as_ref()
-            .map(|ts| DateTime::<Utc>::from(ts))
+            .map(DateTime::<Utc>::from)
             .unwrap_or_else(Utc::now);
 
         let metrics_to_fetch = if query.metrics.is_empty() {
@@ -938,12 +937,12 @@ impl TimeSeriesStorage {
 
         let start = start_time
             .as_ref()
-            .map(|ts| DateTime::<Utc>::from(ts))
+            .map(DateTime::<Utc>::from)
             .unwrap_or_else(|| Utc::now() - ChronoDuration::days(30));
 
         let end = end_time
             .as_ref()
-            .map(|ts| DateTime::<Utc>::from(ts))
+            .map(DateTime::<Utc>::from)
             .unwrap_or_else(Utc::now);
 
         // Get total count
@@ -1043,12 +1042,12 @@ impl TimeSeriesStorage {
 
         let start = start_time
             .as_ref()
-            .map(|ts| DateTime::<Utc>::from(ts))
+            .map(DateTime::<Utc>::from)
             .unwrap_or_else(|| Utc::now() - ChronoDuration::hours(24));
 
         let end = end_time
             .as_ref()
-            .map(|ts| DateTime::<Utc>::from(ts))
+            .map(DateTime::<Utc>::from)
             .unwrap_or_else(Utc::now);
 
         let rows = sqlx::query(

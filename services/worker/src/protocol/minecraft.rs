@@ -3,8 +3,7 @@
 use super::{AnalyzerStats, L7Protocol, PacketMeta, ProtocolAnalyzer, Verdict};
 use parking_lot::RwLock;
 use pistonprotection_common::error::Result;
-use std::sync::atomic::{AtomicU64, Ordering};
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// Minecraft Java Edition packet types
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -81,19 +80,19 @@ pub fn is_minecraft_bedrock(payload: &[u8]) -> bool {
         0x01 | 0x02 => {
             // Unconnected Ping/Pong - magic at offset 17
             if payload.len() >= 33 {
-                return &payload[17..33] == &RAKNET_MAGIC;
+                return payload[17..33] == RAKNET_MAGIC;
             }
         }
-        0x05 | 0x06 | 0x07 | 0x08 => {
+        0x05..=0x08 => {
             // Connection packets - magic at offset 1
             if payload.len() >= 17 {
-                return &payload[1..17] == &RAKNET_MAGIC;
+                return payload[1..17] == RAKNET_MAGIC;
             }
         }
         0x1c => {
             // Unconnected Pong - magic after timestamp and server GUID
             if payload.len() >= 35 {
-                return &payload[17..33] == &RAKNET_MAGIC;
+                return payload[17..33] == RAKNET_MAGIC;
             }
         }
         _ => {}
@@ -184,7 +183,7 @@ impl MinecraftJavaAnalyzer {
 
         // Server address (string with length prefix)
         let (addr_len, al_size) = read_varint(rest)?;
-        if addr_len < 0 || addr_len > 255 {
+        if !(0..=255).contains(&addr_len) {
             return None;
         }
         let addr_len = addr_len as usize;
@@ -334,7 +333,7 @@ impl MinecraftBedrockAnalyzer {
             return false;
         }
 
-        &payload[magic_offset..magic_offset + 16] == &RAKNET_MAGIC
+        payload[magic_offset..magic_offset + 16] == RAKNET_MAGIC
     }
 }
 
@@ -355,8 +354,8 @@ impl ProtocolAnalyzer for MinecraftBedrockAnalyzer {
         let packet_type = self.parse_packet_type(payload);
 
         // Validate magic
-        if self.validate_magic {
-            if !self.validate_magic(payload, packet_type) {
+        if self.validate_magic
+            && !self.validate_magic(payload, packet_type) {
                 debug!(
                     src = %meta.src_ip,
                     packet_type = ?packet_type,
@@ -365,7 +364,6 @@ impl ProtocolAnalyzer for MinecraftBedrockAnalyzer {
                 stats.packets_dropped += 1;
                 return Ok(Verdict::Drop);
             }
-        }
 
         stats.packets_passed += 1;
         Ok(Verdict::Pass)

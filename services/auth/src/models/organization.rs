@@ -8,19 +8,16 @@ use validator::Validate;
 /// Organization subscription status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "subscription_status", rename_all = "lowercase")]
+#[derive(Default)]
 pub enum SubscriptionStatus {
     Active,
+    #[default]
     Trialing,
     PastDue,
     Canceled,
     Unpaid,
 }
 
-impl Default for SubscriptionStatus {
-    fn default() -> Self {
-        Self::Trialing
-    }
-}
 
 impl From<SubscriptionStatus> for i32 {
     fn from(status: SubscriptionStatus) -> Self {
@@ -52,18 +49,15 @@ impl TryFrom<i32> for SubscriptionStatus {
 /// Organization role enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "organization_role", rename_all = "lowercase")]
+#[derive(Default)]
 pub enum OrganizationRole {
     Owner,
     Admin,
+    #[default]
     Member,
     Viewer,
 }
 
-impl Default for OrganizationRole {
-    fn default() -> Self {
-        Self::Member
-    }
-}
 
 impl From<OrganizationRole> for i32 {
     fn from(role: OrganizationRole) -> Self {
@@ -269,7 +263,7 @@ fn validate_slug(slug: &str) -> Result<(), validator::ValidationError> {
     if !slug
         .chars()
         .next()
-        .map_or(false, |c| c.is_ascii_lowercase())
+        .is_some_and(|c| c.is_ascii_lowercase())
     {
         return Err(validator::ValidationError::new("slug_start_letter"));
     }

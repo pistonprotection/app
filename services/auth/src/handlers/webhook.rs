@@ -9,7 +9,7 @@ use axum::{
     routing::post,
 };
 use hmac::{Hmac, Mac};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::Sha256;
 use std::sync::Arc;
 use stripe_rust::{
@@ -357,7 +357,7 @@ async fn process_webhook_event(state: &WebhookState, event: &Event) -> Result<()
 // ========== Customer Event Handlers ==========
 
 async fn handle_customer_created(
-    state: &WebhookState,
+    _state: &WebhookState,
     customer: &Customer,
 ) -> Result<(), anyhow::Error> {
     info!(
@@ -370,7 +370,7 @@ async fn handle_customer_created(
 }
 
 async fn handle_customer_updated(
-    state: &WebhookState,
+    _state: &WebhookState,
     customer: &Customer,
 ) -> Result<(), anyhow::Error> {
     info!(
@@ -382,7 +382,7 @@ async fn handle_customer_updated(
 }
 
 async fn handle_customer_deleted(
-    state: &WebhookState,
+    _state: &WebhookState,
     customer: &Customer,
 ) -> Result<(), anyhow::Error> {
     warn!(
@@ -460,14 +460,13 @@ async fn get_checkout_email(
     }
 
     // Try from customer_details
-    if let Some(details) = &session.customer_details {
-        if let Some(email) = &details.email {
+    if let Some(details) = &session.customer_details
+        && let Some(email) = &details.email {
             return Some(EmailRecipient {
                 email: email.clone(),
                 name: details.name.clone(),
             });
         }
-    }
 
     None
 }
@@ -493,13 +492,11 @@ fn format_amount(amount: Option<i64>, currency: &Option<stripe_rust::Currency>) 
 /// Extract plan name from invoice
 fn get_invoice_plan_name(invoice: &StripeInvoice) -> String {
     // Try to get from invoice lines
-    if let Some(lines) = &invoice.lines {
-        if let Some(first_line) = lines.data.first() {
-            if let Some(description) = &first_line.description {
+    if let Some(lines) = &invoice.lines
+        && let Some(first_line) = lines.data.first()
+            && let Some(description) = &first_line.description {
                 return description.clone();
             }
-        }
-    }
 
     "PistonProtection Plan".to_string()
 }
@@ -555,7 +552,7 @@ async fn handle_subscription_deleted(
     // Update subscription status to canceled
     state
         .stripe_service
-        .update_subscription_status(&subscription.id.to_string(), SubscriptionStatus::Canceled)
+        .update_subscription_status(subscription.id.as_ref(), SubscriptionStatus::Canceled)
         .await?;
 
     // Send cancellation email
@@ -563,9 +560,8 @@ async fn handle_subscription_deleted(
         let end_date = subscription
             .ended_at
             .or(Some(subscription.current_period_end))
-            .map(|ts| chrono::DateTime::from_timestamp(ts, 0)
+            .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0)
                 .map(|dt| dt.format("%B %d, %Y").to_string()))
-            .flatten()
             .unwrap_or_else(|| "soon".to_string());
 
         if let Err(e) = state
@@ -604,9 +600,8 @@ async fn handle_subscription_trial_ending(
 
         let trial_end_date = subscription
             .trial_end
-            .map(|ts| chrono::DateTime::from_timestamp(ts, 0)
+            .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0)
                 .map(|dt| dt.format("%B %d, %Y").to_string()))
-            .flatten()
             .unwrap_or_else(|| "soon".to_string());
 
         if let Err(e) = state
@@ -718,14 +713,12 @@ async fn handle_invoice_paid(
             .stripe_service
             .get_subscription_by_stripe_id(&sub_id)
             .await
-        {
-            if local_sub.status == SubscriptionStatus::PastDue {
+            && local_sub.status == SubscriptionStatus::PastDue {
                 state
                     .stripe_service
                     .update_subscription_status(&sub_id, SubscriptionStatus::Active)
                     .await?;
             }
-        }
     }
 
     // Send payment receipt email
@@ -828,7 +821,7 @@ async fn handle_invoice_payment_action_required(
 }
 
 async fn handle_invoice_upcoming(
-    state: &WebhookState,
+    _state: &WebhookState,
     invoice: &StripeInvoice,
 ) -> Result<(), anyhow::Error> {
     info!(
@@ -895,7 +888,7 @@ async fn handle_invoice_voided(
 // ========== Payment Intent Event Handlers ==========
 
 async fn handle_payment_intent_created(
-    state: &WebhookState,
+    _state: &WebhookState,
     payment_intent: &PaymentIntent,
 ) -> Result<(), anyhow::Error> {
     info!(
@@ -907,7 +900,7 @@ async fn handle_payment_intent_created(
 }
 
 async fn handle_payment_intent_succeeded(
-    state: &WebhookState,
+    _state: &WebhookState,
     payment_intent: &PaymentIntent,
 ) -> Result<(), anyhow::Error> {
     info!(
@@ -923,7 +916,7 @@ async fn handle_payment_intent_succeeded(
 }
 
 async fn handle_payment_intent_failed(
-    state: &WebhookState,
+    _state: &WebhookState,
     payment_intent: &PaymentIntent,
 ) -> Result<(), anyhow::Error> {
     warn!(
@@ -939,7 +932,7 @@ async fn handle_payment_intent_failed(
 }
 
 async fn handle_payment_intent_canceled(
-    state: &WebhookState,
+    _state: &WebhookState,
     payment_intent: &PaymentIntent,
 ) -> Result<(), anyhow::Error> {
     info!(
@@ -950,7 +943,7 @@ async fn handle_payment_intent_canceled(
 }
 
 async fn handle_payment_intent_requires_action(
-    state: &WebhookState,
+    _state: &WebhookState,
     payment_intent: &PaymentIntent,
 ) -> Result<(), anyhow::Error> {
     info!(
@@ -1003,7 +996,7 @@ async fn handle_checkout_session_completed(
 }
 
 async fn handle_checkout_session_expired(
-    state: &WebhookState,
+    _state: &WebhookState,
     session: &CheckoutSession,
 ) -> Result<(), anyhow::Error> {
     info!(

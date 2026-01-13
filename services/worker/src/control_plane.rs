@@ -9,8 +9,7 @@ use crate::ebpf::{interface::NetworkInterface, loader::EbpfLoader};
 use parking_lot::RwLock;
 use pistonprotection_common::error::{Error, Result};
 use pistonprotection_proto::worker::{
-    BackendMetrics, DeregisterRequest, FilterConfig, GetConfigRequest, HeartbeatRequest,
-    HeartbeatResponse, InterfaceMetrics, RegisterRequest, ReportAttackRequest,
+    BackendMetrics, DeregisterRequest, FilterConfig, GetConfigRequest, HeartbeatRequest, InterfaceMetrics, RegisterRequest, ReportAttackRequest,
     ReportMetricsRequest, StreamConfigRequest, Worker, WorkerCapabilities, WorkerStatus,
     worker_service_client::WorkerServiceClient,
 };
@@ -18,8 +17,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::time::Duration;
-use tokio::sync::{Mutex, broadcast, mpsc, watch};
-use tokio::time::{Instant, interval, sleep, timeout};
+use tokio::sync::{Mutex, broadcast, watch};
+use tokio::time::{interval, sleep, timeout};
 use tonic::transport::{Channel, Endpoint};
 use tracing::{debug, error, info, warn};
 
@@ -332,20 +331,20 @@ impl ControlPlaneClient {
         self.connect_and_register().await?;
 
         // Spawn heartbeat task
-        let heartbeat_handle = self.spawn_heartbeat_task();
+        let _heartbeat_handle = self.spawn_heartbeat_task();
 
         // Spawn metrics reporting task
-        let metrics_handle = self.spawn_metrics_task();
+        let _metrics_handle = self.spawn_metrics_task();
 
         // Spawn config streaming task if enabled
-        let config_handle = if self.config.enable_config_stream {
+        let _config_handle = if self.config.enable_config_stream {
             Some(self.spawn_config_stream_task())
         } else {
             None
         };
 
         // Spawn reconnection monitor
-        let reconnect_handle = self.spawn_reconnection_task();
+        let _reconnect_handle = self.spawn_reconnection_task();
 
         Ok(())
     }
@@ -658,7 +657,7 @@ impl ControlPlaneClient {
         let state = Arc::clone(&self.state);
         let config_version = Arc::clone(&self.config_version);
         let config_sync = Arc::clone(&self.config_sync);
-        let request_timeout = self.config.request_timeout;
+        let _request_timeout = self.config.request_timeout;
         let mut shutdown_rx = self.shutdown_tx.subscribe();
 
         tokio::spawn(async move {
@@ -742,7 +741,7 @@ impl ControlPlaneClient {
         let reconnect_attempts = Arc::clone(&self.reconnect_attempts);
         let last_heartbeat = Arc::clone(&self.last_heartbeat);
         let config = self.config.clone();
-        let interfaces = Arc::clone(&self.interfaces);
+        let _interfaces = Arc::clone(&self.interfaces);
         let state_tx = self.state_tx.clone();
         let mut shutdown_rx = self.shutdown_tx.subscribe();
 
@@ -1178,7 +1177,7 @@ fn get_network_drivers(interfaces: &[NetworkInterface]) -> Vec<String> {
 
 /// Collect worker-level metrics
 fn collect_worker_metrics(
-    loader: &Arc<RwLock<EbpfLoader>>,
+    _loader: &Arc<RwLock<EbpfLoader>>,
     interfaces: &Arc<Vec<NetworkInterface>>,
 ) -> WorkerMetricsSnapshot {
     let mut sys = sysinfo::System::new_all();
@@ -1216,7 +1215,7 @@ fn collect_worker_metrics(
 fn collect_backend_metrics(loader: &Arc<RwLock<EbpfLoader>>) -> Vec<BackendMetricsSnapshot> {
     let loader_guard = loader.read();
     let maps = loader_guard.maps();
-    let map_manager = maps.read();
+    let _map_manager = maps.read();
 
     // In a real implementation, read from eBPF maps
     // For now, return empty

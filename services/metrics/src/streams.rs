@@ -13,7 +13,6 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::broadcast;
 use tokio::time::Interval;
-use tokio_stream::wrappers::BroadcastStream;
 use tonic::Status;
 use tracing::{debug, info, warn};
 
@@ -145,8 +144,8 @@ impl Stream for TrafficMetricsStream {
             self.sent_initial = true;
 
             // Get current metrics synchronously
-            let backend_id = self.backend_id.clone();
-            let aggregator = self.aggregator.clone();
+            let _backend_id = self.backend_id.clone();
+            let _aggregator = self.aggregator.clone();
 
             // We need to spawn a task to get the initial value since get_traffic_metrics is async
             // For simplicity, we'll just wait for the first interval tick
@@ -185,7 +184,7 @@ impl Stream for TrafficMetricsStream {
 
                 // Since we can't easily await here, we use a workaround:
                 // Create a future and poll it
-                let fut = async move { aggregator.get_traffic_metrics(&backend_id).await };
+                let _fut = async move { aggregator.get_traffic_metrics(&backend_id).await };
 
                 // For a proper implementation, we'd use a pinned future
                 // For now, we'll rely on the broadcast updates which is the primary mechanism

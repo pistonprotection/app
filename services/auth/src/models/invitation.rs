@@ -10,18 +10,15 @@ use super::OrganizationRole;
 /// Invitation status enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "invitation_status", rename_all = "lowercase")]
+#[derive(Default)]
 pub enum InvitationStatus {
+    #[default]
     Pending,
     Accepted,
     Expired,
     Revoked,
 }
 
-impl Default for InvitationStatus {
-    fn default() -> Self {
-        Self::Pending
-    }
-}
 
 impl From<InvitationStatus> for i32 {
     fn from(status: InvitationStatus) -> Self {

@@ -5,7 +5,6 @@
 
 use pistonprotection_common::{config::Config, telemetry};
 use std::net::SocketAddr;
-use std::sync::Arc;
 use tokio::signal;
 use tracing::{error, info};
 
@@ -66,16 +65,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start HTTP server (health checks, metrics)
     let http_addr: SocketAddr = base_config.http_addr().parse()?;
     let http_server = handlers::http::create_router(app_state.clone());
-    let http_handle = tokio::spawn(async move {
+    let _http_handle = tokio::spawn(async move {
         info!("HTTP server listening on {}", http_addr);
-        let listener = tokio::net::TcpListener::bind(http_addr).await.unwrap();
-        axum::serve(listener, http_server).await.unwrap();
+        let listener = match tokio::net::TcpListener::bind(http_addr).await {
+            Ok(l) => l,
+            Err(e) => {
+                error!("Failed to bind HTTP server: {}", e);
+                return;
+            }
+        };
+        if let Err(e) = axum::serve(listener, http_server).await {
+            error!("HTTP server error: {}", e);
+        }
     });
 
     // Start gRPC server
     let grpc_addr: SocketAddr = base_config.grpc_addr().parse()?;
     let grpc_server = handlers::grpc::create_server(app_state.clone()).await?;
-    let grpc_handle = tokio::spawn(async move {
+    let _grpc_handle = tokio::spawn(async move {
         info!("gRPC server listening on {}", grpc_addr);
         if let Err(e) = grpc_server.serve(grpc_addr).await {
             error!("gRPC server error: {}", e);

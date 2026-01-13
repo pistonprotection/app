@@ -87,3 +87,6 @@ path = "src/tests/mod.rs"
 [[bench]]
 name = "worker_benchmarks"
 harness = false
+
+[lints]
+workspace = true

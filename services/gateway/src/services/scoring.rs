@@ -6,13 +6,12 @@ use std::net::IpAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use chrono::{Duration, Utc};
+use chrono::Duration;
 use pistonprotection_common::scoring::{
     ActionType as ScoringActionType, BehaviorCategory as ScoringBehaviorCategory, IPRecord,
     ScoringEngine, ThreatIntelEntry, ThreatIntelFeed,
 };
-use tonic::{Request, Response, Status};
-use tracing::{debug, info, warn};
+use tracing::info;
 
 use super::AppState;
 

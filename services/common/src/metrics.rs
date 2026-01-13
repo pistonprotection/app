@@ -85,8 +85,15 @@ pub fn encode_metrics() -> String {
     let metric_families = prometheus::gather();
     let mut buffer = Vec::new();
 
-    encoder.encode(&metric_families, &mut buffer).unwrap();
-    String::from_utf8(buffer).unwrap()
+    if let Err(e) = encoder.encode(&metric_families, &mut buffer) {
+        tracing::error!("Failed to encode metrics: {}", e);
+        return String::from("# Error encoding metrics\n");
+    }
+
+    String::from_utf8(buffer).unwrap_or_else(|e| {
+        tracing::error!("Metrics output is not valid UTF-8: {}", e);
+        String::from("# Error: invalid UTF-8 in metrics\n")
+    })
 }
 
 /// Helper struct for timing operations

@@ -227,10 +227,7 @@ fn try_attach_program(program: &mut Xdp, interface_name: &str, flags: XdpFlags) 
     // Try to attach with the specified flags
     // Returns false to fall back to next mode (this is a placeholder implementation)
     // In a real implementation, we would try to attach and check for errors
-    match program.attach(interface_name, flags) {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    program.attach(interface_name, flags).is_ok()
 }
 
 impl Drop for EbpfLoader {

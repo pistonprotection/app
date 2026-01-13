@@ -6,18 +6,18 @@
 
 use crate::ebpf::{
     loader::EbpfLoader,
-    maps::{BackendConfig, BlockedIpEntry, MapManager},
+    maps::{BackendConfig, MapManager},
 };
 use parking_lot::RwLock;
 use pistonprotection_common::error::{Error, Result};
 use pistonprotection_proto::worker::{
-    BackendFilter, FilterConfig, GlobalFilterSettings, MapOperation, MapUpdate, ProtectionConfig,
+    BackendFilter, FilterConfig, GlobalFilterSettings, MapOperation, MapUpdate,
 };
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use tokio::sync::{Notify, mpsc};
+use std::sync::atomic::{AtomicBool, Ordering};
+use tokio::sync::Notify;
 use tracing::{debug, error, info, warn};
 
 /// Configuration version tracking
@@ -124,7 +124,7 @@ impl ConfigSyncManager {
 
     /// Get global settings
     pub fn global_settings(&self) -> Option<GlobalFilterSettings> {
-        self.global_settings.read().clone()
+        *self.global_settings.read()
     }
 
     /// Get sync statistics
@@ -194,7 +194,7 @@ impl ConfigSyncManager {
         }
 
         // Get loader and map manager
-        let mut loader = self.loader.write();
+        let loader = self.loader.write();
         let maps = loader.maps();
         let mut map_manager = maps.write();
 
@@ -221,7 +221,7 @@ impl ConfigSyncManager {
         // Apply global settings
         if let Some(ref global) = config.global {
             self.apply_global_settings(&mut map_manager, global)?;
-            *self.global_settings.write() = Some(global.clone());
+            *self.global_settings.write() = Some(*global);
         }
 
         // Update version tracking
@@ -341,7 +341,7 @@ impl ConfigSyncManager {
     /// Apply global filter settings
     fn apply_global_settings(
         &self,
-        map_manager: &mut MapManager,
+        _map_manager: &mut MapManager,
         settings: &GlobalFilterSettings,
     ) -> Result<()> {
         info!(
@@ -370,7 +370,7 @@ impl ConfigSyncManager {
 
         info!("Applying {} map updates", updates.len());
 
-        let mut loader = self.loader.write();
+        let loader = self.loader.write();
         let maps = loader.maps();
         let mut map_manager = maps.write();
 
@@ -563,7 +563,7 @@ impl ConfigSyncManager {
         ConfigSyncState {
             version: self.current_version.read().clone(),
             backends: self.applied_backends.read().clone(),
-            global_settings: self.global_settings.read().clone(),
+            global_settings: *self.global_settings.read(),
             stats: self.stats.read().clone(),
             pending_updates_count: self.pending_updates.read().len(),
         }

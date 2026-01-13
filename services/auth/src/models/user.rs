@@ -8,16 +8,13 @@ use validator::Validate;
 /// User role enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "user_role", rename_all = "lowercase")]
+#[derive(Default)]
 pub enum UserRole {
+    #[default]
     User,
     Admin,
 }
 
-impl Default for UserRole {
-    fn default() -> Self {
-        Self::User
-    }
-}
 
 impl From<UserRole> for i32 {
     fn from(role: UserRole) -> Self {
@@ -135,7 +132,7 @@ fn validate_username(username: &str) -> Result<(), validator::ValidationError> {
     if !username
         .chars()
         .next()
-        .map_or(false, |c| c.is_ascii_alphabetic())
+        .is_some_and(|c| c.is_ascii_alphabetic())
     {
         return Err(validator::ValidationError::new("username_start_letter"));
     }

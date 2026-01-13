@@ -8,23 +8,21 @@ use std::sync::Arc;
 use stripe_rust::{
     BillingPortalSession, CheckoutSession, CheckoutSessionMode, Client, CreateBillingPortalSession,
     CreateCheckoutSession, CreateCheckoutSessionLineItems, CreateCustomer, CreateSubscription,
-    CreateSubscriptionItems, CreateUsageRecord, Currency, Customer, CustomerId,
-    Invoice as StripeInvoice, InvoiceId, ListInvoices, PaymentMethod as StripePaymentMethod,
-    PaymentMethodId, Price, PriceId, Product, ProductId, Subscription as StripeSubscription,
-    SubscriptionId, SubscriptionItem, SubscriptionStatus as StripeSubscriptionStatus,
+    CreateSubscriptionItems, CreateUsageRecord, Customer, CustomerId,
+    Invoice as StripeInvoice, InvoiceId, ListInvoices, Price, PriceId, Product, Subscription as StripeSubscription,
+    SubscriptionId, SubscriptionStatus as StripeSubscriptionStatus,
     UpdateCustomer, UpdateSubscription, UsageRecord as StripeUsageRecord,
 };
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::config::StripeConfig;
 use crate::models::{
-    Organization, OrganizationLimits, Subscription, SubscriptionStatus,
+    Organization, Subscription, SubscriptionStatus,
     subscription::{
-        BillingPeriod, CancelSubscriptionRequest, CreateBillingPortalSessionRequest,
-        CreateCheckoutSessionRequest, Invoice, InvoiceStatus, PaymentMethod, Plan, PlanType,
-        ProrationBehavior, SubscriptionDetails, UpdateSubscriptionRequest, UsageMetricType,
-        UsageRecord, UsageSummary,
+        BillingPeriod, CreateBillingPortalSessionRequest,
+        CreateCheckoutSessionRequest, Invoice, InvoiceStatus, Plan, PlanType,
+        ProrationBehavior, UsageMetricType, UsageSummary,
     },
 };
 
@@ -271,7 +269,7 @@ impl StripeService {
         request: &CreateCheckoutSessionRequest,
     ) -> Result<CheckoutSession> {
         // Get the organization
-        let org = self
+        let _org = self
             .get_organization_by_id(&request.organization_id)
             .await?;
 
@@ -301,13 +299,11 @@ impl StripeService {
         create_session.cancel_url = Some(&request.cancel_url);
 
         // Set customer if exists
-        if let Some(ref sub) = subscription {
-            if let Some(ref customer_id) = sub.stripe_customer_id {
-                if let Ok(cid) = customer_id.parse::<CustomerId>() {
+        if let Some(ref sub) = subscription
+            && let Some(ref customer_id) = sub.stripe_customer_id
+                && let Ok(cid) = customer_id.parse::<CustomerId>() {
                     create_session.customer = Some(cid);
                 }
-            }
-        }
 
         create_session.line_items = Some(vec![CreateCheckoutSessionLineItems {
             price: Some(price_id.clone()),
@@ -487,14 +483,14 @@ impl StripeService {
 
         // Find the metered subscription item for bandwidth
         for item in stripe_sub.items.data {
-            if let Some(price) = &item.price {
-                if let Some(ref metadata) = price.metadata {
-                    if metadata.get("metric_type") == Some(&"bandwidth".to_string()) {
+            if let Some(price) = &item.price
+                && let Some(ref metadata) = price.metadata
+                    && metadata.get("metric_type") == Some(&"bandwidth".to_string()) {
                         // Report usage in GB
                         let gb = bytes / 1_073_741_824;
                         if gb > 0 {
                             self.report_usage(
-                                &item.id.to_string(),
+                                item.id.as_ref(),
                                 gb as u64,
                                 Some(Utc::now().timestamp()),
                                 stripe_rust::UsageRecordAction::Increment,
@@ -507,14 +503,12 @@ impl StripeService {
                                 &subscription.id,
                                 UsageMetricType::BandwidthBytes,
                                 bytes,
-                                Some(&item.id.to_string()),
+                                Some(item.id.as_ref()),
                             )
                             .await?;
                         }
                         break;
                     }
-                }
-            }
         }
 
         Ok(())
@@ -540,14 +534,14 @@ impl StripeService {
 
         // Find the metered subscription item for requests
         for item in stripe_sub.items.data {
-            if let Some(price) = &item.price {
-                if let Some(ref metadata) = price.metadata {
-                    if metadata.get("metric_type") == Some(&"requests".to_string()) {
+            if let Some(price) = &item.price
+                && let Some(ref metadata) = price.metadata
+                    && metadata.get("metric_type") == Some(&"requests".to_string()) {
                         // Report in thousands
                         let thousands = request_count / 1000;
                         if thousands > 0 {
                             self.report_usage(
-                                &item.id.to_string(),
+                                item.id.as_ref(),
                                 thousands as u64,
                                 Some(Utc::now().timestamp()),
                                 stripe_rust::UsageRecordAction::Increment,
@@ -560,14 +554,12 @@ impl StripeService {
                                 &subscription.id,
                                 UsageMetricType::Requests,
                                 request_count,
-                                Some(&item.id.to_string()),
+                                Some(item.id.as_ref()),
                             )
                             .await?;
                         }
                         break;
                     }
-                }
-            }
         }
 
         Ok(())
@@ -867,7 +859,7 @@ impl StripeService {
 
         // Check if we have this subscription
         let existing = self
-            .get_subscription_by_stripe_id(&stripe_sub.id.to_string())
+            .get_subscription_by_stripe_id(stripe_sub.id.as_ref())
             .await?;
 
         if let Some(sub) = existing {
@@ -940,14 +932,12 @@ impl StripeService {
         }
 
         // Update organization limits based on plan
-        if let Some(item) = stripe_sub.items.data.first() {
-            if let Some(price) = &item.price {
-                if let Ok(plan) = self.get_plan_by_stripe_price(&price.id.to_string()).await {
-                    self.update_organization_limits_from_plan(&stripe_sub.id.to_string(), &plan)
+        if let Some(item) = stripe_sub.items.data.first()
+            && let Some(price) = &item.price
+                && let Ok(plan) = self.get_plan_by_stripe_price(price.id.as_ref()).await {
+                    self.update_organization_limits_from_plan(stripe_sub.id.as_ref(), &plan)
                         .await?;
                 }
-            }
-        }
 
         Ok(())
     }
@@ -1039,7 +1029,7 @@ impl StripeService {
         let status = stripe_invoice
             .status
             .as_ref()
-            .map(|s| InvoiceStatus::from_stripe_status(&s.to_string()))
+            .map(|s| InvoiceStatus::from_stripe_status(s.as_ref()))
             .unwrap_or(InvoiceStatus::Draft);
 
         let period_start = stripe_invoice

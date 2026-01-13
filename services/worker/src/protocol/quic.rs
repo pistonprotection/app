@@ -193,7 +193,7 @@ impl ProtocolAnalyzer for QuicAnalyzer {
         L7Protocol::Quic
     }
 
-    fn can_handle(&self, meta: &PacketMeta, payload: &[u8]) -> bool {
+    fn can_handle(&self, _meta: &PacketMeta, payload: &[u8]) -> bool {
         is_quic(payload)
     }
 

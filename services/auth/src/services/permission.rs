@@ -55,7 +55,7 @@ impl PermissionService {
         let member = db::get_organization_member(db, organization_id, user_id)
             .await
             .map_err(|e| PermissionError::DatabaseError(e.to_string()))?
-            .ok_or_else(|| PermissionError::NotMember)?;
+            .ok_or(PermissionError::NotMember)?;
 
         // Get permissions based on role
         let role_name = match member.role {
@@ -164,7 +164,7 @@ impl PermissionService {
         let member = db::get_organization_member(db, organization_id, user_id)
             .await
             .map_err(|e| PermissionError::DatabaseError(e.to_string()))?
-            .ok_or_else(|| PermissionError::NotMember)?;
+            .ok_or(PermissionError::NotMember)?;
 
         Ok(member.role)
     }

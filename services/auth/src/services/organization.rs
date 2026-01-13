@@ -142,19 +142,17 @@ impl OrganizationService {
         let existing = db::get_organization_by_id(&self.db, org_id)
             .await
             .map_err(|e| OrganizationError::DatabaseError(e.to_string()))?
-            .ok_or_else(|| OrganizationError::NotFound)?;
+            .ok_or(OrganizationError::NotFound)?;
 
         // Check slug uniqueness if changing
-        if let Some(ref slug) = request.slug {
-            if slug != &existing.slug {
-                if let Some(_) = db::get_organization_by_slug(&self.db, slug)
+        if let Some(ref slug) = request.slug
+            && slug != &existing.slug
+                && let Some(_) = db::get_organization_by_slug(&self.db, slug)
                     .await
                     .map_err(|e| OrganizationError::DatabaseError(e.to_string()))?
                 {
                     return Err(OrganizationError::SlugExists);
                 }
-            }
-        }
 
         // Update organization
         let org = db::update_organization(
@@ -284,7 +282,7 @@ impl OrganizationService {
         db::get_organization_member(&self.db, org_id, user_id)
             .await
             .map_err(|e| OrganizationError::DatabaseError(e.to_string()))?
-            .ok_or_else(|| OrganizationError::NotMember)?;
+            .ok_or(OrganizationError::NotMember)?;
 
         let member = db::update_organization_member_role(&self.db, org_id, user_id, role)
             .await
@@ -308,11 +306,9 @@ impl OrganizationService {
         if let Some(member) = db::get_organization_member(&self.db, org_id, user_id)
             .await
             .map_err(|e| OrganizationError::DatabaseError(e.to_string()))?
-        {
-            if member.role == OrganizationRole::Owner {
+            && member.role == OrganizationRole::Owner {
                 return Err(OrganizationError::CannotRemoveOwner);
             }
-        }
 
         let removed = db::remove_organization_member(&self.db, org_id, user_id)
             .await
@@ -351,7 +347,7 @@ impl OrganizationService {
         let current = db::get_organization_member(&self.db, org_id, current_owner_id)
             .await
             .map_err(|e| OrganizationError::DatabaseError(e.to_string()))?
-            .ok_or_else(|| OrganizationError::NotMember)?;
+            .ok_or(OrganizationError::NotMember)?;
 
         if current.role != OrganizationRole::Owner {
             return Err(OrganizationError::NotOwner);
@@ -361,7 +357,7 @@ impl OrganizationService {
         db::get_organization_member(&self.db, org_id, new_owner_id)
             .await
             .map_err(|e| OrganizationError::DatabaseError(e.to_string()))?
-            .ok_or_else(|| OrganizationError::NotMember)?;
+            .ok_or(OrganizationError::NotMember)?;
 
         // Update roles
         db::update_organization_member_role(

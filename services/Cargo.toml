@@ -111,6 +111,15 @@ clickhouse = { version = "0.13", features = ["inserter", "watch", "uuid", "chron
 tokio-test = "0.4"
 mockall = "0.13"
 
+[workspace.lints.clippy]
+# Allow large error variants since tonic::Status is intentionally large
+# and this is idiomatic in gRPC services
+result_large_err = "allow"
+
+[workspace.lints.rust]
+# These are common in proto-generated code and gRPC services
+mismatched_lifetime_syntaxes = "allow"
+
 [profile.release]
 opt-level = 3
 lto = "thin"

@@ -10,7 +10,7 @@ use tracing::{info, warn};
 
 use crate::config::AuthConfig;
 use crate::db;
-use crate::models::{CreateSession, Session, TokenPair, User, UserRole};
+use crate::models::{CreateSession, Session, TokenPair, User};
 use crate::services::{JwtService, SessionService};
 
 /// Authentication service
@@ -131,13 +131,13 @@ impl AuthService {
         let user = db::get_user_by_email(&self.db, email)
             .await
             .map_err(|e| AuthError::DatabaseError(e.to_string()))?
-            .ok_or_else(|| AuthError::InvalidCredentials)?;
+            .ok_or(AuthError::InvalidCredentials)?;
 
         // Check if user has a password (not OAuth-only account)
         let password_hash = user
             .password_hash
             .as_ref()
-            .ok_or_else(|| AuthError::InvalidCredentials)?;
+            .ok_or(AuthError::InvalidCredentials)?;
 
         // Verify password
         if !self.verify_password(password, password_hash)? {
@@ -279,7 +279,7 @@ impl AuthService {
         let user = db::get_user_by_id(&self.db, &claims.sub)
             .await
             .map_err(|e| AuthError::DatabaseError(e.to_string()))?
-            .ok_or_else(|| AuthError::UserNotFound)?;
+            .ok_or(AuthError::UserNotFound)?;
 
         // Check if session is still valid (if session ID in token)
         if let Some(session_id) = &claims.sid {
@@ -346,7 +346,7 @@ impl AuthService {
         let user = db::get_user_by_id(&self.db, &claims.sub)
             .await
             .map_err(|e| AuthError::DatabaseError(e.to_string()))?
-            .ok_or_else(|| AuthError::UserNotFound)?;
+            .ok_or(AuthError::UserNotFound)?;
 
         // Get session if session ID in token
         let session = if let Some(session_id) = &claims.sid {
@@ -355,7 +355,7 @@ impl AuthService {
                 .get_cached_session(session_id)
                 .await
                 .map_err(|e| AuthError::SessionError(e.to_string()))?
-                .ok_or_else(|| AuthError::SessionExpired)?;
+                .ok_or(AuthError::SessionExpired)?;
 
             // Touch session to update last active time
             self.session_service
@@ -410,13 +410,13 @@ impl AuthService {
         let user = db::get_user_by_id(&self.db, user_id)
             .await
             .map_err(|e| AuthError::DatabaseError(e.to_string()))?
-            .ok_or_else(|| AuthError::UserNotFound)?;
+            .ok_or(AuthError::UserNotFound)?;
 
         // Verify current password
         let current_hash = user
             .password_hash
             .as_ref()
-            .ok_or_else(|| AuthError::InvalidCredentials)?;
+            .ok_or(AuthError::InvalidCredentials)?;
 
         if !self.verify_password(current_password, current_hash)? {
             return Err(AuthError::InvalidCredentials);

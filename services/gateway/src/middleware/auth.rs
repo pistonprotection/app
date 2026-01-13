@@ -285,10 +285,10 @@ impl AuthState {
     /// Validate the request and return auth context
     async fn authenticate(&self, headers: &http::HeaderMap) -> Result<Option<AuthContext>, AuthError> {
         // Try JWT first (Authorization: Bearer <token>)
-        if let Some(auth_header) = headers.get("authorization") {
-            if let Ok(auth_str) = auth_header.to_str() {
-                if let Some(token) = auth_str.strip_prefix("Bearer ") {
-                    if let Some(ref validator) = self.jwt_validator {
+        if let Some(auth_header) = headers.get("authorization")
+            && let Ok(auth_str) = auth_header.to_str()
+                && let Some(token) = auth_str.strip_prefix("Bearer ")
+                    && let Some(ref validator) = self.jwt_validator {
                         let claims = validator.validate(token)?;
                         return Ok(Some(AuthContext {
                             user_id: claims.sub,
@@ -298,17 +298,13 @@ impl AuthState {
                             auth_method: AuthMethod::Jwt,
                         }));
                     }
-                }
-            }
-        }
 
         // Try API key (x-api-key header)
-        if let Some(api_key_header) = headers.get("x-api-key") {
-            if let Ok(api_key) = api_key_header.to_str() {
+        if let Some(api_key_header) = headers.get("x-api-key")
+            && let Ok(api_key) = api_key_header.to_str() {
                 let context = self.api_key_validator.validate(api_key).await?;
                 return Ok(Some(context));
             }
-        }
 
         // No authentication provided
         Ok(None)

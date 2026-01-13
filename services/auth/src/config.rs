@@ -5,6 +5,7 @@ use std::env;
 
 /// Auth-specific configuration
 #[derive(Debug, Clone, Deserialize)]
+#[derive(Default)]
 pub struct AuthConfig {
     /// JWT configuration
     #[serde(default)]
@@ -35,19 +36,6 @@ pub struct AuthConfig {
     pub stripe: StripeConfig,
 }
 
-impl Default for AuthConfig {
-    fn default() -> Self {
-        Self {
-            jwt: JwtConfig::default(),
-            session: SessionConfig::default(),
-            password: PasswordConfig::default(),
-            api_key: ApiKeyConfig::default(),
-            oauth: OAuthConfig::default(),
-            rbac: RbacConfig::default(),
-            stripe: StripeConfig::default(),
-        }
-    }
-}
 
 /// JWT configuration
 #[derive(Debug, Clone, Deserialize)]

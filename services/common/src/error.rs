@@ -393,7 +393,8 @@ mod tests {
 
     #[test]
     fn test_context_extension() {
-        let result: std::result::Result<(), Error> = Err(Error::NotFound("file not found".into()));
+        let result: std::result::Result<(), Error> =
+            Err(Error::not_found("File", "config.toml"));
 
         let with_context = result.context("Failed to read configuration");
         assert!(with_context.is_err());

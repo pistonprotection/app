@@ -441,7 +441,7 @@ fn update_prometheus_metrics(runtime: &WorkerRuntime) {
         .set(map_stats.backends as f64);
 
     // Update sync stats
-    let sync_stats = runtime.config_sync.stats();
+    let _sync_stats = runtime.config_sync.stats();
 
     // These would be custom metrics in a full implementation
     // pistonprotection_common::metrics::CONFIGS_APPLIED
