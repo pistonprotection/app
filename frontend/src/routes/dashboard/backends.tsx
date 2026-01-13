@@ -15,7 +15,7 @@ import {
   Shield,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
@@ -106,6 +106,7 @@ type Protocol =
 function BackendsPage() {
   const { data: session } = authClient.useSession();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [editingBackendId, setEditingBackendId] = useState<string | null>(null);
   const [deleteBackendId, setDeleteBackendId] = useState<string | null>(null);
 
   const trpc = useTRPC();
@@ -169,6 +170,21 @@ function BackendsPage() {
     }),
   );
 
+  // Update backend mutation
+  const updateMutation = useMutation(
+    trpc.backends.update.mutationOptions({
+      onSuccess: () => {
+        toast.success("Backend updated successfully");
+        setEditingBackendId(null);
+        editForm.reset();
+        queryClient.invalidateQueries({ queryKey: ["backends"] });
+      },
+      onError: (error) => {
+        toast.error(`Failed to update backend: ${error.message}`);
+      },
+    }),
+  );
+
   // Form for creating backend
   const form = useForm({
     defaultValues: {
@@ -188,6 +204,51 @@ function BackendsPage() {
       onChange: createBackendSchema,
     },
   });
+
+  // Form for editing backend
+  const editForm = useForm({
+    defaultValues: {
+      name: "",
+      description: "",
+      enabled: true,
+      protectionLevel: 50,
+    },
+    onSubmit: async ({ value }) => {
+      if (!editingBackendId) return;
+      await updateMutation.mutateAsync({
+        id: editingBackendId,
+        organizationId,
+        name: value.name,
+        description: value.description || null,
+        enabled: value.enabled,
+        protectionLevel: value.protectionLevel,
+      });
+    },
+    validators: {
+      onChange: z.object({
+        name: z.string().min(1, "Name is required").max(100),
+        description: z.string().max(500).optional(),
+        enabled: z.boolean(),
+        protectionLevel: z.number().int().min(0).max(100),
+      }),
+    },
+  });
+
+  // Get the backend being edited and populate form
+  const backendToEdit = editingBackendId
+    ? backends.find((b) => b.id === editingBackendId)
+    : null;
+
+  // Update edit form when backend selection changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Reset form when backend changes
+  React.useEffect(() => {
+    if (backendToEdit) {
+      editForm.setFieldValue("name", backendToEdit.name);
+      editForm.setFieldValue("description", backendToEdit.description ?? "");
+      editForm.setFieldValue("enabled", backendToEdit.enabled);
+      editForm.setFieldValue("protectionLevel", backendToEdit.protectionLevel);
+    }
+  }, [backendToEdit?.id]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -495,7 +556,9 @@ function BackendsPage() {
                             <Settings className="mr-2 h-4 w-4" />
                             Configure
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => setEditingBackendId(backend.id)}
+                          >
                             <Pencil className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
@@ -564,6 +627,125 @@ function BackendsPage() {
               Delete
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Backend Dialog */}
+      <Dialog
+        open={!!editingBackendId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingBackendId(null);
+            editForm.reset();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[500px]">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              editForm.handleSubmit();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Edit Backend</DialogTitle>
+              <DialogDescription>
+                Update the backend server configuration.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <editForm.Field name="name">
+                {(field) => (
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-name">Name</Label>
+                    <Input
+                      id="edit-name"
+                      placeholder="My Server"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                    />
+                    {field.state.meta.errors.length > 0 && (
+                      <p className="text-sm text-destructive">
+                        {field.state.meta.errors[0]}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </editForm.Field>
+              <editForm.Field name="description">
+                {(field) => (
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-description">
+                      Description (optional)
+                    </Label>
+                    <Input
+                      id="edit-description"
+                      placeholder="A brief description of this server"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                    />
+                  </div>
+                )}
+              </editForm.Field>
+              <editForm.Field name="protectionLevel">
+                {(field) => (
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-protectionLevel">
+                      Protection Level: {field.state.value}%
+                    </Label>
+                    <input
+                      type="range"
+                      id="edit-protectionLevel"
+                      min={0}
+                      max={100}
+                      value={field.state.value}
+                      onChange={(e) =>
+                        field.handleChange(Number(e.target.value))
+                      }
+                      className="w-full"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Higher values mean stricter filtering (may increase false
+                      positives)
+                    </p>
+                  </div>
+                )}
+              </editForm.Field>
+              <editForm.Field name="enabled">
+                {(field) => (
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="edit-enabled">Enabled</Label>
+                    <Switch
+                      id="edit-enabled"
+                      checked={field.state.value}
+                      onCheckedChange={(checked) => field.handleChange(checked)}
+                    />
+                  </div>
+                )}
+              </editForm.Field>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEditingBackendId(null);
+                  editForm.reset();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={updateMutation.isPending}>
+                {updateMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
