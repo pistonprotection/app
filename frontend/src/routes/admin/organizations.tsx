@@ -62,12 +62,14 @@ function AdminOrganizations() {
   const queryClient = useQueryClient();
 
   // List organizations
-  const { data: organizations, isLoading } = useQuery(
+  const { data: organizationsData, isLoading } = useQuery(
     trpc.admin.listOrganizations.queryOptions({
       search: searchQuery || undefined,
       limit: 50,
     }),
   );
+
+  const organizations = organizationsData?.organizations ?? [];
 
   // Get org details
   const { data: selectedOrg } = useQuery({
@@ -77,29 +79,18 @@ function AdminOrganizations() {
     enabled: !!selectedOrgId,
   });
 
-  // Suspend organization mutation
-  const suspendMutation = useMutation(
-    trpc.admin.suspendOrganization.mutationOptions({
+  // Update organization status mutation
+  const updateStatusMutation = useMutation(
+    trpc.admin.updateOrganizationStatus.mutationOptions({
       onSuccess: () => {
-        toast.success("Organization suspended");
+        toast.success("Organization status updated");
         setSuspendDialogOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["admin", "organizations"] });
+        queryClient.invalidateQueries({
+          queryKey: ["admin", "listOrganizations"],
+        });
       },
       onError: (error) => {
-        toast.error(`Failed to suspend organization: ${error.message}`);
-      },
-    }),
-  );
-
-  // Unsuspend organization mutation
-  const unsuspendMutation = useMutation(
-    trpc.admin.unsuspendOrganization.mutationOptions({
-      onSuccess: () => {
-        toast.success("Organization unsuspended");
-        queryClient.invalidateQueries({ queryKey: ["admin", "organizations"] });
-      },
-      onError: (error) => {
-        toast.error(`Failed to unsuspend organization: ${error.message}`);
+        toast.error(`Failed to update organization status: ${error.message}`);
       },
     }),
   );
@@ -119,7 +110,7 @@ function AdminOrganizations() {
             <div>
               <CardTitle>All Organizations</CardTitle>
               <CardDescription>
-                {organizations?.total ?? 0} total organizations
+                {organizationsData?.total ?? 0} total organizations
               </CardDescription>
             </div>
             <div className="relative w-64">
@@ -152,7 +143,7 @@ function AdminOrganizations() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {organizations?.items.map((org) => (
+                {organizations.map((org) => (
                   <TableRow key={org.id}>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -181,12 +172,13 @@ function AdminOrganizations() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <Server className="h-4 w-4 text-muted-foreground" />
-                        {org.backendCount}
+                        <Server className="h-4 w-4 text-muted-foreground" />-
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{org.plan ?? "Free"}</Badge>
+                      <Badge variant="outline">
+                        {org.subscription?.plan ?? "Free"}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -226,11 +218,14 @@ function AdminOrganizations() {
                           {org.status === "suspended" ? (
                             <DropdownMenuItem
                               onClick={() =>
-                                unsuspendMutation.mutate({ id: org.id })
+                                updateStatusMutation.mutate({
+                                  organizationId: org.id,
+                                  status: "active",
+                                })
                               }
                             >
                               <Shield className="mr-2 h-4 w-4" />
-                              Unsuspend
+                              Activate
                             </DropdownMenuItem>
                           ) : (
                             <DropdownMenuItem
@@ -276,11 +271,16 @@ function AdminOrganizations() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Status</p>
-                  <Badge>{selectedOrg.status}</Badge>
+                  <Badge>
+                    {selectedOrg.protectionOrganization?.status ??
+                      "pre-onboarding"}
+                  </Badge>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Plan</p>
-                  <p className="font-medium">{selectedOrg.plan ?? "Free"}</p>
+                  <p className="font-medium">
+                    {selectedOrg.subscription?.plan ?? "Free"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Created</p>
@@ -293,7 +293,7 @@ function AdminOrganizations() {
                 <Card>
                   <CardContent className="pt-4">
                     <div className="text-2xl font-bold">
-                      {selectedOrg.memberCount}
+                      {selectedOrg.members?.length ?? 0}
                     </div>
                     <p className="text-xs text-muted-foreground">Members</p>
                   </CardContent>
@@ -301,7 +301,7 @@ function AdminOrganizations() {
                 <Card>
                   <CardContent className="pt-4">
                     <div className="text-2xl font-bold">
-                      {selectedOrg.backendCount}
+                      {selectedOrg.stats?.backends ?? 0}
                     </div>
                     <p className="text-xs text-muted-foreground">Backends</p>
                   </CardContent>
@@ -309,11 +309,9 @@ function AdminOrganizations() {
                 <Card>
                   <CardContent className="pt-4">
                     <div className="text-2xl font-bold">
-                      {formatNumber(selectedOrg.requestsLast24h ?? 0)}
+                      {selectedOrg.stats?.filters ?? 0}
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Requests (24h)
-                    </p>
+                    <p className="text-xs text-muted-foreground">Filters</p>
                   </CardContent>
                 </Card>
               </div>
@@ -343,14 +341,14 @@ function AdminOrganizations() {
               variant="destructive"
               onClick={() =>
                 selectedOrgId &&
-                suspendMutation.mutate({
-                  id: selectedOrgId,
-                  reason: "Admin action",
+                updateStatusMutation.mutate({
+                  organizationId: selectedOrgId,
+                  status: "suspended",
                 })
               }
-              disabled={suspendMutation.isPending}
+              disabled={updateStatusMutation.isPending}
             >
-              {suspendMutation.isPending && (
+              {updateStatusMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
               Suspend
@@ -362,7 +360,7 @@ function AdminOrganizations() {
   );
 }
 
-function formatNumber(num: number): string {
+function _formatNumber(num: number): string {
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
   if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
   return num.toString();

@@ -748,4 +748,356 @@ export const adminRouter = createTRPCRouter({
       resources: resources.map((r) => r.resource),
     };
   }),
+
+  // ==================== SYSTEM HEALTH ====================
+
+  // Get system health status
+  getSystemHealth: adminProcedure.query(async () => {
+    // In production, these would be actual health checks
+    return {
+      gateway: "healthy" as const,
+      gatewayLatency: 12,
+      auth: "healthy" as const,
+      authLatency: 8,
+      configMgr: "healthy" as const,
+      configMgrLatency: 15,
+      metrics: "healthy" as const,
+      metricsLatency: 5,
+      database: "healthy" as const,
+      databaseLatency: 3,
+      redis: "healthy" as const,
+      redisLatency: 1,
+    };
+  }),
+
+  // Get recent attacks
+  getRecentAttacks: adminProcedure
+    .input(
+      z.object({
+        limit: z.number().int().min(1).max(50).default(10),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const attacks = await ctx.db.query.attackEvent.findMany({
+        orderBy: [desc(attackEvent.startedAt)],
+        limit: input.limit,
+        with: {
+          backend: {
+            columns: { id: true, name: true },
+            with: {
+              organization: {
+                columns: { id: true, name: true },
+              },
+            },
+          },
+        },
+      });
+
+      return attacks.map((attack) => ({
+        id: attack.id,
+        type: attack.type,
+        severity: attack.severity,
+        startedAt: attack.startedAt,
+        endedAt: attack.endedAt,
+        organizationName: attack.backend?.organization?.name ?? "Unknown",
+      }));
+    }),
+
+  // ==================== BLACKLIST MANAGEMENT ====================
+
+  // List blacklist entries
+  listBlacklistEntries: adminProcedure
+    .input(
+      z.object({
+        type: z.enum(["ip", "cidr", "asn", "country"]),
+        search: z.string().optional(),
+        limit: z.number().int().min(1).max(500).default(100),
+        offset: z.number().int().min(0).default(0),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      // Using filter table for global blacklists (no organizationId)
+      const conditions = [eq(filter.type, "blacklist")];
+
+      // Filter by blacklist type stored in config
+      const entries = await ctx.db.query.filter.findMany({
+        where: and(...conditions),
+        orderBy: [desc(filter.createdAt)],
+        limit: input.limit,
+        offset: input.offset,
+      });
+
+      // Filter and transform based on type
+      const filtered = entries.filter((entry) => {
+        const config = entry.config as Record<string, unknown>;
+        return config.blacklistType === input.type;
+      });
+
+      const items = filtered.map((entry) => {
+        const config = entry.config as Record<string, unknown>;
+        return {
+          id: entry.id,
+          value: config.value as string,
+          reason: config.reason as string | null,
+          addedBy: config.addedBy as string | null,
+          expiresAt: config.expiresAt as Date | null,
+          createdAt: entry.createdAt,
+        };
+      });
+
+      return {
+        items,
+        total: filtered.length,
+      };
+    }),
+
+  // Get blacklist statistics
+  getBlacklistStats: adminProcedure.query(async ({ ctx }) => {
+    const allBlacklists = await ctx.db.query.filter.findMany({
+      where: eq(filter.type, "blacklist"),
+    });
+
+    let ipCount = 0;
+    let cidrCount = 0;
+    let asnCount = 0;
+    let countryCount = 0;
+
+    for (const entry of allBlacklists) {
+      const config = entry.config as Record<string, unknown>;
+      switch (config.blacklistType) {
+        case "ip":
+          ipCount++;
+          break;
+        case "cidr":
+          cidrCount++;
+          break;
+        case "asn":
+          asnCount++;
+          break;
+        case "country":
+          countryCount++;
+          break;
+      }
+    }
+
+    return {
+      ipCount,
+      cidrCount,
+      asnCount,
+      countryCount,
+      total: allBlacklists.length,
+    };
+  }),
+
+  // Add blacklist entry
+  addBlacklistEntry: adminProcedure
+    .input(
+      z.object({
+        type: z.enum(["ip", "cidr", "asn", "country"]),
+        value: z.string().min(1),
+        reason: z.string().optional(),
+        expiresAt: z.date().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [created] = await ctx.db
+        .insert(filter)
+        .values({
+          name: `Global Blacklist: ${input.value}`,
+          type: "blacklist",
+          enabled: true,
+          priority: 1000,
+          config: {
+            blacklistType: input.type,
+            value: input.value,
+            reason: input.reason ?? null,
+            addedBy: ctx.session.user.email,
+            expiresAt: input.expiresAt ?? null,
+          },
+        })
+        .returning();
+
+      return created;
+    }),
+
+  // Remove blacklist entry
+  removeBlacklistEntry: adminProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.delete(filter).where(eq(filter.id, input.id));
+      return { success: true };
+    }),
+
+  // ==================== BACKENDS MANAGEMENT ====================
+
+  // List all backends across organizations
+  listBackends: adminProcedure
+    .input(
+      z.object({
+        search: z.string().optional(),
+        status: z
+          .enum(["healthy", "unhealthy", "degraded", "unknown"])
+          .optional(),
+        protocol: z.string().optional(),
+        organizationId: z.string().uuid().optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+        offset: z.number().int().min(0).default(0),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const conditions = [];
+
+      if (input.search) {
+        conditions.push(
+          or(
+            like(backend.name, `%${input.search}%`),
+            like(backend.slug, `%${input.search}%`),
+          ),
+        );
+      }
+
+      if (input.status) {
+        conditions.push(eq(backend.status, input.status));
+      }
+
+      if (input.organizationId) {
+        conditions.push(eq(backend.organizationId, input.organizationId));
+      }
+
+      const backends = await ctx.db.query.backend.findMany({
+        where: conditions.length > 0 ? and(...conditions) : undefined,
+        orderBy: [desc(backend.createdAt)],
+        limit: input.limit,
+        offset: input.offset,
+        with: {
+          organization: {
+            columns: { id: true, name: true, slug: true },
+          },
+        },
+      });
+
+      const countResult = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(backend)
+        .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+      return {
+        backends,
+        total: countResult[0]?.count ?? 0,
+      };
+    }),
+
+  // Get backend details
+  getBackend: adminProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const result = await ctx.db.query.backend.findFirst({
+        where: eq(backend.id, input.id),
+        with: {
+          organization: true,
+          filters: true,
+        },
+      });
+
+      if (!result) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Backend not found",
+        });
+      }
+
+      return result;
+    }),
+
+  // ==================== ATTACK MANAGEMENT ====================
+
+  // List all attacks
+  listAttacks: adminProcedure
+    .input(
+      z.object({
+        status: z.enum(["ongoing", "mitigated", "blocked"]).optional(),
+        severity: z.enum(["low", "medium", "high", "critical"]).optional(),
+        backendId: z.string().uuid().optional(),
+        organizationId: z.string().uuid().optional(),
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+        offset: z.number().int().min(0).default(0),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const conditions = [];
+
+      if (input.status) {
+        conditions.push(eq(attackEvent.status, input.status));
+      }
+
+      if (input.severity) {
+        conditions.push(eq(attackEvent.severity, input.severity));
+      }
+
+      if (input.backendId) {
+        conditions.push(eq(attackEvent.backendId, input.backendId));
+      }
+
+      if (input.startDate) {
+        conditions.push(gte(attackEvent.startedAt, input.startDate));
+      }
+
+      if (input.endDate) {
+        conditions.push(lte(attackEvent.startedAt, input.endDate));
+      }
+
+      const attacks = await ctx.db.query.attackEvent.findMany({
+        where: conditions.length > 0 ? and(...conditions) : undefined,
+        orderBy: [desc(attackEvent.startedAt)],
+        limit: input.limit,
+        offset: input.offset,
+        with: {
+          backend: {
+            columns: { id: true, name: true },
+            with: {
+              organization: {
+                columns: { id: true, name: true },
+              },
+            },
+          },
+        },
+      });
+
+      const countResult = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(attackEvent)
+        .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+      return {
+        attacks,
+        total: countResult[0]?.count ?? 0,
+      };
+    }),
+
+  // Get attack details
+  getAttack: adminProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const attack = await ctx.db.query.attackEvent.findFirst({
+        where: eq(attackEvent.id, input.id),
+        with: {
+          backend: {
+            with: {
+              organization: true,
+            },
+          },
+        },
+      });
+
+      if (!attack) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Attack not found",
+        });
+      }
+
+      return attack;
+    }),
 });

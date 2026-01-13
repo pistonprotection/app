@@ -73,21 +73,29 @@ function AdminUsers() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<
-    "suspend" | "ban" | "resetPassword" | "makeAdmin" | "removeAdmin" | null
+    "ban" | "unban" | "makeAdmin" | "removeAdmin" | null
   >(null);
+  const [banReason, setBanReason] = useState("");
 
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
   // List users
-  const { data: users, isLoading } = useQuery(
+  const { data: usersData, isLoading } = useQuery(
     trpc.admin.listUsers.queryOptions({
       search: searchQuery || undefined,
-      role: roleFilter !== "all" ? roleFilter : undefined,
-      status: statusFilter !== "all" ? statusFilter : undefined,
+      role: roleFilter !== "all" ? (roleFilter as "user" | "admin") : undefined,
+      banned:
+        statusFilter === "banned"
+          ? true
+          : statusFilter === "active"
+            ? false
+            : undefined,
       limit: 50,
     }),
   );
+
+  const users = usersData?.users ?? [];
 
   // Get user details
   const { data: selectedUser } = useQuery({
@@ -95,40 +103,13 @@ function AdminUsers() {
     enabled: !!selectedUserId,
   });
 
-  // Suspend user mutation
-  const suspendMutation = useMutation(
-    trpc.admin.suspendUser.mutationOptions({
-      onSuccess: () => {
-        toast.success("User suspended");
-        closeDialog();
-        queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
-      },
-      onError: (error) => {
-        toast.error(`Failed to suspend user: ${error.message}`);
-      },
-    }),
-  );
-
-  // Unsuspend user mutation
-  const unsuspendMutation = useMutation(
-    trpc.admin.unsuspendUser.mutationOptions({
-      onSuccess: () => {
-        toast.success("User unsuspended");
-        queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
-      },
-      onError: (error) => {
-        toast.error(`Failed to unsuspend user: ${error.message}`);
-      },
-    }),
-  );
-
   // Ban user mutation
   const banMutation = useMutation(
     trpc.admin.banUser.mutationOptions({
       onSuccess: () => {
         toast.success("User banned");
         closeDialog();
-        queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+        queryClient.invalidateQueries({ queryKey: ["admin", "listUsers"] });
       },
       onError: (error) => {
         toast.error(`Failed to ban user: ${error.message}`);
@@ -136,43 +117,30 @@ function AdminUsers() {
     }),
   );
 
-  // Make admin mutation
-  const makeAdminMutation = useMutation(
-    trpc.admin.makeUserAdmin.mutationOptions({
+  // Unban user mutation
+  const unbanMutation = useMutation(
+    trpc.admin.unbanUser.mutationOptions({
       onSuccess: () => {
-        toast.success("User promoted to admin");
+        toast.success("User unbanned");
         closeDialog();
-        queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+        queryClient.invalidateQueries({ queryKey: ["admin", "listUsers"] });
       },
       onError: (error) => {
-        toast.error(`Failed to promote user: ${error.message}`);
+        toast.error(`Failed to unban user: ${error.message}`);
       },
     }),
   );
 
-  // Remove admin mutation
-  const removeAdminMutation = useMutation(
-    trpc.admin.removeUserAdmin.mutationOptions({
+  // Update user role mutation
+  const updateRoleMutation = useMutation(
+    trpc.admin.updateUserRole.mutationOptions({
       onSuccess: () => {
-        toast.success("Admin role removed");
+        toast.success("User role updated");
         closeDialog();
-        queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+        queryClient.invalidateQueries({ queryKey: ["admin", "listUsers"] });
       },
       onError: (error) => {
-        toast.error(`Failed to remove admin role: ${error.message}`);
-      },
-    }),
-  );
-
-  // Reset password mutation
-  const resetPasswordMutation = useMutation(
-    trpc.admin.resetUserPassword.mutationOptions({
-      onSuccess: () => {
-        toast.success("Password reset email sent");
-        closeDialog();
-      },
-      onError: (error) => {
-        toast.error(`Failed to reset password: ${error.message}`);
+        toast.error(`Failed to update user role: ${error.message}`);
       },
     }),
   );
@@ -187,26 +155,27 @@ function AdminUsers() {
     setActionDialogOpen(false);
     setSelectedUserId(null);
     setActionType(null);
+    setBanReason("");
   }
 
   function executeAction() {
     if (!selectedUserId || !actionType) return;
 
     switch (actionType) {
-      case "suspend":
-        suspendMutation.mutate({ id: selectedUserId });
-        break;
       case "ban":
-        banMutation.mutate({ id: selectedUserId });
+        banMutation.mutate({
+          userId: selectedUserId,
+          reason: banReason || "Banned by admin",
+        });
         break;
-      case "resetPassword":
-        resetPasswordMutation.mutate({ id: selectedUserId });
+      case "unban":
+        unbanMutation.mutate({ userId: selectedUserId });
         break;
       case "makeAdmin":
-        makeAdminMutation.mutate({ id: selectedUserId });
+        updateRoleMutation.mutate({ userId: selectedUserId, role: "admin" });
         break;
       case "removeAdmin":
-        removeAdminMutation.mutate({ id: selectedUserId });
+        updateRoleMutation.mutate({ userId: selectedUserId, role: "user" });
         break;
     }
   }
@@ -216,26 +185,21 @@ function AdminUsers() {
     if (!user) return null;
 
     switch (actionType) {
-      case "suspend":
-        return {
-          title: "Suspend User",
-          description: `Are you sure you want to suspend ${user.email}? They will not be able to log in.`,
-          variant: "warning" as const,
-          confirmText: "Suspend User",
-        };
       case "ban":
         return {
           title: "Ban User",
-          description: `Are you sure you want to permanently ban ${user.email}? This action cannot be undone.`,
+          description: `Are you sure you want to ban ${user.email}? They will not be able to log in.`,
           variant: "destructive" as const,
           confirmText: "Ban User",
+          showReasonInput: true,
         };
-      case "resetPassword":
+      case "unban":
         return {
-          title: "Reset Password",
-          description: `Send a password reset email to ${user.email}?`,
+          title: "Unban User",
+          description: `Are you sure you want to unban ${user.email}? They will be able to log in again.`,
           variant: "default" as const,
-          confirmText: "Send Reset Email",
+          confirmText: "Unban User",
+          showReasonInput: false,
         };
       case "makeAdmin":
         return {
@@ -243,6 +207,7 @@ function AdminUsers() {
           description: `Promote ${user.email} to admin? They will have full platform access.`,
           variant: "warning" as const,
           confirmText: "Make Admin",
+          showReasonInput: false,
         };
       case "removeAdmin":
         return {
@@ -250,6 +215,7 @@ function AdminUsers() {
           description: `Remove admin privileges from ${user.email}?`,
           variant: "warning" as const,
           confirmText: "Remove Admin",
+          showReasonInput: false,
         };
       default:
         return null;
@@ -293,12 +259,12 @@ function AdminUsers() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Suspended</CardTitle>
+            <CardTitle className="text-sm font-medium">Banned</CardTitle>
             <UserX className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {users?.filter((u) => u.status === "suspended").length ?? 0}
+              {users?.filter((u) => u.banned).length ?? 0}
             </div>
           </CardContent>
         </Card>
@@ -348,7 +314,6 @@ function AdminUsers() {
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="suspended">Suspended</SelectItem>
                 <SelectItem value="banned">Banned</SelectItem>
               </SelectContent>
             </Select>
@@ -407,16 +372,8 @@ function AdminUsers() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={
-                          user.status === "active"
-                            ? "default"
-                            : user.status === "suspended"
-                              ? "secondary"
-                              : "destructive"
-                        }
-                      >
-                        {user.status}
+                      <Badge variant={user.banned ? "destructive" : "default"}>
+                        {user.banned ? "Banned" : "Active"}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -431,8 +388,7 @@ function AdminUsers() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                        {user.organizationsCount}
+                        <Building2 className="h-4 w-4 text-muted-foreground" />-
                       </div>
                     </TableCell>
                     <TableCell>
@@ -477,14 +433,6 @@ function AdminUsers() {
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              openActionDialog(user.id, "resetPassword")
-                            }
-                          >
-                            <Key className="mr-2 h-4 w-4" />
-                            Reset Password
-                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           {user.role === "admin" ? (
                             <DropdownMenuItem
@@ -506,27 +454,14 @@ function AdminUsers() {
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuSeparator />
-                          {user.status === "active" ? (
+                          {user.banned ? (
                             <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() =>
-                                openActionDialog(user.id, "suspend")
-                              }
-                            >
-                              <UserX className="mr-2 h-4 w-4" />
-                              Suspend User
-                            </DropdownMenuItem>
-                          ) : user.status === "suspended" ? (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                unsuspendMutation.mutate({ id: user.id })
-                              }
+                              onClick={() => openActionDialog(user.id, "unban")}
                             >
                               <Check className="mr-2 h-4 w-4" />
-                              Unsuspend User
+                              Unban User
                             </DropdownMenuItem>
-                          ) : null}
-                          {user.status !== "banned" && (
+                          ) : (
                             <DropdownMenuItem
                               className="text-destructive"
                               onClick={() => openActionDialog(user.id, "ban")}
@@ -602,7 +537,12 @@ function AdminUsers() {
                   </div>
                   <div>
                     <Label>Status</Label>
-                    <p className="capitalize">{selectedUser.status}</p>
+                    <p>{selectedUser.banned ? "Banned" : "Active"}</p>
+                    {selectedUser.banReason && (
+                      <p className="text-sm text-muted-foreground">
+                        Reason: {selectedUser.banReason}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label>Email Verified</Label>
@@ -619,10 +559,10 @@ function AdminUsers() {
                     </p>
                   </div>
                   <div>
-                    <Label>Last Login</Label>
+                    <Label>Updated</Label>
                     <p>
-                      {selectedUser.lastLoginAt
-                        ? new Date(selectedUser.lastLoginAt).toLocaleString()
+                      {selectedUser.updatedAt
+                        ? new Date(selectedUser.updatedAt).toLocaleString()
                         : "Never"}
                     </p>
                   </div>
@@ -631,10 +571,22 @@ function AdminUsers() {
 
               <TabsContent value="organizations">
                 <p className="text-muted-foreground">
-                  User is a member of {selectedUser.organizationsCount}{" "}
+                  User is a member of {selectedUser.members?.length ?? 0}{" "}
                   organization(s).
                 </p>
-                {/* Would list organizations here */}
+                {selectedUser.members && selectedUser.members.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {selectedUser.members.map((member) => (
+                      <div
+                        key={member.organization?.id}
+                        className="flex items-center justify-between p-2 rounded border"
+                      >
+                        <span>{member.organization?.name}</span>
+                        <Badge variant="outline">{member.role}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="sessions">
@@ -669,6 +621,18 @@ function AdminUsers() {
             </DialogTitle>
             <DialogDescription>{dialogContent?.description}</DialogDescription>
           </DialogHeader>
+          {dialogContent?.showReasonInput && (
+            <div className="py-4">
+              <Label htmlFor="ban-reason">Reason (optional)</Label>
+              <Input
+                id="ban-reason"
+                value={banReason}
+                onChange={(e) => setBanReason(e.target.value)}
+                placeholder="Enter ban reason..."
+                className="mt-2"
+              />
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog}>
               Cancel
@@ -681,18 +645,14 @@ function AdminUsers() {
               }
               onClick={executeAction}
               disabled={
-                suspendMutation.isPending ||
                 banMutation.isPending ||
-                makeAdminMutation.isPending ||
-                removeAdminMutation.isPending ||
-                resetPasswordMutation.isPending
+                unbanMutation.isPending ||
+                updateRoleMutation.isPending
               }
             >
-              {(suspendMutation.isPending ||
-                banMutation.isPending ||
-                makeAdminMutation.isPending ||
-                removeAdminMutation.isPending ||
-                resetPasswordMutation.isPending) && (
+              {(banMutation.isPending ||
+                unbanMutation.isPending ||
+                updateRoleMutation.isPending) && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
               {dialogContent?.confirmText}
