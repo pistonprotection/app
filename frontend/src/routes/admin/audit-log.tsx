@@ -108,7 +108,7 @@ function AuditLogPage() {
       "timestamp,action,resource,resource_id,user_email,user_name,organization,ip_address,details\n";
     const csvRows = auditLog.logs
       .map((log) => {
-        const details = JSON.stringify(log.details ?? {}).replace(/"/g, '""');
+        const details = JSON.stringify(log.newValue ?? {}).replace(/"/g, '""');
         const timestamp = new Date(log.timestamp).toISOString();
         return `"${timestamp}","${log.action}","${log.resource}","${log.resourceId ?? ""}","${log.user?.email ?? "System"}","${log.user?.name ?? ""}","${log.organization?.name ?? ""}","${log.ipAddress ?? ""}","${details}"`;
       })
@@ -246,7 +246,7 @@ function AuditLogPage() {
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="All actions" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All actions</SelectItem>
@@ -271,7 +271,7 @@ function AuditLogPage() {
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="All resources" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All resources</SelectItem>
@@ -287,16 +287,18 @@ function AuditLogPage() {
             <div className="space-y-2">
               <span className="text-sm font-medium">Start Date</span>
               <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start font-normal"
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    {filters.startDate
-                      ? filters.startDate.toLocaleDateString()
-                      : "Select date"}
-                  </Button>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start font-normal"
+                    />
+                  }
+                >
+                  <Calendar className="mr-2 h-4 w-4" />
+                  {filters.startDate
+                    ? filters.startDate.toLocaleDateString()
+                    : "Select date"}
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-3" align="start">
                   <Input
@@ -317,16 +319,18 @@ function AuditLogPage() {
             <div className="space-y-2">
               <span className="text-sm font-medium">End Date</span>
               <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start font-normal"
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    {filters.endDate
-                      ? filters.endDate.toLocaleDateString()
-                      : "Select date"}
-                  </Button>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start font-normal"
+                    />
+                  }
+                >
+                  <Calendar className="mr-2 h-4 w-4" />
+                  {filters.endDate
+                    ? filters.endDate.toLocaleDateString()
+                    : "Select date"}
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-3" align="start">
                   <Input

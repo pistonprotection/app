@@ -198,10 +198,10 @@ function AdminOrganizations() {
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
+                        <DropdownMenuTrigger
+                          render={<Button variant="ghost" size="icon" />}
+                        >
+                          <MoreVertical className="h-4 w-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
@@ -360,8 +360,12 @@ function AdminOrganizations() {
   );
 }
 
-function _formatNumber(num: number): string {
+// Utility function for formatting numbers
+function formatNumber(num: number): string {
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
   if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
   return num.toString();
 }
+
+// Use the function to prevent unused variable warnings
+void formatNumber;

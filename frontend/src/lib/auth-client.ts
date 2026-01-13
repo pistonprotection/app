@@ -12,43 +12,67 @@ import {
   twoFactorClient,
   usernameClient,
 } from "better-auth/client/plugins";
+import { createAccessControl } from "better-auth/plugins/access";
+import {
+  adminAc as defaultGlobalAdminAc,
+  defaultStatements as defaultGlobalStatements,
+  userAc as defaultGlobalUserAc,
+} from "better-auth/plugins/admin/access";
+import {
+  adminAc as defaultOrgAdminAc,
+  memberAc as defaultOrgMemberAc,
+  ownerAc as defaultOrgOwnerAc,
+  defaultStatements as defaultOrgStatements,
+} from "better-auth/plugins/organization/access";
 import { createAuthClient } from "better-auth/react";
 import type { InferUserFromClient } from "better-auth/types";
 import type { auth } from "@/server/auth";
 
 // Global access control configuration
-export const globalAc = {
-  admin: ["admin"],
-  user: ["user"],
-} as const;
+export const globalAc = createAccessControl({
+  ...defaultGlobalStatements,
+  organization: ["create"],
+});
+
+export const globalUser = globalAc.newRole({
+  ...defaultGlobalUserAc.statements,
+  organization: ["create"],
+});
+
+export const globalAdmin = globalAc.newRole({
+  ...globalUser.statements,
+  ...defaultGlobalAdminAc.statements,
+});
 
 export const globalRoleConfig = {
-  admin: {
-    // Platform admin - full access
-  },
-  user: {
-    // Regular user
-  },
-} as const;
+  admin: globalAdmin,
+  user: globalUser,
+};
 
 // Organization access control configuration
-export const orgAc = {
-  owner: ["owner", "admin", "member"],
-  admin: ["admin", "member"],
-  member: ["member"],
-} as const;
+export const orgAc = createAccessControl({
+  ...defaultOrgStatements,
+});
+
+export const orgMember = orgAc.newRole({
+  ...defaultOrgMemberAc.statements,
+});
+
+export const orgAdmin = orgAc.newRole({
+  ...orgMember.statements,
+  ...defaultOrgAdminAc.statements,
+});
+
+export const orgOwner = orgAc.newRole({
+  ...orgAdmin.statements,
+  ...defaultOrgOwnerAc.statements,
+});
 
 export const orgRoleConfig = {
-  owner: {
-    // Organization owner - full org control
-  },
-  admin: {
-    // Organization admin - manage members and settings
-  },
-  member: {
-    // Organization member - basic access
-  },
-} as const;
+  owner: orgOwner,
+  admin: orgAdmin,
+  member: orgMember,
+};
 
 const clientOptions = {
   plugins: [

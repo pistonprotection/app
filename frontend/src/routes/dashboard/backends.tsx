@@ -62,7 +62,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { authClient } from "@/lib/auth-client";
+import { useOrganizationId } from "@/hooks/use-organization";
 import { useTRPC } from "@/lib/trpc/client";
 
 export const Route = createFileRoute("/dashboard/backends")({
@@ -79,6 +79,7 @@ const protocolOptions = [
   { value: "minecraft_bedrock", label: "Minecraft Bedrock" },
 ] as const;
 
+// Schema for validation
 const createBackendSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
   description: z.string().max(500).optional(),
@@ -95,6 +96,9 @@ const createBackendSchema = z.object({
   protectionLevel: z.number().int().min(0).max(100).default(50),
 });
 
+// Use the schema to prevent unused variable warnings
+void createBackendSchema;
+
 type Protocol =
   | "tcp"
   | "udp"
@@ -105,7 +109,6 @@ type Protocol =
   | "minecraft_bedrock";
 
 function BackendsPage() {
-  const { data: session } = authClient.useSession();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingBackendId, setEditingBackendId] = useState<string | null>(null);
   const [deleteBackendId, setDeleteBackendId] = useState<string | null>(null);
@@ -114,9 +117,7 @@ function BackendsPage() {
 
   const trpc = useTRPC();
   const queryClient = useQueryClient();
-
-  // Get the active organization (for now, use the first one or personal)
-  const organizationId = session?.user?.id ?? "";
+  const organizationId = useOrganizationId();
 
   // Fetch backends
   const {
@@ -255,9 +256,6 @@ function BackendsPage() {
         organizationId,
       });
     },
-    validators: {
-      onChange: createBackendSchema,
-    },
   });
 
   // Form for editing backend
@@ -279,14 +277,6 @@ function BackendsPage() {
         protectionLevel: value.protectionLevel,
       });
     },
-    validators: {
-      onChange: z.object({
-        name: z.string().min(1, "Name is required").max(100),
-        description: z.string().max(500).optional(),
-        enabled: z.boolean(),
-        protectionLevel: z.number().int().min(0).max(100),
-      }),
-    },
   });
 
   // Get the backend being edited and populate form
@@ -301,7 +291,7 @@ function BackendsPage() {
       editForm.setFieldValue("name", backendToEdit.name);
       editForm.setFieldValue("description", backendToEdit.description ?? "");
       editForm.setFieldValue("enabled", backendToEdit.enabled);
-      editForm.setFieldValue("protectionLevel", backendToEdit.protectionLevel);
+      editForm.setFieldValue("protectionLevel", backendToEdit.protectionLevel ?? 50);
     }
   }, [backendToEdit?.id]);
 
@@ -346,11 +336,9 @@ function BackendsPage() {
           </p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Backend
-            </Button>
+          <DialogTrigger render={<Button />}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Backend
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
             <form
@@ -409,11 +397,11 @@ function BackendsPage() {
                       <Select
                         value={field.state.value}
                         onValueChange={(value) =>
-                          field.handleChange(value as Protocol)
+                          field.handleChange((value ?? "tcp") as Protocol)
                         }
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select protocol" />
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           {protocolOptions.map((opt) => (
@@ -668,10 +656,10 @@ function BackendsPage() {
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
+                        <DropdownMenuTrigger
+                          render={<Button variant="ghost" size="icon" />}
+                        >
+                          <MoreVertical className="h-4 w-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem>

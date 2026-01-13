@@ -61,10 +61,10 @@ function AdminOverview() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {platformStats?.totalOrganizations ?? 0}
+              {platformStats?.organizations?.total ?? 0}
             </div>
             <p className="text-xs text-muted-foreground">
-              {platformStats?.activeOrganizations ?? 0} active
+              {platformStats?.organizations?.total ?? 0} active
             </p>
           </CardContent>
         </Card>
@@ -76,10 +76,10 @@ function AdminOverview() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {platformStats?.totalUsers ?? 0}
+              {platformStats?.users?.total ?? 0}
             </div>
             <p className="text-xs text-muted-foreground">
-              {platformStats?.activeUsers ?? 0} active this week
+              {platformStats?.users?.activeToday ?? 0} active this week
             </p>
           </CardContent>
         </Card>
@@ -93,10 +93,10 @@ function AdminOverview() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {platformStats?.totalBackends ?? 0}
+              {platformStats?.backends?.total ?? 0}
             </div>
             <p className="text-xs text-muted-foreground">
-              {platformStats?.healthyBackends ?? 0} healthy
+              {platformStats?.backends?.healthy ?? 0} healthy
             </p>
           </CardContent>
         </Card>
@@ -108,10 +108,10 @@ function AdminOverview() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {platformStats?.attacksLast24h ?? 0}
+              {platformStats?.attacks?.totalLast24h ?? 0}
             </div>
             <p className="text-xs text-muted-foreground">
-              {platformStats?.mitigatedAttacks ?? 0} mitigated
+              {platformStats?.attacks?.ongoing ?? 0} ongoing
             </p>
           </CardContent>
         </Card>
@@ -128,10 +128,10 @@ function AdminOverview() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatNumber(platformStats?.requestsLast24h ?? 0)}
+              {formatNumber(platformStats?.traffic?.requestsLast24h ?? 0)}
             </div>
             <p className="text-xs text-muted-foreground">
-              {formatNumber(platformStats?.blockedRequestsLast24h ?? 0)} blocked
+              {formatNumber(platformStats?.traffic?.blockedLast24h ?? 0)} blocked
             </p>
           </CardContent>
         </Card>
@@ -145,7 +145,7 @@ function AdminOverview() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatBytes(platformStats?.bandwidthLast24h ?? 0)}
+              {formatBytes(platformStats?.traffic?.bytesLast24h ?? 0)}
             </div>
           </CardContent>
         </Card>
@@ -159,7 +159,7 @@ function AdminOverview() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatNumber(platformStats?.uniqueIpsLast24h ?? 0)}
+              {formatNumber(0)}
             </div>
           </CardContent>
         </Card>

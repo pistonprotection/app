@@ -7,7 +7,7 @@ import * as appSchema from "@/server/db/schema";
 import { sendEmail } from "@/server/email";
 
 export const stripeClient = new Stripe(env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-05-28.basil",
+  apiVersion: "2025-12-15.clover",
 });
 
 // Get user by Stripe customer ID
@@ -162,9 +162,9 @@ async function logBillingEvent(
     organizationId,
     userId: null,
     action: `billing.${eventType}`,
-    resourceType: "subscription",
+    resource: "subscription",
     resourceId: eventData.subscriptionId as string | null,
-    details: eventData,
+    newValue: eventData,
     ipAddress: null,
     userAgent: "stripe-webhook",
   });
@@ -198,17 +198,22 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
           `[Stripe Webhook] Subscription updated: ${subscription.id}`,
         );
 
+        // Get period info from subscription items in the new API
+        const subscriptionItem = subscription.items.data[0];
+        const periodStart = subscriptionItem?.current_period_start;
+        const periodEnd = subscriptionItem?.current_period_end;
+
         // Update the subscription status in database
         await db
           .update(authSchema.subscription)
           .set({
             status: subscription.status,
             cancelAtPeriodEnd: subscription.cancel_at_period_end,
-            periodStart: subscription.current_period_start
-              ? new Date(subscription.current_period_start * 1000)
+            periodStart: periodStart
+              ? new Date(periodStart * 1000)
               : null,
-            periodEnd: subscription.current_period_end
-              ? new Date(subscription.current_period_end * 1000)
+            periodEnd: periodEnd
+              ? new Date(periodEnd * 1000)
               : null,
           })
           .where(
@@ -249,10 +254,9 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
           await db
             .update(appSchema.protectionOrganization)
             .set({
-              maxBackends: 1,
-              maxFilters: 5,
+              backendsLimit: 1,
+              filtersLimit: 5,
               bandwidthLimit: 1_073_741_824, // 1GB
-              requestLimit: 100_000,
               billingType: "flat",
             })
             .where(
@@ -279,12 +283,14 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
           await sendPaymentSuccessNotification(
             user.email,
             invoice.amount_paid,
-            invoice.hosted_invoice_url,
+            invoice.hosted_invoice_url ?? null,
           );
         }
 
         // Reset usage counters on successful billing cycle
-        const subscriptionId = invoice.subscription as string | null;
+        // In newer Stripe API, subscription is accessed via parent.subscription_details
+        const parentSub = invoice.parent?.subscription_details;
+        const subscriptionId = (parentSub?.subscription as string | null) ?? null;
         if (subscriptionId) {
           const sub = await db.query.subscription.findFirst({
             where: (s, { eq }) => eq(s.stripeSubscriptionId, subscriptionId),
@@ -331,17 +337,19 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
         }
 
         // Log the event
-        const subscriptionId = invoice.subscription as string | null;
-        if (subscriptionId) {
+        // In newer Stripe API, subscription is accessed via parent.subscription_details
+        const parentSubFailed = invoice.parent?.subscription_details;
+        const subscriptionIdFailed = (parentSubFailed?.subscription as string | null) ?? null;
+        if (subscriptionIdFailed) {
           const sub = await db.query.subscription.findFirst({
-            where: (s, { eq }) => eq(s.stripeSubscriptionId, subscriptionId),
+            where: (s, { eq }) => eq(s.stripeSubscriptionId, subscriptionIdFailed),
           });
 
           if (sub?.referenceId) {
             await logBillingEvent(sub.referenceId, "payment_failed", {
               invoiceId: invoice.id,
               amountDue: invoice.amount_due,
-              subscriptionId,
+              subscriptionId: subscriptionIdFailed,
               attemptCount: invoice.attempt_count,
             });
           }

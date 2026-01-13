@@ -168,7 +168,7 @@ function AdminMetricsPage() {
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <Select value={timeRange} onValueChange={setTimeRange}>
+          <Select value={timeRange} onValueChange={(value) => setTimeRange(value ?? "15m")}>
             <SelectTrigger className="w-[140px]">
               <SelectValue />
             </SelectTrigger>

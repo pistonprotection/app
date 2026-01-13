@@ -39,6 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useOrganizationId } from "@/hooks/use-organization";
 import { useTRPC } from "@/lib/trpc/client";
 
 export const Route = createFileRoute("/dashboard/billing")({
@@ -128,15 +129,16 @@ function BillingPage() {
 
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  const organizationId = useOrganizationId();
 
   // Get current subscription
   const { data: subscription, isLoading: subLoading } = useQuery(
-    trpc.billing.getSubscription.queryOptions(),
+    trpc.billing.getSubscription.queryOptions({ organizationId }),
   );
 
   // Get usage
   const { data: usage, isLoading: usageLoading } = useQuery(
-    trpc.billing.getUsage.queryOptions(),
+    trpc.billing.getUsage.queryOptions({ organizationId }),
   );
 
   // Get available plans
@@ -146,12 +148,12 @@ function BillingPage() {
 
   // Get invoices
   const { data: invoices, isLoading: invoicesLoading } = useQuery(
-    trpc.billing.getInvoices.queryOptions({ limit: 10 }),
+    trpc.billing.getInvoices.queryOptions({ organizationId, limit: 10 }),
   );
 
   // Get payment methods
   const { data: paymentMethods } = useQuery(
-    trpc.billing.getPaymentMethods.queryOptions(),
+    trpc.billing.getPaymentMethods.queryOptions({ organizationId }),
   );
 
   // Create checkout session for upgrade
@@ -262,7 +264,7 @@ function BillingPage() {
         </div>
         <Button
           variant="outline"
-          onClick={() => portalMutation.mutate()}
+          onClick={() => portalMutation.mutate({ organizationId })}
           disabled={portalMutation.isPending}
         >
           {portalMutation.isPending ? (
@@ -288,7 +290,7 @@ function BillingPage() {
             </div>
             <Button
               variant="destructive"
-              onClick={() => portalMutation.mutate()}
+              onClick={() => portalMutation.mutate({ organizationId })}
             >
               Update Payment
             </Button>
@@ -314,7 +316,7 @@ function BillingPage() {
             </div>
             <Button
               variant="outline"
-              onClick={() => resumeMutation.mutate()}
+              onClick={() => resumeMutation.mutate({ organizationId })}
               disabled={resumeMutation.isPending}
             >
               {resumeMutation.isPending && (
@@ -381,6 +383,7 @@ function BillingPage() {
                   const plan = plans?.find((p) => p.name === nextPlan);
                   if (plan?.lookupKey) {
                     upgradeMutation.mutate({
+                      organizationId,
                       priceId: plan.lookupKey,
                       annual: false,
                     });
@@ -642,6 +645,7 @@ function BillingPage() {
                           if (!isCurrent && plan.lookupKey) {
                             setUpgradePlanName(plan.name);
                             upgradeMutation.mutate({
+                              organizationId,
                               priceId: plan.lookupKey,
                               annual: false,
                             });
@@ -725,7 +729,7 @@ function BillingPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => viewInvoice(invoice.hostedInvoiceUrl)}
+                        onClick={() => viewInvoice(invoice.hostedInvoiceUrl ?? null)}
                       >
                         <ExternalLink className="mr-2 h-4 w-4" />
                         View
@@ -734,7 +738,7 @@ function BillingPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() =>
-                          downloadInvoice(invoice.invoicePdf, invoice.number)
+                          downloadInvoice(invoice.invoicePdf ?? null, invoice.number ?? null)
                         }
                       >
                         <Download className="mr-2 h-4 w-4" />
@@ -797,7 +801,7 @@ function BillingPage() {
             </Button>
             <Button
               variant="destructive"
-              onClick={() => cancelMutation.mutate()}
+              onClick={() => cancelMutation.mutate({ organizationId })}
               disabled={cancelMutation.isPending}
             >
               {cancelMutation.isPending && (

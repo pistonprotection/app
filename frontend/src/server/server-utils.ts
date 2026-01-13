@@ -5,7 +5,7 @@ import { member } from "@/server/db/auth-schema";
 import { protectionOrganization } from "@/server/db/schema";
 
 // Extended plan interface with usage-based billing options
-export interface ProtectionPlanConfig {
+export interface ProtectionPlanConfig extends Record<string, unknown> {
   // Flat plan limits
   backends: number;
   filters: number;

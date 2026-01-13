@@ -607,10 +607,10 @@ function AdminSettingsPage() {
                   </p>
                 </div>
                 <Dialog>
-                  <DialogTrigger asChild>
-                    <Button variant="destructive" size="sm">
-                      Purge Cache
-                    </Button>
+                  <DialogTrigger
+                    render={<Button variant="destructive" size="sm" />}
+                  >
+                    Purge Cache
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>

@@ -39,7 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { authClient } from "@/lib/auth-client";
+import { useOrganizationId } from "@/hooks/use-organization";
 import { useTRPC } from "@/lib/trpc/client";
 
 export const Route = createFileRoute("/dashboard/ip-lookup")({
@@ -58,9 +58,8 @@ export const Route = createFileRoute("/dashboard/ip-lookup")({
 function IpLookupPage() {
   const [searchIp, setSearchIp] = useState("");
   const [submittedIp, setSubmittedIp] = useState("");
-  const { data: session } = authClient.useSession();
   const trpc = useTRPC();
-  const organizationId = session?.user?.id ?? "";
+  const organizationId = useOrganizationId();
 
   // IP Score lookup
   const {

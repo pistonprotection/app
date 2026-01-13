@@ -34,16 +34,16 @@ import { auth } from "@/server/auth";
 export const Route = createFileRoute("/admin/")({
   beforeLoad: async ({ context }) => {
     // Server-side session and admin role check
+    // Access request from context (set by TanStack Start during SSR)
+    const ctx = context as { request?: Request };
     const session = await auth.api.getSession({
-      headers: context.request?.headers ?? new Headers(),
+      headers: ctx.request?.headers ?? new Headers(),
     });
 
     if (!session?.user) {
       throw redirect({
-        to: "/auth/login",
-        search: {
-          redirect: "/admin",
-        },
+        to: "/auth/$authView",
+        params: { authView: "sign-in" },
       });
     }
 
@@ -127,13 +127,11 @@ function AdminLayout() {
                   {adminNavItems.map((item) => (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton
-                        asChild
+                        render={<Link to={item.href} />}
                         isActive={location.pathname === item.href}
                       >
-                        <Link to={item.href}>
-                          <item.icon className="h-4 w-4" />
-                          <span>{item.title}</span>
-                        </Link>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}

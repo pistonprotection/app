@@ -17,6 +17,8 @@ Make sure all things work that are defined in code and have actual use for the a
 Also don't leave a documentation module when documentations should be in the frontend module.
 E.g. remove useless modules and make sure the codebase is clean.
 
+Use rudt nightly-2026-01-10 and latest syntax and features and editions.
+
 - ddos protection management panel written with:
   - shadcn/ui (baseui theme, not radix theme)
   - shadcn/ui used idiomatically, use components where possible. always consider all available shadcn components for a design

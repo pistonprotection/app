@@ -52,7 +52,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { authClient } from "@/lib/auth-client";
+import { useOrganizationId } from "@/hooks/use-organization";
 import { useTRPC } from "@/lib/trpc/client";
 
 export const Route = createFileRoute("/dashboard/analytics")({
@@ -104,12 +104,11 @@ function formatNumber(num: number): string {
 }
 
 function AnalyticsPage() {
-  const { data: session } = authClient.useSession();
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
   const [ipLookup, setIpLookup] = useState("");
 
   const trpc = useTRPC();
-  const organizationId = session?.user?.id ?? "";
+  const organizationId = useOrganizationId();
 
   // Get traffic stats
   const {
@@ -205,10 +204,10 @@ function AnalyticsPage() {
         </div>
         <Select
           value={timeRange}
-          onValueChange={(v) => setTimeRange(v as TimeRange)}
+          onValueChange={(v) => setTimeRange((v ?? "24h") as TimeRange)}
         >
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select range" />
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="1h">Last Hour</SelectItem>
@@ -399,7 +398,7 @@ function AnalyticsPage() {
                     outerRadius={80}
                     innerRadius={50}
                     paddingAngle={2}
-                    label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                    label={({ percent }: { percent?: number }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
                   >
                     {attackTypes.map((_entry, index) => (
                       <Cell
@@ -416,9 +415,9 @@ function AnalyticsPage() {
                       border: "1px solid hsl(var(--border))",
                       borderRadius: "8px",
                     }}
-                    formatter={(value: number) => [
-                      formatNumber(value),
-                      "Count",
+                    formatter={(value: number | undefined) => [
+                      formatNumber(value ?? 0),
+                      "Count" as const,
                     ]}
                   />
                   <Legend

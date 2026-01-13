@@ -14,6 +14,18 @@ import {
   twoFactor,
   username,
 } from "better-auth/plugins";
+import { createAccessControl } from "better-auth/plugins/access";
+import {
+  adminAc as defaultGlobalAdminAc,
+  defaultStatements as defaultGlobalStatements,
+  userAc as defaultGlobalUserAc,
+} from "better-auth/plugins/admin/access";
+import {
+  adminAc as defaultOrgAdminAc,
+  memberAc as defaultOrgMemberAc,
+  ownerAc as defaultOrgOwnerAc,
+  defaultStatements as defaultOrgStatements,
+} from "better-auth/plugins/organization/access";
 import { emailHarmony } from "better-auth-harmony";
 import { eq } from "drizzle-orm";
 import { env } from "@/env";
@@ -23,6 +35,41 @@ import * as authSchema from "@/server/db/auth-schema";
 import * as appSchema from "@/server/db/schema";
 import { getRoleOfUserInOrg, protectionPlans } from "@/server/server-utils";
 import { handleStripeEvent, stripeClient } from "@/server/stripe";
+
+// Global access control
+const globalAc = createAccessControl({
+  ...defaultGlobalStatements,
+  organization: ["create"],
+});
+
+const globalUser = globalAc.newRole({
+  ...defaultGlobalUserAc.statements,
+  organization: ["create"],
+});
+
+const globalAdmin = globalAc.newRole({
+  ...globalUser.statements,
+  ...defaultGlobalAdminAc.statements,
+});
+
+// Organization access control
+const orgAc = createAccessControl({
+  ...defaultOrgStatements,
+});
+
+const orgMember = orgAc.newRole({
+  ...defaultOrgMemberAc.statements,
+});
+
+const orgAdmin = orgAc.newRole({
+  ...orgMember.statements,
+  ...defaultOrgAdminAc.statements,
+});
+
+const orgOwner = orgAc.newRole({
+  ...orgAdmin.statements,
+  ...defaultOrgOwnerAc.statements,
+});
 
 const siteName = "PistonProtection";
 const baseUrlString = env.PUBLIC_APP_URL;
@@ -167,17 +214,10 @@ export const auth = betterAuth({
       },
     }),
     admin({
-      ac: {
-        admin: ["admin"],
-        user: ["user"],
-      },
+      ac: globalAc,
       roles: {
-        admin: {
-          // Platform admin capabilities
-        },
-        user: {
-          // Regular user capabilities
-        },
+        admin: globalAdmin,
+        user: globalUser,
       },
     }),
     apiKey({
@@ -186,15 +226,11 @@ export const auth = betterAuth({
       defaultPrefix: "pp_",
     }),
     organization({
-      ac: {
-        owner: ["owner", "admin", "member"],
-        admin: ["admin", "member"],
-        member: ["member"],
-      },
+      ac: orgAc,
       roles: {
-        owner: {},
-        admin: {},
-        member: {},
+        owner: orgOwner,
+        admin: orgAdmin,
+        member: orgMember,
       },
       allowUserToCreateOrganization: async (_user): Promise<boolean> => {
         // Allow all verified users to create organizations
@@ -212,7 +248,10 @@ export const auth = betterAuth({
           id,
           role,
           email,
-          inviter,
+          inviter: {
+            email: inviter.user.email,
+            name: inviter.user.name,
+          },
           organization,
         });
       },

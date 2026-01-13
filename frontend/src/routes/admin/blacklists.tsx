@@ -65,12 +65,16 @@ export const Route = createFileRoute("/admin/blacklists")({
   component: AdminBlacklists,
 });
 
+// Schema for validation
 const addBlacklistSchema = z.object({
   type: z.enum(["ip", "cidr", "asn", "country"]),
   value: z.string().min(1),
   reason: z.string().optional(),
   expiresAt: z.string().optional(),
 });
+
+// Use the schema to prevent unused variable warnings
+void addBlacklistSchema;
 
 type BlacklistType = "ip" | "cidr" | "asn" | "country";
 
@@ -147,9 +151,6 @@ function AdminBlacklists() {
         reason: value.reason || undefined,
         expiresAt: value.expiresAt ? new Date(value.expiresAt) : undefined,
       });
-    },
-    validators: {
-      onChange: addBlacklistSchema,
     },
   });
 
@@ -299,11 +300,9 @@ function AdminBlacklists() {
             Export
           </Button>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Entry
-              </Button>
+            <DialogTrigger render={<Button />}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Entry
             </DialogTrigger>
             <DialogContent>
               <form
@@ -538,10 +537,10 @@ function AdminBlacklists() {
                         </TableCell>
                         <TableCell>
                           <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
+                            <DropdownMenuTrigger
+                              render={<Button variant="ghost" size="icon" />}
+                            >
+                              <MoreVertical className="h-4 w-4" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem

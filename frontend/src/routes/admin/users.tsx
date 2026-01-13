@@ -296,9 +296,9 @@ function AdminUsers() {
               />
             </div>
 
-            <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <Select value={roleFilter} onValueChange={(value) => setRoleFilter(value ?? "all")}>
               <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Role" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Roles</SelectItem>
@@ -307,9 +307,9 @@ function AdminUsers() {
               </SelectContent>
             </Select>
 
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value ?? "all")}>
               <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Status" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
@@ -353,15 +353,7 @@ function AdminUsers() {
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                          {user.avatar ? (
-                            <img
-                              src={user.avatar}
-                              alt={user.name ?? user.email}
-                              className="h-10 w-10 rounded-full"
-                            />
-                          ) : (
-                            <UserIcon className="h-5 w-5 text-muted-foreground" />
-                          )}
+                          <UserIcon className="h-5 w-5 text-muted-foreground" />
                         </div>
                         <div>
                           <p className="font-medium">{user.name || "—"}</p>
@@ -414,17 +406,15 @@ function AdminUsers() {
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-muted-foreground">
-                        {user.lastLoginAt
-                          ? formatTimeAgo(user.lastLoginAt)
-                          : "Never"}
+                        {formatTimeAgo(user.createdAt)}
                       </span>
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
+                        <DropdownMenuTrigger
+                          render={<Button variant="ghost" size="sm" />}
+                        >
+                          <MoreVertical className="h-4 w-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
@@ -506,9 +496,9 @@ function AdminUsers() {
               <TabsContent value="profile" className="space-y-4">
                 <div className="flex items-center gap-4">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-                    {selectedUser.avatar ? (
+                    {selectedUser.image ? (
                       <img
-                        src={selectedUser.avatar}
+                        src={selectedUser.image}
                         alt={selectedUser.name ?? selectedUser.email}
                         className="h-16 w-16 rounded-full"
                       />
