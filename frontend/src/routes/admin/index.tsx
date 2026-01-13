@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Ban,
   Building2,
+  History,
   LayoutDashboard,
   Server,
   Settings,
@@ -92,6 +93,11 @@ const adminNavItems = [
     title: "Metrics",
     href: "/admin/metrics",
     icon: Activity,
+  },
+  {
+    title: "Audit Log",
+    href: "/admin/audit-log",
+    icon: History,
   },
   {
     title: "Settings",
