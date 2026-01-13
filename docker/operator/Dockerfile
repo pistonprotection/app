@@ -22,6 +22,7 @@ WORKDIR /app
 FROM chef AS planner
 
 COPY operator/Cargo.toml operator/Cargo.lock ./
+COPY operator/benches ./benches
 
 # Create dummy source for dependency resolution
 RUN mkdir src && \
@@ -47,6 +48,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 # Copy actual source and build
 COPY operator/Cargo.toml operator/Cargo.lock ./
 COPY operator/src ./src
+COPY operator/benches ./benches
 
 # Build arguments for versioning
 ARG VERSION=0.0.0
