@@ -27,6 +27,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -108,6 +109,8 @@ function BackendsPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingBackendId, setEditingBackendId] = useState<string | null>(null);
   const [deleteBackendId, setDeleteBackendId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
 
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -184,6 +187,58 @@ function BackendsPage() {
       },
     }),
   );
+
+  // Bulk toggle mutation
+  const bulkToggleMutation = useMutation(
+    trpc.backends.bulkToggle.mutationOptions({
+      onSuccess: (data) => {
+        toast.success(
+          `${data.count} backends ${data.enabled ? "enabled" : "disabled"}`,
+        );
+        setSelectedIds(new Set());
+        queryClient.invalidateQueries({ queryKey: ["backends"] });
+      },
+      onError: (error) => {
+        toast.error(`Failed to bulk toggle: ${error.message}`);
+      },
+    }),
+  );
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation(
+    trpc.backends.bulkDelete.mutationOptions({
+      onSuccess: (data) => {
+        toast.success(`${data.count} backends deleted`);
+        setSelectedIds(new Set());
+        setBulkDeleteConfirm(false);
+        queryClient.invalidateQueries({ queryKey: ["backends"] });
+      },
+      onError: (error) => {
+        toast.error(`Failed to bulk delete: ${error.message}`);
+      },
+    }),
+  );
+
+  // Selection helpers
+  const toggleSelection = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selectedIds.size === backends.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(backends.map((b) => b.id)));
+    }
+  };
 
   // Form for creating backend
   const form = useForm({
@@ -472,10 +527,60 @@ function BackendsPage() {
       {/* Backends Table */}
       <Card>
         <CardHeader>
-          <CardTitle>All Backends</CardTitle>
-          <CardDescription>
-            View and manage all your protected backend servers.
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>All Backends</CardTitle>
+              <CardDescription>
+                View and manage all your protected backend servers.
+              </CardDescription>
+            </div>
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  {selectedIds.size} selected
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    bulkToggleMutation.mutate({
+                      ids: Array.from(selectedIds),
+                      enabled: true,
+                      organizationId,
+                    })
+                  }
+                  disabled={bulkToggleMutation.isPending}
+                >
+                  <Power className="mr-1 h-3 w-3" />
+                  Enable All
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    bulkToggleMutation.mutate({
+                      ids: Array.from(selectedIds),
+                      enabled: false,
+                      organizationId,
+                    })
+                  }
+                  disabled={bulkToggleMutation.isPending}
+                >
+                  <Power className="mr-1 h-3 w-3" />
+                  Disable All
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteConfirm(true)}
+                  disabled={bulkDeleteMutation.isPending}
+                >
+                  <Trash2 className="mr-1 h-3 w-3" />
+                  Delete Selected
+                </Button>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -499,6 +604,16 @@ function BackendsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[40px]">
+                    <Checkbox
+                      checked={
+                        backends.length > 0 &&
+                        selectedIds.size === backends.length
+                      }
+                      onCheckedChange={selectAll}
+                      aria-label="Select all backends"
+                    />
+                  </TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Protocol</TableHead>
                   <TableHead>Status</TableHead>
@@ -511,6 +626,13 @@ function BackendsPage() {
               <TableBody>
                 {backends.map((backend) => (
                   <TableRow key={backend.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(backend.id)}
+                        onCheckedChange={() => toggleSelection(backend.id)}
+                        aria-label={`Select ${backend.name}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         <Globe className="h-4 w-4 text-muted-foreground" />
@@ -746,6 +868,43 @@ function BackendsPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={bulkDeleteConfirm} onOpenChange={setBulkDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {selectedIds.size} Backends</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {selectedIds.size} backend
+              {selectedIds.size > 1 ? "s" : ""}? This action cannot be undone
+              and will remove all associated origins, domains, and filters.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setBulkDeleteConfirm(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() =>
+                bulkDeleteMutation.mutate({
+                  ids: Array.from(selectedIds),
+                  organizationId,
+                })
+              }
+              disabled={bulkDeleteMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Delete {selectedIds.size} Backend{selectedIds.size > 1 ? "s" : ""}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
