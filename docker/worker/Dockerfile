@@ -85,12 +85,14 @@ RUN rustup install nightly-2024-10-01 && \
     rustup default nightly-2024-10-01 && \
     rustup component add rust-src
 
-# Install bpf-linker dependencies
+# Install bpf-linker dependencies - use LLVM 16 (available in bookworm)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    llvm-17 \
-    clang-17 \
-    libclang-17-dev \
-    && rm -rf /var/lib/apt/lists/*
+    llvm-16 \
+    clang-16 \
+    libclang-16-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-16 100 \
+    && update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-16 100
 
 # Install bpf-linker
 RUN cargo install bpf-linker --locked
