@@ -870,51 +870,114 @@ impl MetricsServiceTrait for MetricsGrpcService {
         }))
     }
 
-    // Alert CRUD - these require a separate AlertService implementation
+    // Alert CRUD operations
+    #[instrument(skip(self, request))]
     async fn create_alert(
         &self,
-        _request: Request<CreateAlertRequest>,
+        request: Request<CreateAlertRequest>,
     ) -> Result<Response<CreateAlertResponse>, Status> {
-        // TODO: Implement alert service
-        Err(Status::unimplemented(
-            "Alert management not yet implemented",
-        ))
+        let req = request.into_inner();
+        let alert = req
+            .alert
+            .ok_or_else(|| Status::invalid_argument("Alert is required"))?;
+
+        let created = self
+            .service
+            .create_alert(&req.backend_id, alert)
+            .await
+            .map_err(Status::from)?;
+
+        Ok(Response::new(CreateAlertResponse {
+            alert: Some(created),
+        }))
     }
 
+    #[instrument(skip(self, request))]
     async fn get_alert(
         &self,
-        _request: Request<GetAlertRequest>,
+        request: Request<GetAlertRequest>,
     ) -> Result<Response<GetAlertResponse>, Status> {
-        Err(Status::unimplemented(
-            "Alert management not yet implemented",
-        ))
+        let req = request.into_inner();
+
+        let alert = self
+            .service
+            .get_alert(&req.alert_id)
+            .await
+            .map_err(Status::from)?
+            .ok_or_else(|| Status::not_found("Alert not found"))?;
+
+        Ok(Response::new(GetAlertResponse { alert: Some(alert) }))
     }
 
+    #[instrument(skip(self, request))]
     async fn update_alert(
         &self,
-        _request: Request<UpdateAlertRequest>,
+        request: Request<UpdateAlertRequest>,
     ) -> Result<Response<UpdateAlertResponse>, Status> {
-        Err(Status::unimplemented(
-            "Alert management not yet implemented",
-        ))
+        let req = request.into_inner();
+        let alert = req
+            .alert
+            .ok_or_else(|| Status::invalid_argument("Alert is required"))?;
+
+        let updated = self
+            .service
+            .update_alert(alert)
+            .await
+            .map_err(Status::from)?;
+
+        Ok(Response::new(UpdateAlertResponse {
+            alert: Some(updated),
+        }))
     }
 
+    #[instrument(skip(self, request))]
     async fn delete_alert(
         &self,
-        _request: Request<DeleteAlertRequest>,
+        request: Request<DeleteAlertRequest>,
     ) -> Result<Response<DeleteAlertResponse>, Status> {
-        Err(Status::unimplemented(
-            "Alert management not yet implemented",
-        ))
+        let req = request.into_inner();
+
+        let success = self
+            .service
+            .delete_alert(&req.alert_id)
+            .await
+            .map_err(Status::from)?;
+
+        Ok(Response::new(DeleteAlertResponse { success }))
     }
 
+    #[instrument(skip(self, request))]
     async fn list_alerts(
         &self,
-        _request: Request<ListAlertsRequest>,
+        request: Request<ListAlertsRequest>,
     ) -> Result<Response<ListAlertsResponse>, Status> {
-        Err(Status::unimplemented(
-            "Alert management not yet implemented",
-        ))
+        let req = request.into_inner();
+        let pagination = req.pagination.unwrap_or_default();
+        let page = pagination.page.max(1);
+        let page_size = pagination.page_size.clamp(1, 100);
+
+        let (alerts, total) = self
+            .service
+            .list_alerts(&req.backend_id, page, page_size)
+            .await
+            .map_err(Status::from)?;
+
+        let has_next = (page * page_size) < total as u32;
+
+        Ok(Response::new(ListAlertsResponse {
+            alerts,
+            pagination: Some(pistonprotection_proto::common::PaginationInfo {
+                page,
+                page_size,
+                total_count: total as u32,
+                has_next,
+                next_cursor: if has_next {
+                    format!("{}", page + 1)
+                } else {
+                    String::new()
+                },
+            }),
+        }))
     }
 
     #[instrument(skip(self, request))]

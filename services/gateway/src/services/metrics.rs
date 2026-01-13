@@ -401,6 +401,191 @@ impl MetricsService {
 
         Ok(None)
     }
+
+    // =========================================================================
+    // Alert CRUD Operations
+    // =========================================================================
+
+    /// Create a new alert
+    #[instrument(skip(self))]
+    pub async fn create_alert(&self, backend_id: &str, mut alert: Alert) -> Result<Alert> {
+        let db = self.state.db()?;
+
+        // Generate a new ID if not provided
+        if alert.id.is_empty() {
+            alert.id = uuid::Uuid::new_v4().to_string();
+        }
+        alert.backend_id = backend_id.to_string();
+
+        let now = chrono::Utc::now();
+        alert.created_at = Some(now.into());
+        alert.updated_at = Some(now.into());
+        alert.state = AlertState::Ok.into();
+
+        // Serialize condition and notifications to JSON
+        let condition_json = alert
+            .condition
+            .as_ref()
+            .map(|c| serde_json::to_value(c).unwrap_or_default());
+        let notifications_json = serde_json::to_value(&alert.notifications).unwrap_or_default();
+
+        sqlx::query(
+            r#"
+            INSERT INTO alerts (id, backend_id, name, condition, notifications, enabled, state, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            "#,
+        )
+        .bind(&alert.id)
+        .bind(&alert.backend_id)
+        .bind(&alert.name)
+        .bind(&condition_json)
+        .bind(&notifications_json)
+        .bind(alert.enabled)
+        .bind(alert.state)
+        .bind(now)
+        .bind(now)
+        .execute(db)
+        .await?;
+
+        Ok(alert)
+    }
+
+    /// Get an alert by ID
+    #[instrument(skip(self))]
+    pub async fn get_alert(&self, alert_id: &str) -> Result<Option<Alert>> {
+        let db = self.state.db()?;
+
+        let row = sqlx::query(
+            r#"
+            SELECT id, backend_id, name, condition, notifications, enabled, state,
+                   last_triggered, created_at, updated_at
+            FROM alerts
+            WHERE id = $1
+            "#,
+        )
+        .bind(alert_id)
+        .fetch_optional(db)
+        .await?;
+
+        if let Some(row) = row {
+            return Ok(Some(self.row_to_alert(&row)));
+        }
+
+        Ok(None)
+    }
+
+    /// Update an existing alert
+    #[instrument(skip(self))]
+    pub async fn update_alert(&self, alert: Alert) -> Result<Alert> {
+        let db = self.state.db()?;
+
+        let now = chrono::Utc::now();
+        let condition_json = alert
+            .condition
+            .as_ref()
+            .map(|c| serde_json::to_value(c).unwrap_or_default());
+        let notifications_json = serde_json::to_value(&alert.notifications).unwrap_or_default();
+
+        sqlx::query(
+            r#"
+            UPDATE alerts
+            SET name = $2, condition = $3, notifications = $4, enabled = $5, state = $6, updated_at = $7
+            WHERE id = $1
+            "#,
+        )
+        .bind(&alert.id)
+        .bind(&alert.name)
+        .bind(&condition_json)
+        .bind(&notifications_json)
+        .bind(alert.enabled)
+        .bind(alert.state)
+        .bind(now)
+        .execute(db)
+        .await?;
+
+        // Return updated alert
+        self.get_alert(&alert.id)
+            .await?
+            .ok_or_else(|| pistonprotection_common::error::Error::NotFound {
+                entity: "Alert".to_string(),
+                id: alert.id.clone(),
+            })
+    }
+
+    /// Delete an alert
+    #[instrument(skip(self))]
+    pub async fn delete_alert(&self, alert_id: &str) -> Result<bool> {
+        let db = self.state.db()?;
+
+        let result = sqlx::query("DELETE FROM alerts WHERE id = $1")
+            .bind(alert_id)
+            .execute(db)
+            .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// List alerts for a backend
+    #[instrument(skip(self))]
+    pub async fn list_alerts(
+        &self,
+        backend_id: &str,
+        page: u32,
+        page_size: u32,
+    ) -> Result<(Vec<Alert>, u64)> {
+        let db = self.state.db()?;
+        let offset = (page.saturating_sub(1)) * page_size;
+
+        // Get total count
+        let count_row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM alerts WHERE backend_id = $1")
+            .bind(backend_id)
+            .fetch_one(db)
+            .await?;
+        let total = count_row.0 as u64;
+
+        // Get alerts
+        let rows = sqlx::query(
+            r#"
+            SELECT id, backend_id, name, condition, notifications, enabled, state,
+                   last_triggered, created_at, updated_at
+            FROM alerts
+            WHERE backend_id = $1
+            ORDER BY created_at DESC
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(backend_id)
+        .bind(page_size as i64)
+        .bind(offset as i64)
+        .fetch_all(db)
+        .await?;
+
+        let alerts = rows.iter().map(|row| self.row_to_alert(row)).collect();
+
+        Ok((alerts, total))
+    }
+
+    /// Helper to convert a database row to an Alert
+    fn row_to_alert(&self, row: &sqlx::postgres::PgRow) -> Alert {
+        let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
+        let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
+        let last_triggered: Option<chrono::DateTime<chrono::Utc>> = row.get("last_triggered");
+        let condition_json: Option<serde_json::Value> = row.get("condition");
+        let notifications_json: serde_json::Value = row.get("notifications");
+
+        Alert {
+            id: row.get("id"),
+            backend_id: row.get("backend_id"),
+            name: row.get("name"),
+            condition: condition_json.and_then(|v| serde_json::from_value(v).ok()),
+            notifications: serde_json::from_value(notifications_json).unwrap_or_default(),
+            enabled: row.get("enabled"),
+            state: row.get::<i32, _>("state"),
+            last_triggered: last_triggered.map(|t| t.into()),
+            created_at: Some(created_at.into()),
+            updated_at: Some(updated_at.into()),
+        }
+    }
 }
 
 impl Clone for MetricsService {
