@@ -80,21 +80,13 @@ FROM rust:${RUST_VERSION}-${DEBIAN_VERSION} AS ebpf-builder
 
 WORKDIR /app
 
-# Install nightly toolchain with rust-src
+# Install nightly toolchain with rust-src (required for -Z build-std)
 RUN rustup install nightly-2024-10-01 && \
     rustup default nightly-2024-10-01 && \
     rustup component add rust-src
 
-# Install bpf-linker dependencies - use LLVM 16 (available in bookworm)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    llvm-16 \
-    clang-16 \
-    libclang-16-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-16 100 \
-    && update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-16 100
-
-# Install bpf-linker
+# Install bpf-linker using Rust's built-in LLVM (no external LLVM needed)
+# This avoids LLVM version mismatches since bpf-linker uses rustc's LLVM
 RUN cargo install bpf-linker --locked
 
 # Copy eBPF source
