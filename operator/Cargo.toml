@@ -1,17 +1,18 @@
 [package]
 name = "pistonprotection-operator"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Kubernetes operator for PistonProtection DDoS protection"
-license = "MIT"
+license = "Apache-2.0"
+rust-version = "1.85"
 
 [dependencies]
 # Kubernetes
-kube = { version = "0.99", features = ["runtime", "derive", "client", "rustls-tls"] }
-k8s-openapi = { version = "0.24", features = ["latest"] }
+kube = { version = "3.0", features = ["runtime", "derive", "client", "rustls-tls"] }
+k8s-openapi = { version = "0.27", features = ["latest"] }
 
 # Async runtime
-tokio = { version = "1.40", features = ["full", "sync", "time"] }
+tokio = { version = "1.49", features = ["full", "sync", "time"] }
 futures = "0.3"
 async-trait = "0.1"
 
@@ -29,13 +30,13 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Configuration
-config = "0.14"
+config = "0.15"
 
 # Schema generation
-schemars = "0.8"
+schemars = "1.0"
 
 # Metrics
-prometheus = "0.13"
+prometheus = "0.14"
 
 # gRPC
 tonic = { version = "0.14", features = ["transport", "tls-ring", "tls-native-roots"] }
@@ -43,7 +44,7 @@ prost = "0.14"
 prost-types = "0.14"
 
 # HTTP server for health checks and metrics
-axum = "0.7"
+axum = "0.8"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["trace"] }
 hyper = { version = "1.5", features = ["full"] }
@@ -67,7 +68,7 @@ tempfile = "3.10"
 serial_test = "3.0"
 test-case = "3.3"
 pretty_assertions = "1.4"
-fake = { version = "2.9", features = ["derive"] }
+fake = { version = "3.0", features = ["derive"] }
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 
 [[bench]]
@@ -75,33 +76,13 @@ name = "operator_benchmarks"
 harness = false
 
 [lints.clippy]
-# Allow these lints which are common in test code and for API completeness
-useless_vec = "allow"
+result_large_err = "allow"
 redundant_pattern_matching = "allow"
 collapsible_if = "allow"
 let_and_return = "allow"
 field_reassign_with_default = "allow"
 too_many_arguments = "allow"
 empty_line_after_doc_comments = "allow"
-question_mark = "allow"
-unnecessary_cast = "allow"
-useless_asref = "allow"
-needless_pass_by_value = "allow"
-clone_on_copy = "allow"
-get_first = "allow"
-single_match = "allow"
-match_single_binding = "allow"
-map_clone = "allow"
-manual_map = "allow"
-nonminimal_bool = "allow"
-if_same_then_else = "allow"
-needless_return = "allow"
-match_like_matches_macro = "allow"
-redundant_closure = "allow"
-single_char_pattern = "allow"
-ptr_arg = "allow"
 
 [lints.rust]
 dead_code = "allow"
-unused_variables = "allow"
-unused_imports = "allow"

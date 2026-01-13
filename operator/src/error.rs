@@ -322,12 +322,14 @@ mod tests {
     fn test_error_retryable() {
         assert!(Error::GrpcConnectionError("test".into()).is_retryable());
         assert!(
-            Error::KubeError(kube::Error::Api(kube::error::ErrorResponse {
-                status: "".into(),
-                message: "".into(),
-                reason: "".into(),
+            Error::KubeError(kube::Error::Api(Box::new(kube::core::Status {
+                status: None,
+                message: String::new(),
+                reason: String::new(),
                 code: 500,
-            }))
+                metadata: None,
+                details: None,
+            })))
             .is_retryable()
         );
 
@@ -350,12 +352,14 @@ mod tests {
     #[test]
     fn test_error_category() {
         assert_eq!(
-            Error::KubeError(kube::Error::Api(kube::error::ErrorResponse {
-                status: "".into(),
-                message: "".into(),
-                reason: "".into(),
+            Error::KubeError(kube::Error::Api(Box::new(kube::core::Status {
+                status: None,
+                message: String::new(),
+                reason: String::new(),
                 code: 500,
-            }))
+                metadata: None,
+                details: None,
+            })))
             .category(),
             "kubernetes"
         );

@@ -550,8 +550,8 @@ impl ClickHouseAnalytics {
 
     /// Record an attack event
     pub async fn record_attack(&self, event: AttackEventRecord) -> Result<(), ClickHouseError> {
-        let mut inserter = self.client.inserter("attack_events")?;
-        inserter.write(&event)?;
+        let mut inserter = self.client.inserter::<AttackEventRecord>("attack_events");
+        inserter.write(&event).await?;
         inserter.end().await?;
         Ok(())
     }
@@ -564,9 +564,9 @@ impl ClickHouseAnalytics {
 
         debug!("Flushing {} request events to ClickHouse", events.len());
 
-        let mut inserter = self.client.inserter("request_events")?;
+        let mut inserter = self.client.inserter::<RequestEvent>("request_events");
         for event in events {
-            inserter.write(&event)?;
+            inserter.write(&event).await?;
         }
         inserter.end().await?;
 
@@ -584,9 +584,9 @@ impl ClickHouseAnalytics {
 
         debug!("Flushing {} connection events to ClickHouse", events.len());
 
-        let mut inserter = self.client.inserter("connection_events")?;
+        let mut inserter = self.client.inserter::<ConnectionEvent>("connection_events");
         for event in events {
-            inserter.write(&event)?;
+            inserter.write(&event).await?;
         }
         inserter.end().await?;
 
@@ -604,9 +604,9 @@ impl ClickHouseAnalytics {
 
         debug!("Flushing {} filter events to ClickHouse", events.len());
 
-        let mut inserter = self.client.inserter("filter_match_events")?;
+        let mut inserter = self.client.inserter::<FilterMatchEvent>("filter_match_events");
         for event in events {
-            inserter.write(&event)?;
+            inserter.write(&event).await?;
         }
         inserter.end().await?;
 

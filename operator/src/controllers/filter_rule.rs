@@ -422,7 +422,7 @@ fn is_rule_scheduled_active(rule: &FilterRule) -> bool {
     }
 
     // Check time range
-    if let (Some(ref start_time), Some(ref end_time)) = (&schedule.start_time, &schedule.end_time) {
+    if let (Some(start_time), Some(end_time)) = (&schedule.start_time, &schedule.end_time) {
         let current_time = now.format("%H:%M").to_string();
 
         // Simple string comparison works for HH:MM format

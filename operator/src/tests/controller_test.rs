@@ -387,7 +387,7 @@ mod deletion_tests {
         let mut reconciler = MockReconciler::new(client);
 
         let mut protection = create_test_ddos_protection("test", "default");
-        protection.metadata.deletion_timestamp = Some(Time(chrono::Utc::now()));
+        protection.metadata.deletion_timestamp = Some(Time(k8s_openapi::jiff::Timestamp::now()));
 
         let result = reconciler.reconcile_ddos_protection(&protection);
 
@@ -408,7 +408,7 @@ mod deletion_tests {
 
         // Then delete
         let mut to_delete = protection.clone();
-        to_delete.metadata.deletion_timestamp = Some(Time(chrono::Utc::now()));
+        to_delete.metadata.deletion_timestamp = Some(Time(k8s_openapi::jiff::Timestamp::now()));
 
         let result = reconciler.reconcile_ddos_protection(&to_delete);
 
