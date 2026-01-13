@@ -1,11 +1,9 @@
 //! Mock database utilities for gateway tests
 
-use mockall::mock;
-use mockall::predicate::*;
 use pistonprotection_proto::backend::Backend;
 use pistonprotection_proto::filter::FilterRule;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 
 /// Mock database error type
 #[derive(Debug, Clone)]
@@ -25,6 +23,8 @@ impl std::error::Error for MockDbError {}
 pub struct MockDatabase {
     pub backends: RwLock<HashMap<String, Backend>>,
     pub filter_rules: RwLock<HashMap<String, FilterRule>>,
+    /// Map rule_id to backend_id for filtering
+    pub rule_to_backend: RwLock<HashMap<String, String>>,
     pub should_fail: RwLock<bool>,
 }
 
@@ -33,6 +33,7 @@ impl MockDatabase {
         Self {
             backends: RwLock::new(HashMap::new()),
             filter_rules: RwLock::new(HashMap::new()),
+            rule_to_backend: RwLock::new(HashMap::new()),
             should_fail: RwLock::new(false),
         }
     }
@@ -96,8 +97,16 @@ impl MockDatabase {
     }
 
     // Filter rule operations
-    pub fn insert_filter_rule(&self, rule: FilterRule) -> Result<(), MockDbError> {
+    pub fn insert_filter_rule(
+        &self,
+        rule: FilterRule,
+        backend_id: &str,
+    ) -> Result<(), MockDbError> {
         self.check_failure()?;
+        self.rule_to_backend
+            .write()
+            .unwrap()
+            .insert(rule.id.clone(), backend_id.to_string());
         self.filter_rules
             .write()
             .unwrap()
@@ -112,18 +121,19 @@ impl MockDatabase {
 
     pub fn list_filter_rules(&self, backend_id: &str) -> Result<Vec<FilterRule>, MockDbError> {
         self.check_failure()?;
-        Ok(self
-            .filter_rules
-            .read()
-            .unwrap()
+        let rules = self.filter_rules.read().unwrap();
+        let rule_to_backend = self.rule_to_backend.read().unwrap();
+
+        Ok(rules
             .values()
-            .filter(|r| r.backend_id == backend_id)
+            .filter(|r| rule_to_backend.get(&r.id).map(|s| s.as_str()) == Some(backend_id))
             .cloned()
             .collect())
     }
 
     pub fn delete_filter_rule(&self, id: &str) -> Result<bool, MockDbError> {
         self.check_failure()?;
+        self.rule_to_backend.write().unwrap().remove(id);
         Ok(self.filter_rules.write().unwrap().remove(id).is_some())
     }
 
@@ -131,6 +141,7 @@ impl MockDatabase {
     pub fn clear(&self) {
         self.backends.write().unwrap().clear();
         self.filter_rules.write().unwrap().clear();
+        self.rule_to_backend.write().unwrap().clear();
     }
 }
 
@@ -216,10 +227,9 @@ pub fn create_test_backend(id: &str, org_id: &str, name: &str) -> Backend {
 }
 
 /// Create a test filter rule with default values
-pub fn create_test_filter_rule(id: &str, backend_id: &str, name: &str) -> FilterRule {
+pub fn create_test_filter_rule(id: &str, name: &str) -> FilterRule {
     FilterRule {
         id: id.to_string(),
-        backend_id: backend_id.to_string(),
         name: name.to_string(),
         description: format!("Test rule: {}", name),
         enabled: true,
@@ -249,9 +259,9 @@ mod tests {
         assert_eq!(list.len(), 1);
 
         // Update
-        let mut updated = backend.clone();
-        updated.name = "Updated Backend".to_string();
-        db.update_backend(updated).unwrap();
+        let mut updated_backend = backend.clone();
+        updated_backend.name = "Updated Backend".to_string();
+        db.update_backend(updated_backend).unwrap();
         let retrieved = db.get_backend("b1").unwrap().unwrap();
         assert_eq!(retrieved.name, "Updated Backend");
 
@@ -261,11 +271,35 @@ mod tests {
     }
 
     #[test]
-    fn test_mock_database_failure_mode() {
+    fn test_mock_database_crud_filter_rules() {
+        let db = MockDatabase::new();
+        let rule = create_test_filter_rule("r1", "Test Rule");
+
+        // Insert
+        db.insert_filter_rule(rule.clone(), "backend1").unwrap();
+
+        // Get
+        let retrieved = db.get_filter_rule("r1").unwrap().unwrap();
+        assert_eq!(retrieved.name, "Test Rule");
+
+        // List by backend
+        let list = db.list_filter_rules("backend1").unwrap();
+        assert_eq!(list.len(), 1);
+
+        let empty_list = db.list_filter_rules("other-backend").unwrap();
+        assert_eq!(empty_list.len(), 0);
+
+        // Delete
+        assert!(db.delete_filter_rule("r1").unwrap());
+        assert!(db.get_filter_rule("r1").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_mock_database_failure_simulation() {
         let db = MockDatabase::new();
         db.set_should_fail(true);
 
-        let backend = create_test_backend("b1", "org1", "Test");
+        let backend = create_test_backend("b1", "org1", "Test Backend");
         let result = db.insert_backend(backend);
         assert!(result.is_err());
     }
@@ -274,15 +308,24 @@ mod tests {
     fn test_mock_cache_operations() {
         let cache = MockCache::new();
 
+        // Set
         cache.set("key1", b"value1").unwrap();
+
+        // Get
+        let value = cache.get("key1").unwrap().unwrap();
+        assert_eq!(value, b"value1");
+
+        // Exists
         assert!(cache.exists("key1").unwrap());
-        assert_eq!(cache.get("key1").unwrap(), Some(b"value1".to_vec()));
+        assert!(!cache.exists("key2").unwrap());
+
+        // Delete
         assert!(cache.delete("key1").unwrap());
         assert!(!cache.exists("key1").unwrap());
     }
 
     #[test]
-    fn test_mock_cache_failure_mode() {
+    fn test_mock_cache_failure_simulation() {
         let cache = MockCache::new();
         cache.set_should_fail(true);
 

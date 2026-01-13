@@ -1,11 +1,12 @@
 # PistonProtection Grafana Tempo Configuration
-# Distributed tracing backend
+# Distributed tracing backend - Updated for Tempo 2.9.x
 
 # Server configuration
 server:
   http_listen_port: 3200
   grpc_listen_port: 9095
   log_level: info
+  # Updated from default 80 to 3200 in Tempo 2.8+
 
 # Distributor receives traces from collectors
 distributor:
@@ -26,6 +27,10 @@ distributor:
     # Zipkin format
     zipkin:
       endpoint: 0.0.0.0:9411
+  # Log received spans at info level for debugging
+  log_received_spans:
+    enabled: false
+    include_all_attributes: false
 
 # Ingester configuration
 ingester:
@@ -33,16 +38,35 @@ ingester:
   max_block_bytes: 5_000_000
   # Max duration of a block before cutting
   max_block_duration: 5m
+  # Lifecycle manager configuration
+  lifecycler:
+    ring:
+      kvstore:
+        store: inmemory
+      replication_factor: 1
+  # Flush configuration
+  flush_check_period: 10s
 
 # Query configuration
 querier:
   max_retries: 2
+  search:
+    prefer_self: 10
+    external_endpoints: []
+  trace_by_id:
+    query_timeout: 30s
 
 # Query frontend for search
 query_frontend:
   search:
     max_duration: 0s # No limit
     concurrent_jobs: 5
+    target_bytes_per_job: 104857600
+  trace_by_id:
+    hedge_requests_at: 2s
+    hedge_requests_up_to: 2
+  # SLO configuration
+  max_retries: 2
 
 # Compactor configuration
 compactor:
@@ -66,11 +90,22 @@ storage:
     wal:
       path: /tmp/tempo/wal
       encoding: snappy
-    # Block configuration
+    # Block configuration - using vParquet4 (latest in Tempo 2.9)
     block:
-      version: vParquet3
+      version: vParquet4
       # Use row-group for better search
       row_group_size_bytes: 100_000
+      # Dedicated attribute columns for faster queries
+      dedicated_columns:
+        - scope: resource
+          name: service.name
+          type: string
+        - scope: span
+          name: http.method
+          type: string
+        - scope: span
+          name: http.status_code
+          type: int
     pool:
       max_workers: 100
       queue_depth: 10000
@@ -81,11 +116,16 @@ metrics_generator:
     external_labels:
       source: tempo
       cluster: pistonprotection
+    stale_duration: 15m
   storage:
     path: /tmp/tempo/generator/wal
     remote_write:
       - url: http://prometheus:9090/api/v1/write
         send_exemplars: true
+  # Metrics generator ring configuration
+  ring:
+    kvstore:
+      store: inmemory
   processor:
     service_graphs:
       dimensions:
@@ -93,13 +133,29 @@ metrics_generator:
         - service.name
       wait: 10s
       max_items: 10000
+      enable_client_server_prefix: true
+      # Virtual node peer attributes for better service graph
+      peer_attributes:
+        - db.name
+        - net.peer.name
+        - peer.service
     span_metrics:
       dimensions:
         - service.namespace
         - service.name
         - http.method
         - http.status_code
+        - http.route
       histogram_buckets: [0.002, 0.004, 0.008, 0.016, 0.032, 0.064, 0.128, 0.256, 0.512, 1.024, 2.048, 4.096, 8.192, 16.384]
+      enable_target_info: true
+      intrinsic_dimensions:
+        status_code: true
+        status_message: false
+    # Local blocks processor for metrics from stored traces
+    local_blocks:
+      max_live_traces: 10000
+      flush_check_period: 10s
+      complete_block_timeout: 15m
 
 # Override configuration for multi-tenancy
 overrides:
@@ -112,8 +168,23 @@ overrides:
     search:
       max_bytes_per_tag_values_query: 5_000_000
     metrics_generator:
-      processors: [service-graphs, span-metrics]
+      processors: [service-graphs, span-metrics, local-blocks]
       max_active_series: 50000
+      collection_interval: 15s
+      # Ring configuration
+      ring:
+        kvstore:
+          store: inmemory
+    # Global search configuration
+    global:
+      max_bytes_per_trace: 5_000_000
+
+# Cache configuration for improved query performance
+cache:
+  # Background cache for blocks
+  background:
+    writeback_goroutines: 10
+    writeback_buffer: 500000
 
 # Usage report disabled for local
 usage_report:

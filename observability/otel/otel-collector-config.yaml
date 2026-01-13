@@ -1,12 +1,17 @@
 # PistonProtection OpenTelemetry Collector Configuration
+# Updated for OTEL Collector Contrib v0.143.x
 
 receivers:
   otlp:
     protocols:
       grpc:
         endpoint: 0.0.0.0:4317
+        max_recv_msg_size_mib: 16
       http:
         endpoint: 0.0.0.0:4318
+        cors:
+          allowed_origins:
+            - "*"
 
   prometheus:
     config:
@@ -20,12 +25,37 @@ receivers:
     collection_interval: 30s
     scrapers:
       cpu:
+        metrics:
+          system.cpu.utilization:
+            enabled: true
       disk:
       filesystem:
       load:
       memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
       network:
       processes:
+      process:
+        mute_process_name_error: true
+        mute_process_exe_error: true
+        mute_process_io_error: true
+
+connectors:
+  # Generate metrics from spans (RED metrics)
+  spanmetrics:
+    histogram:
+      explicit:
+        buckets: [1ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s]
+    dimensions:
+      - name: http.method
+      - name: http.status_code
+      - name: http.route
+      - name: service.name
+    exemplars:
+      enabled: true
+    metrics_flush_interval: 15s
 
 processors:
   batch:
@@ -43,8 +73,8 @@ processors:
     timeout: 5s
     override: false
 
-  attributes:
-    actions:
+  resource:
+    attributes:
       - key: environment
         value: development
         action: upsert
@@ -52,14 +82,67 @@ processors:
         value: pistonprotection
         action: upsert
 
+  attributes:
+    actions:
+      - key: environment
+        value: development
+        action: upsert
+
+  # Transform processor for data manipulation
+  transform:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - set(attributes["deployment.environment"], "development")
+    log_statements:
+      - context: log
+        statements:
+          - set(severity_text, "INFO") where severity_number == 9
+          - set(severity_text, "WARN") where severity_number == 13
+          - set(severity_text, "ERROR") where severity_number == 17
+
   filter:
     error_mode: ignore
     traces:
       span:
         - 'attributes["http.target"] == "/health"'
         - 'attributes["http.target"] == "/metrics"'
+        - 'attributes["http.target"] == "/ready"'
+        - 'attributes["http.target"] == "/live"'
+
+  # Tail sampling for intelligent trace sampling
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 100
+    expected_new_traces_per_sec: 100
+    policies:
+      # Always sample errors
+      - name: errors-policy
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      # Always sample slow traces
+      - name: latency-policy
+        type: latency
+        latency:
+          threshold_ms: 500
+      # Sample 10% of everything else
+      - name: probabilistic-policy
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 10
 
 exporters:
+  # Prometheus remote write for metrics
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+    tls:
+      insecure: true
+    resource_to_telemetry_conversion:
+      enabled: true
+
+  # Legacy prometheus scrape endpoint
   prometheus:
     endpoint: "0.0.0.0:8889"
     namespace: pistonprotection
@@ -68,8 +151,14 @@ exporters:
     resource_to_telemetry_conversion:
       enabled: true
 
+  # Loki for logs
   loki:
     endpoint: http://loki:3100/loki/api/v1/push
+    default_labels_enabled:
+      exporter: true
+      job: true
+      instance: true
+      level: true
     labels:
       attributes:
         service.name: "service"
@@ -84,20 +173,36 @@ exporters:
     tls:
       insecure: true
 
-  # Jaeger alternative for tracing (comment out otlp/tempo if using this)
-  # otlp/jaeger:
-  #   endpoint: jaeger:4317
-  #   tls:
-  #     insecure: true
+  # ClickHouse for long-term storage and analytics
+  clickhouse:
+    endpoint: tcp://clickhouse:9000?dial_timeout=10s&compress=lz4
+    database: pistonprotection
+    username: pistonprotection
+    password: ${CLICKHOUSE_PASSWORD:-pistonprotection}
+    ttl: 168h
+    logs_table_name: otel_logs
+    traces_table_name: otel_traces
+    metrics_table_name: otel_metrics
+    timeout: 5s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 1000
 
   debug:
-    verbosity: detailed
+    verbosity: basic
     sampling_initial: 5
     sampling_thereafter: 200
 
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133
+    path: "/health"
 
   pprof:
     endpoint: 0.0.0.0:1777
@@ -105,27 +210,38 @@ extensions:
   zpages:
     endpoint: 0.0.0.0:55679
 
+  # Memory ballast for GC optimization
+  memory_ballast:
+    size_mib: 128
+
 service:
-  extensions: [health_check, pprof, zpages]
+  extensions: [health_check, pprof, zpages, memory_ballast]
 
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, attributes, filter, batch]
-      exporters: [otlp/tempo, debug]
+      processors: [memory_limiter, resourcedetection, resource, transform, filter, tail_sampling, batch]
+      exporters: [otlp/tempo, clickhouse]
+
+    traces/spanmetrics:
+      receivers: [otlp]
+      processors: [memory_limiter, filter, batch]
+      exporters: [spanmetrics]
 
     metrics:
-      receivers: [otlp, prometheus, hostmetrics]
-      processors: [memory_limiter, resourcedetection, attributes, batch]
-      exporters: [prometheus]
+      receivers: [otlp, prometheus, hostmetrics, spanmetrics]
+      processors: [memory_limiter, resourcedetection, resource, batch]
+      exporters: [prometheusremotewrite, prometheus]
 
     logs:
       receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, attributes, batch]
-      exporters: [loki]
+      processors: [memory_limiter, resourcedetection, resource, transform, batch]
+      exporters: [loki, clickhouse]
 
   telemetry:
     logs:
       level: info
+      encoding: json
     metrics:
+      level: detailed
       address: 0.0.0.0:8888

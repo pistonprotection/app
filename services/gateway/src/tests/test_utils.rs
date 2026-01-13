@@ -1,8 +1,7 @@
 //! Test utilities for gateway tests
 
 use crate::services::AppState;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use pistonprotection_common::config::Config;
 
 /// Test configuration constants
 pub mod constants {
@@ -14,10 +13,18 @@ pub mod constants {
 
 /// Create a minimal test app state without database connections
 pub fn create_test_app_state() -> AppState {
-    AppState {
-        db: None,
-        cache: None,
-    }
+    // Create a test config
+    let config = Config {
+        service_name: "gateway-test".to_string(),
+        environment: "test".to_string(),
+        server: Default::default(),
+        database: None,
+        redis: None,
+        auth: None,
+        telemetry: Default::default(),
+        metrics: Default::default(),
+    };
+    AppState::new(None, None, config)
 }
 
 /// Test fixture builder for creating consistent test data

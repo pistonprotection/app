@@ -91,7 +91,8 @@ impl FilterService {
         self.row_to_rule(&row)
     }
 
-    /// List filter rules for a backend
+    /// List filter rules for a backend with pagination
+    /// Returns (rules, total_count)
     #[instrument(skip(self))]
     pub async fn list(
         &self,
@@ -99,9 +100,22 @@ impl FilterService {
         include_disabled: bool,
         page: u32,
         page_size: u32,
-    ) -> Result<Vec<FilterRule>> {
+    ) -> Result<(Vec<FilterRule>, u64)> {
         let db = self.state.db()?;
         let offset = (page.saturating_sub(1)) * page_size;
+
+        // Get total count for pagination
+        let count_query = if include_disabled {
+            "SELECT COUNT(*) FROM filter_rules WHERE backend_id = $1"
+        } else {
+            "SELECT COUNT(*) FROM filter_rules WHERE backend_id = $1 AND enabled = true"
+        };
+
+        let count_row: (i64,) = sqlx::query_as(count_query)
+            .bind(backend_id)
+            .fetch_one(db)
+            .await?;
+        let total = count_row.0 as u64;
 
         let query = if include_disabled {
             r#"
@@ -130,7 +144,8 @@ impl FilterService {
             .fetch_all(db)
             .await?;
 
-        rows.iter().map(|row| self.row_to_rule(row)).collect()
+        let rules: Result<Vec<FilterRule>> = rows.iter().map(|row| self.row_to_rule(row)).collect();
+        Ok((rules?, total))
     }
 
     /// Update a filter rule

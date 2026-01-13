@@ -1,13 +1,10 @@
 //! Integration tests for gRPC services
 
-use super::mock_db::{MockDatabase, create_test_backend, create_test_filter_rule};
-use super::test_utils::{
-    TestFixture, assert_grpc_status_code, constants, create_test_app_state, create_test_request,
-};
+use super::test_utils::{assert_grpc_status_code, constants, create_test_app_state, create_test_request};
 use pistonprotection_proto::backend::*;
 use pistonprotection_proto::filter::*;
 use pistonprotection_proto::metrics::*;
-use tonic::{Code, Status};
+use tonic::Code;
 
 // ============================================================================
 // Backend Service Tests
@@ -16,6 +13,7 @@ use tonic::{Code, Status};
 #[cfg(test)]
 mod backend_service_tests {
     use super::*;
+    use pistonprotection_proto::backend::backend_service_server::BackendService;
 
     /// Test creating a backend with valid data
     #[tokio::test]
@@ -35,16 +33,16 @@ mod backend_service_tests {
             backend: Some(backend),
         });
 
-        // Without a real database, this will fail with an internal error
+        // Without a real database, this will fail with unavailable error
         // but we can verify the request validation works
         let result = service.create_backend(request).await;
 
         // In a real test with mock DB, we'd expect Ok
         // For now, we verify the error is from DB, not validation
         if let Err(status) = result {
-            // DB not configured should return internal error
+            // DB not configured should return unavailable error
             assert!(
-                status.code() == Code::Internal || status.code() == Code::InvalidArgument,
+                status.code() == Code::Unavailable || status.code() == Code::Internal,
                 "Unexpected error code: {:?}",
                 status.code()
             );
@@ -83,11 +81,11 @@ mod backend_service_tests {
         let result = service.get_backend(request).await;
 
         assert!(result.is_err());
-        // Should return NotFound or Internal (if DB not configured)
+        // Should return Unavailable (DB not configured)
         let status = result.err().unwrap();
         assert!(
-            status.code() == Code::NotFound || status.code() == Code::Internal,
-            "Expected NotFound or Internal, got: {:?}",
+            status.code() == Code::Unavailable || status.code() == Code::NotFound,
+            "Expected Unavailable or NotFound, got: {:?}",
             status.code()
         );
     }
@@ -121,6 +119,8 @@ mod backend_service_tests {
 
         // Will fail without DB, but validates request handling
         assert!(result.is_err());
+        let status = result.err().unwrap();
+        assert!(status.code() == Code::Unavailable || status.code() == Code::NotFound);
     }
 
     /// Test listing backends with pagination
@@ -131,6 +131,7 @@ mod backend_service_tests {
 
         let request = create_test_request(ListBackendsRequest {
             organization_id: constants::TEST_ORG_ID.to_string(),
+            type_filter: 0,
             pagination: Some(pistonprotection_proto::common::Pagination {
                 page: 1,
                 page_size: 10,
@@ -142,7 +143,7 @@ mod backend_service_tests {
 
         // Will fail without DB, but validates request handling
         if let Err(status) = result {
-            assert!(status.code() == Code::Internal);
+            assert!(status.code() == Code::Unavailable);
         }
     }
 
@@ -155,6 +156,7 @@ mod backend_service_tests {
         // Test page_size = 0 (should be bounded to 1)
         let request = create_test_request(ListBackendsRequest {
             organization_id: constants::TEST_ORG_ID.to_string(),
+            type_filter: 0,
             pagination: Some(pistonprotection_proto::common::Pagination {
                 page: 1,
                 page_size: 0,
@@ -167,7 +169,7 @@ mod backend_service_tests {
         // Request should be valid (page_size bounded), DB error expected
         if let Err(status) = result {
             assert!(
-                status.code() == Code::Internal,
+                status.code() == Code::Unavailable,
                 "Unexpected error: {:?}",
                 status
             );
@@ -176,6 +178,7 @@ mod backend_service_tests {
         // Test page_size > 100 (should be bounded to 100)
         let request = create_test_request(ListBackendsRequest {
             organization_id: constants::TEST_ORG_ID.to_string(),
+            type_filter: 0,
             pagination: Some(pistonprotection_proto::common::Pagination {
                 page: 1,
                 page_size: 500,
@@ -187,20 +190,18 @@ mod backend_service_tests {
 
         if let Err(status) = result {
             assert!(
-                status.code() == Code::Internal,
+                status.code() == Code::Unavailable,
                 "Unexpected error: {:?}",
                 status
             );
         }
     }
 
-    /// Test unimplemented endpoints return Unimplemented status
+    /// Test adding origin without required field
     #[tokio::test]
-    async fn test_unimplemented_add_origin() {
+    async fn test_add_origin_missing_origin() {
         let state = create_test_app_state();
         let service = crate::handlers::grpc::BackendGrpcService::new(state);
-
-        use pistonprotection_proto::backend::backend_service_server::BackendService;
 
         let request = create_test_request(AddOriginRequest {
             backend_id: "test".to_string(),
@@ -210,22 +211,26 @@ mod backend_service_tests {
         let result = service.add_origin(request).await;
 
         assert!(result.is_err());
-        assert_grpc_status_code(&result.err().unwrap(), Code::Unimplemented);
+        let status = result.err().unwrap();
+        assert_grpc_status_code(&status, Code::InvalidArgument);
     }
 
+    /// Test updating origin without required field
     #[tokio::test]
-    async fn test_unimplemented_update_origin() {
+    async fn test_update_origin_missing_origin() {
         let state = create_test_app_state();
         let service = crate::handlers::grpc::BackendGrpcService::new(state);
 
-        use pistonprotection_proto::backend::backend_service_server::BackendService;
-
-        let request = create_test_request(UpdateOriginRequest { origin: None });
+        let request = create_test_request(UpdateOriginRequest {
+            backend_id: String::new(),
+            origin: None,
+        });
 
         let result = service.update_origin(request).await;
 
         assert!(result.is_err());
-        assert_grpc_status_code(&result.err().unwrap(), Code::Unimplemented);
+        let status = result.err().unwrap();
+        assert_grpc_status_code(&status, Code::InvalidArgument);
     }
 }
 
@@ -236,6 +241,7 @@ mod backend_service_tests {
 #[cfg(test)]
 mod filter_service_tests {
     use super::*;
+    use pistonprotection_proto::filter::filter_service_server::FilterService;
 
     /// Test creating a filter rule with valid data
     #[tokio::test]
@@ -260,7 +266,7 @@ mod filter_service_tests {
 
         // Without DB, will fail but validates request handling
         if let Err(status) = result {
-            assert!(status.code() == Code::Internal);
+            assert!(status.code() == Code::Unavailable);
         }
     }
 
@@ -297,6 +303,8 @@ mod filter_service_tests {
 
         // Will fail without DB
         assert!(result.is_err());
+        let status = result.err().unwrap();
+        assert!(status.code() == Code::Unavailable || status.code() == Code::NotFound);
     }
 
     /// Test updating a rule without required rule field
@@ -346,7 +354,7 @@ mod filter_service_tests {
 
         // Will fail without DB
         if let Err(status) = result {
-            assert!(status.code() == Code::Internal);
+            assert!(status.code() == Code::Unavailable);
         }
     }
 
@@ -369,17 +377,15 @@ mod filter_service_tests {
 
         // Will fail without DB
         if let Err(status) = result {
-            assert!(status.code() == Code::Internal);
+            assert!(status.code() == Code::Unavailable);
         }
     }
 
-    /// Test unimplemented bulk endpoints
+    /// Test bulk create with empty rules list
     #[tokio::test]
-    async fn test_unimplemented_bulk_create() {
+    async fn test_bulk_create_empty_rules() {
         let state = create_test_app_state();
         let service = crate::handlers::grpc::FilterGrpcService::new(state);
-
-        use pistonprotection_proto::filter::filter_service_server::FilterService;
 
         let request = create_test_request(BulkCreateRulesRequest {
             backend_id: "test".to_string(),
@@ -389,7 +395,46 @@ mod filter_service_tests {
         let result = service.bulk_create_rules(request).await;
 
         assert!(result.is_err());
-        assert_grpc_status_code(&result.err().unwrap(), Code::Unimplemented);
+        assert_grpc_status_code(&result.err().unwrap(), Code::InvalidArgument);
+    }
+
+    /// Test bulk create with too many rules
+    #[tokio::test]
+    async fn test_bulk_create_too_many_rules() {
+        let state = create_test_app_state();
+        let service = crate::handlers::grpc::FilterGrpcService::new(state);
+
+        // Create 101 rules (over limit)
+        let rules: Vec<FilterRule> = (0..101)
+            .map(|i| FilterRule {
+                name: format!("Rule {}", i),
+                ..Default::default()
+            })
+            .collect();
+
+        let request = create_test_request(BulkCreateRulesRequest {
+            backend_id: "test".to_string(),
+            rules,
+        });
+
+        let result = service.bulk_create_rules(request).await;
+
+        assert!(result.is_err());
+        assert_grpc_status_code(&result.err().unwrap(), Code::InvalidArgument);
+    }
+
+    /// Test bulk delete with empty rule IDs
+    #[tokio::test]
+    async fn test_bulk_delete_empty_ids() {
+        let state = create_test_app_state();
+        let service = crate::handlers::grpc::FilterGrpcService::new(state);
+
+        let request = create_test_request(BulkDeleteRulesRequest { rule_ids: vec![] });
+
+        let result = service.bulk_delete_rules(request).await;
+
+        assert!(result.is_err());
+        assert_grpc_status_code(&result.err().unwrap(), Code::InvalidArgument);
     }
 }
 
@@ -400,6 +445,7 @@ mod filter_service_tests {
 #[cfg(test)]
 mod metrics_service_tests {
     use super::*;
+    use pistonprotection_proto::metrics::metrics_service_server::MetricsService;
 
     /// Test getting traffic metrics
     #[tokio::test]
@@ -409,16 +455,12 @@ mod metrics_service_tests {
 
         let request = create_test_request(GetTrafficMetricsRequest {
             backend_id: constants::TEST_BACKEND_ID.to_string(),
-            start_time: None,
-            end_time: None,
         });
 
         let result = service.get_traffic_metrics(request).await;
 
-        // Will fail without metrics service
-        if let Err(status) = result {
-            assert!(status.code() == Code::Internal);
-        }
+        // Should succeed (returns default metrics when cache is not configured)
+        assert!(result.is_ok());
     }
 
     /// Test getting attack metrics
@@ -429,89 +471,122 @@ mod metrics_service_tests {
 
         let request = create_test_request(GetAttackMetricsRequest {
             backend_id: constants::TEST_BACKEND_ID.to_string(),
-            start_time: None,
-            end_time: None,
         });
 
         let result = service.get_attack_metrics(request).await;
 
-        // Will fail without metrics service
-        if let Err(status) = result {
-            assert!(status.code() == Code::Internal);
-        }
+        // Should succeed (returns default metrics when cache is not configured)
+        assert!(result.is_ok());
     }
 
-    /// Test unimplemented time series endpoint
+    /// Test getting time series without required timestamps
     #[tokio::test]
-    async fn test_unimplemented_time_series() {
+    async fn test_get_time_series_missing_times() {
         let state = create_test_app_state();
         let service = crate::handlers::grpc::MetricsGrpcService::new(state);
 
-        use pistonprotection_proto::metrics::metrics_service_server::MetricsService;
-
         let request = create_test_request(TimeSeriesQuery {
             backend_id: "test".to_string(),
+            start_time: None,
+            end_time: None,
             ..Default::default()
         });
 
         let result = service.get_traffic_time_series(request).await;
 
         assert!(result.is_err());
-        assert_grpc_status_code(&result.err().unwrap(), Code::Unimplemented);
+        assert_grpc_status_code(&result.err().unwrap(), Code::InvalidArgument);
     }
 
-    /// Test unimplemented geo metrics
+    /// Test getting geo metrics without required timestamps
     #[tokio::test]
-    async fn test_unimplemented_geo_metrics() {
+    async fn test_get_geo_metrics_missing_times() {
         let state = create_test_app_state();
         let service = crate::handlers::grpc::MetricsGrpcService::new(state);
 
-        use pistonprotection_proto::metrics::metrics_service_server::MetricsService;
-
         let request = create_test_request(GetGeoMetricsRequest {
             backend_id: "test".to_string(),
-            ..Default::default()
+            start_time: None,
+            end_time: None,
         });
 
         let result = service.get_geo_metrics(request).await;
 
         assert!(result.is_err());
-        assert_grpc_status_code(&result.err().unwrap(), Code::Unimplemented);
+        assert_grpc_status_code(&result.err().unwrap(), Code::InvalidArgument);
     }
 
-    /// Test unimplemented alert CRUD
+    /// Test alert creation without required field
     #[tokio::test]
-    async fn test_unimplemented_alerts() {
+    async fn test_create_alert_missing_alert() {
         let state = create_test_app_state();
         let service = crate::handlers::grpc::MetricsGrpcService::new(state);
 
-        use pistonprotection_proto::metrics::metrics_service_server::MetricsService;
-
-        // Create alert
         let request = create_test_request(CreateAlertRequest {
             backend_id: "test".to_string(),
             alert: None,
         });
-        let result = service.create_alert(request).await;
-        assert!(result.is_err());
-        assert_grpc_status_code(&result.err().unwrap(), Code::Unimplemented);
 
-        // Get alert
+        let result = service.create_alert(request).await;
+
+        assert!(result.is_err());
+        assert_grpc_status_code(&result.err().unwrap(), Code::InvalidArgument);
+    }
+
+    /// Test get alert
+    #[tokio::test]
+    async fn test_get_alert() {
+        let state = create_test_app_state();
+        let service = crate::handlers::grpc::MetricsGrpcService::new(state);
+
         let request = create_test_request(GetAlertRequest {
             alert_id: "test".to_string(),
         });
-        let result = service.get_alert(request).await;
-        assert!(result.is_err());
-        assert_grpc_status_code(&result.err().unwrap(), Code::Unimplemented);
 
-        // List alerts
+        let result = service.get_alert(request).await;
+
+        // Will fail without DB
+        assert!(result.is_err());
+        let status = result.err().unwrap();
+        assert!(status.code() == Code::Unavailable || status.code() == Code::NotFound);
+    }
+
+    /// Test list alerts
+    #[tokio::test]
+    async fn test_list_alerts() {
+        let state = create_test_app_state();
+        let service = crate::handlers::grpc::MetricsGrpcService::new(state);
+
         let request = create_test_request(ListAlertsRequest {
             backend_id: "test".to_string(),
             pagination: None,
         });
+
         let result = service.list_alerts(request).await;
+
+        // Will fail without DB
         assert!(result.is_err());
-        assert_grpc_status_code(&result.err().unwrap(), Code::Unimplemented);
+        let status = result.err().unwrap();
+        assert!(status.code() == Code::Unavailable);
+    }
+
+    /// Test list attack events without required timestamps
+    #[tokio::test]
+    async fn test_list_attack_events_missing_times() {
+        let state = create_test_app_state();
+        let service = crate::handlers::grpc::MetricsGrpcService::new(state);
+
+        let request = create_test_request(ListAttackEventsRequest {
+            backend_id: "test".to_string(),
+            start_time: None,
+            end_time: None,
+            pagination: None,
+        });
+
+        let result = service.list_attack_events(request).await;
+
+        assert!(result.is_err());
+        assert_grpc_status_code(&result.err().unwrap(), Code::InvalidArgument);
     }
 }
 

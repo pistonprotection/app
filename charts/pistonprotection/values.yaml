@@ -1049,8 +1049,8 @@ clickhouse:
   image:
     # -- ClickHouse image repository
     repository: clickhouse/clickhouse-server
-    # -- ClickHouse image tag
-    tag: "24.3"
+    # -- ClickHouse image tag (updated to latest stable)
+    tag: "25.12.2"
     # -- Image pull policy
     pullPolicy: IfNotPresent
   auth:

@@ -1,13 +1,22 @@
 // PistonProtection Grafana Alloy Configuration
-// Replaces deprecated Promtail for log collection
-// Alloy is Grafana's unified telemetry collector for logs, metrics, and traces
+// Updated for Alloy v1.12.x - unified telemetry collector
+// Replaces deprecated Grafana Agent (EOL November 1, 2025)
+
+// =============================================================================
+// Logging Configuration
+// =============================================================================
+
+logging {
+  level  = "info"
+  format = "logfmt"
+}
 
 // =============================================================================
 // Discovery: Docker containers
 // =============================================================================
 
 discovery.docker "local" {
-  host = "unix:///var/run/docker.sock"
+  host             = "unix:///var/run/docker.sock"
   refresh_interval = "5s"
 }
 
@@ -48,6 +57,12 @@ discovery.relabel "docker_containers" {
   rule {
     replacement  = "pistonprotection"
     target_label = "job"
+  }
+
+  // Add environment label
+  rule {
+    replacement  = "development"
+    target_label = "environment"
   }
 }
 
@@ -91,6 +106,11 @@ loki.process "docker_logs" {
     }
   }
 
+  // Normalize log levels
+  stage.label_drop {
+    values = ["filename"]
+  }
+
   // Handle multiline logs (stack traces, etc.)
   stage.multiline {
     firstline     = "^\\d{4}-\\d{2}-\\d{2}|\\[INFO\\]|\\[WARN\\]|\\[ERROR\\]|\\[DEBUG\\]|^\\{"
@@ -103,6 +123,19 @@ loki.process "docker_logs" {
     source = "timestamp"
     format = "RFC3339Nano"
   }
+
+  // Add trace correlation labels for Tempo integration
+  stage.label_keep {
+    values = ["container", "service", "project", "component", "job", "level", "target", "environment"]
+  }
+
+  // Structured metadata for better querying (Loki 3.x feature)
+  stage.structured_metadata {
+    values = {
+      trace_id = "",
+      span_id  = "",
+    }
+  }
 }
 
 // =============================================================================
@@ -113,8 +146,8 @@ loki.write "loki" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"
 
-    // Tenant ID for multi-tenancy
-    tenant_id = "pistonprotection"
+    // Tenant ID for multi-tenancy (set to empty for single tenant mode)
+    // tenant_id = "pistonprotection"
 
     // Batch and retry configuration
     batch_wait    = "1s"
@@ -148,14 +181,64 @@ loki.source.file "var_logs" {
 }
 
 // =============================================================================
+// OTLP Receiver for OpenTelemetry data
+// =============================================================================
+
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  output {
+    logs    = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.batch.default.input]
+    metrics = [otelcol.processor.batch.default.input]
+  }
+}
+
+// Batch processor for OTLP data
+otelcol.processor.batch "default" {
+  timeout             = "10s"
+  send_batch_size     = 1024
+  send_batch_max_size = 2048
+  output {
+    logs    = [otelcol.exporter.loki.default.input]
+    traces  = [otelcol.exporter.otlp.tempo.input]
+    metrics = [otelcol.exporter.prometheus.default.input]
+  }
+}
+
+// Export traces to Tempo
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
+    }
+  }
+}
+
+// Export logs to Loki via OTLP
+otelcol.exporter.loki "default" {
+  forward_to = [loki.write.loki.receiver]
+}
+
+// Export metrics to Prometheus
+otelcol.exporter.prometheus "default" {
+  forward_to = [prometheus.remote_write.metrics.receiver]
+}
+
+// =============================================================================
 // Metrics: Alloy internal metrics
 // =============================================================================
 
 prometheus.exporter.self "alloy_metrics" {}
 
 prometheus.scrape "alloy_self" {
-  targets    = prometheus.exporter.self.alloy_metrics.targets
-  forward_to = [prometheus.remote_write.metrics.receiver]
+  targets         = prometheus.exporter.self.alloy_metrics.targets
+  forward_to      = [prometheus.remote_write.metrics.receiver]
   scrape_interval = "15s"
 }
 
@@ -163,6 +246,22 @@ prometheus.remote_write "metrics" {
   endpoint {
     url = "http://prometheus:9090/api/v1/write"
   }
+}
+
+// =============================================================================
+// Docker metrics collection
+// =============================================================================
+
+prometheus.exporter.cadvisor "docker" {
+  docker_host = "unix:///var/run/docker.sock"
+  storage_duration = "5m"
+}
+
+prometheus.scrape "cadvisor" {
+  targets         = prometheus.exporter.cadvisor.docker.targets
+  forward_to      = [prometheus.remote_write.metrics.receiver]
+  scrape_interval = "30s"
+  job_name        = "cadvisor"
 }
 
 // =============================================================================

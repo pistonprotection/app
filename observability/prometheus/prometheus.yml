@@ -1,4 +1,5 @@
 # PistonProtection Prometheus Configuration
+# Updated for Prometheus 3.x
 
 global:
   scrape_interval: 15s
@@ -7,6 +8,8 @@ global:
     # Environment-specific labels - override via PROMETHEUS_CLUSTER and PROMETHEUS_ENV
     cluster: '${PROMETHEUS_CLUSTER:-pistonprotection-local}'
     env: '${PROMETHEUS_ENV:-development}'
+  # Keep dropped targets in memory for debugging
+  keep_dropped_targets: 100
 
 alerting:
   alertmanagers:
@@ -20,11 +23,22 @@ alerting:
 rule_files:
   - /etc/prometheus/alerts.yaml
 
+# OTLP receiver configuration (Prometheus 3.x feature)
+# Receives metrics via OTLP from the OpenTelemetry Collector
+otlp:
+  # Enable OTLP receiver (requires --enable-feature=otlp-write-receiver flag)
+  promote_resource_attributes:
+    - service.name
+    - service.namespace
+    - service.instance.id
+
 scrape_configs:
   # Prometheus self-monitoring
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
+    # Enable native histograms scraping (Prometheus 3.x)
+    scrape_classic_histograms: true
 
   # PistonProtection Gateway
   - job_name: 'gateway'
@@ -34,6 +48,7 @@ scrape_configs:
       - source_labels: [__address__]
         target_label: instance
         replacement: 'gateway'
+    scrape_classic_histograms: true
 
   # PistonProtection Worker
   - job_name: 'worker'
@@ -43,6 +58,7 @@ scrape_configs:
       - source_labels: [__address__]
         target_label: instance
         replacement: 'worker'
+    scrape_classic_histograms: true
 
   # PistonProtection Config Manager
   - job_name: 'config-mgr'
@@ -52,6 +68,7 @@ scrape_configs:
       - source_labels: [__address__]
         target_label: instance
         replacement: 'config-mgr'
+    scrape_classic_histograms: true
 
   # PistonProtection Metrics Service
   - job_name: 'metrics-service'
@@ -61,6 +78,7 @@ scrape_configs:
       - source_labels: [__address__]
         target_label: instance
         replacement: 'metrics'
+    scrape_classic_histograms: true
 
   # PistonProtection Auth Service
   - job_name: 'auth'
@@ -70,18 +88,51 @@ scrape_configs:
       - source_labels: [__address__]
         target_label: instance
         replacement: 'auth'
+    scrape_classic_histograms: true
 
   # OpenTelemetry Collector
   - job_name: 'otel-collector'
     static_configs:
       - targets: ['otel-collector:8888']
+    scrape_classic_histograms: true
 
-  # Redis (using redis_exporter if available)
-  - job_name: 'redis'
+  # OpenTelemetry Collector exported metrics
+  - job_name: 'otel-collector-exporter'
     static_configs:
-      - targets: ['redis:6379']
+      - targets: ['otel-collector:8889']
+    scrape_classic_histograms: true
 
-  # PostgreSQL (using postgres_exporter if available)
-  - job_name: 'postgres'
+  # Grafana Tempo metrics
+  - job_name: 'tempo'
     static_configs:
-      - targets: ['postgres:5432']
+      - targets: ['tempo:3200']
+    metrics_path: /metrics
+    scrape_classic_histograms: true
+
+  # Grafana Loki metrics
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['loki:3100']
+    metrics_path: /metrics
+    scrape_classic_histograms: true
+
+  # Grafana Alloy metrics
+  - job_name: 'alloy'
+    static_configs:
+      - targets: ['alloy:12345']
+    metrics_path: /metrics
+    scrape_classic_histograms: true
+
+  # ClickHouse metrics
+  - job_name: 'clickhouse'
+    static_configs:
+      - targets: ['clickhouse:9363']
+    metrics_path: /metrics
+    scrape_classic_histograms: true
+
+  # Alertmanager metrics
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
+    metrics_path: /metrics
+    scrape_classic_histograms: true

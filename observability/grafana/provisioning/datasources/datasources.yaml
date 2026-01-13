@@ -1,6 +1,11 @@
 # Grafana Datasource Provisioning
+# Updated for Grafana 12.3.x with modern observability stack
 
 apiVersion: 1
+
+deleteDatasources:
+  - name: Redis
+    orgId: 1
 
 datasources:
   - name: Prometheus
@@ -9,25 +14,37 @@ datasources:
     url: http://prometheus:9090
     isDefault: true
     editable: false
+    uid: prometheus
     jsonData:
       httpMethod: POST
       manageAlerts: true
       prometheusType: Prometheus
-      prometheusVersion: "2.52.0"
+      prometheusVersion: "3.2.1"
       cacheLevel: 'High'
       incrementalQuerying: true
       incrementalQueryOverlapWindow: 10m
+      # Enable exemplars for trace correlation
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
 
   - name: Loki
     type: loki
     access: proxy
     url: http://loki:3100
+    uid: loki
     editable: false
     jsonData:
       maxLines: 1000
+      timeout: 60
+      # Derived fields for trace correlation
       derivedFields:
-        - datasourceUid: Prometheus
+        - datasourceUid: tempo
           matcherRegex: '"trace_id":"([a-f0-9]+)"'
+          name: TraceID
+          url: '$${__value.raw}'
+        - datasourceUid: tempo
+          matcherRegex: 'trace_id=([a-f0-9]+)'
           name: TraceID
           url: '$${__value.raw}'
 
@@ -39,17 +56,28 @@ datasources:
     editable: false
     jsonData:
       httpMethod: GET
-      tracesToLogs:
+      tracesToLogsV2:
         datasourceUid: loki
-        mapTagNamesEnabled: true
-        mappedTags:
-          - key: service.name
-            value: service
+        spanStartTimeShift: '-1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: true
+        filterBySpanID: false
+        customQuery: true
+        query: '{$${__tags}} |= "$${__trace.traceId}"'
       tracesToMetrics:
         datasourceUid: prometheus
+        spanStartTimeShift: '-1h'
+        spanEndTimeShift: '1h'
         tags:
           - key: service.name
             value: service
+          - key: http.method
+            value: method
+        queries:
+          - name: Request rate
+            query: 'sum(rate(traces_spanmetrics_calls_total{$${__tags}}[5m]))'
+          - name: Error rate
+            query: 'sum(rate(traces_spanmetrics_calls_total{$${__tags}, status_code="STATUS_CODE_ERROR"}[5m]))'
       serviceMap:
         datasourceUid: prometheus
       nodeGraph:
@@ -58,10 +86,46 @@ datasources:
         hide: false
       lokiSearch:
         datasourceUid: loki
+      # TraceQL search
+      traceQuery:
+        timeShiftEnabled: true
+        spanStartTimeShift: '1h'
+        spanEndTimeShift: '-1h'
+
+  - name: ClickHouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    url: http://clickhouse:8123
+    uid: clickhouse
+    editable: false
+    jsonData:
+      defaultDatabase: pistonprotection
+      port: 9000
+      server: clickhouse
+      username: pistonprotection
+      tlsSkipVerify: true
+      # Enable OTEL traces support
+      logs:
+        defaultDatabase: pistonprotection
+        defaultTable: otel_logs
+        otelEnabled: true
+        otelVersion: latest
+        timestampColumn: Timestamp
+        levelColumn: SeverityText
+        messageColumn: Body
+      traces:
+        defaultDatabase: pistonprotection
+        defaultTable: otel_traces
+        otelEnabled: true
+        otelVersion: latest
+        durationUnit: ns
+    secureJsonData:
+      password: ${GF_CLICKHOUSE_PASSWORD:-pistonprotection}
 
   - name: PostgreSQL
     type: postgres
     url: postgres:5432
+    uid: postgres
     user: ${GF_POSTGRES_USER:-pistonprotection}
     secureJsonData:
       password: ${GF_POSTGRES_PASSWORD:-pistonprotection}
@@ -73,10 +137,12 @@ datasources:
       connMaxLifetime: 14400
     editable: false
 
-  - name: Redis
-    type: redis-datasource
+  - name: Alertmanager
+    type: alertmanager
     access: proxy
-    url: redis://redis:6379
+    url: http://alertmanager:9093
+    uid: alertmanager
     editable: false
     jsonData:
-      client: standalone
+      implementation: prometheus
+      handleGrafanaManagedAlerts: true

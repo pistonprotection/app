@@ -1,0 +1,80 @@
+<?xml version="1.0"?>
+<!-- PistonProtection ClickHouse Users Configuration -->
+<clickhouse>
+    <profiles>
+        <default>
+            <max_memory_usage>10000000000</max_memory_usage>
+            <use_uncompressed_cache>0</use_uncompressed_cache>
+            <load_balancing>random</load_balancing>
+            <max_partitions_per_insert_block>100</max_partitions_per_insert_block>
+        </default>
+
+        <readonly>
+            <readonly>1</readonly>
+        </readonly>
+
+        <analytics>
+            <max_memory_usage>20000000000</max_memory_usage>
+            <max_execution_time>600</max_execution_time>
+            <max_rows_to_read>1000000000</max_rows_to_read>
+            <max_result_rows>10000000</max_result_rows>
+        </analytics>
+
+        <ingest>
+            <max_memory_usage>5000000000</max_memory_usage>
+            <max_insert_block_size>1048576</max_insert_block_size>
+            <async_insert>1</async_insert>
+            <wait_for_async_insert>0</wait_for_async_insert>
+        </ingest>
+    </profiles>
+
+    <quotas>
+        <default>
+            <interval>
+                <duration>3600</duration>
+                <queries>0</queries>
+                <errors>0</errors>
+                <result_rows>0</result_rows>
+                <read_rows>0</read_rows>
+                <execution_time>0</execution_time>
+            </interval>
+        </default>
+
+        <limited>
+            <interval>
+                <duration>3600</duration>
+                <queries>1000</queries>
+                <errors>100</errors>
+                <result_rows>100000000</result_rows>
+                <read_rows>1000000000</read_rows>
+                <execution_time>600</execution_time>
+            </interval>
+        </limited>
+    </quotas>
+
+    <users>
+        <!-- Default admin user configured via environment variables -->
+
+        <!-- Read-only user for Grafana -->
+        <grafana>
+            <password_sha256_hex><!-- Will be set dynamically --></password_sha256_hex>
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>readonly</profile>
+            <quota>default</quota>
+            <access_management>0</access_management>
+        </grafana>
+
+        <!-- Ingest user for OTEL collector -->
+        <otel>
+            <password_sha256_hex><!-- Will be set dynamically --></password_sha256_hex>
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>ingest</profile>
+            <quota>default</quota>
+            <access_management>0</access_management>
+        </otel>
+    </users>
+</clickhouse>

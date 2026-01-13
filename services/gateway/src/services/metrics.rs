@@ -167,7 +167,8 @@ impl MetricsService {
         })
     }
 
-    /// List attack events
+    /// List attack events with pagination
+    /// Returns (events, total_count)
     #[instrument(skip(self))]
     pub async fn list_attack_events(
         &self,
@@ -176,9 +177,26 @@ impl MetricsService {
         end_time: chrono::DateTime<chrono::Utc>,
         page: u32,
         page_size: u32,
-    ) -> Result<Vec<AttackEvent>> {
+    ) -> Result<(Vec<AttackEvent>, u64)> {
         let db = self.state.db()?;
         let offset = (page.saturating_sub(1)) * page_size;
+
+        // Get total count for pagination
+        let count_row: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*)
+            FROM attack_events
+            WHERE backend_id = $1
+              AND started_at >= $2
+              AND started_at < $3
+            "#,
+        )
+        .bind(backend_id)
+        .bind(start_time)
+        .bind(end_time)
+        .fetch_one(db)
+        .await?;
+        let total = count_row.0 as u64;
 
         let rows = sqlx::query(
             r#"
@@ -228,7 +246,7 @@ impl MetricsService {
             })
             .collect();
 
-        Ok(events)
+        Ok((events, total))
     }
 
     /// Record metrics from worker
@@ -334,27 +352,32 @@ impl MetricsService {
         })
     }
 
-    /// List all worker metrics
+    /// List all worker metrics with pagination
+    /// Returns (workers, total_count)
     #[instrument(skip(self))]
     pub async fn list_worker_metrics(
         &self,
-        _page: u32,
-        _page_size: u32,
-    ) -> Result<Vec<WorkerMetrics>> {
+        page: u32,
+        page_size: u32,
+    ) -> Result<(Vec<WorkerMetrics>, u64)> {
         if let Some(cache) = &self.state.cache {
             // Get all worker IDs from cache
             if let Ok(Some(worker_ids)) = cache.get::<Vec<String>>("workers:active").await {
+                let total = worker_ids.len() as u64;
+                let offset = ((page.saturating_sub(1)) * page_size) as usize;
+                let limit = page_size as usize;
+
                 let mut workers = Vec::new();
-                for id in &worker_ids {
+                for id in worker_ids.iter().skip(offset).take(limit) {
                     if let Ok(metrics) = self.get_worker_metrics(id).await {
                         workers.push(metrics);
                     }
                 }
-                return Ok(workers);
+                return Ok((workers, total));
             }
         }
 
-        Ok(vec![])
+        Ok((vec![], 0))
     }
 
     /// Get single attack event

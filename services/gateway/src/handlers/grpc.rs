@@ -117,20 +117,30 @@ impl BackendServiceTrait for BackendGrpcService {
     ) -> Result<Response<ListBackendsResponse>, Status> {
         let req = request.into_inner();
         let pagination = req.pagination.unwrap_or_default();
+        let page = pagination.page.max(1);
+        let page_size = pagination.page_size.clamp(1, 100);
 
-        let backends = self
+        let (backends, total) = self
             .service
-            .list(
-                &req.organization_id,
-                pagination.page,
-                pagination.page_size.clamp(1, 100),
-            )
+            .list(&req.organization_id, page, page_size)
             .await
             .map_err(Status::from)?;
 
+        let has_next = (page * page_size) < total as u32;
+
         Ok(Response::new(ListBackendsResponse {
             backends,
-            pagination: None,
+            pagination: Some(pistonprotection_proto::common::PaginationInfo {
+                page,
+                page_size,
+                total_count: total as u32,
+                has_next,
+                next_cursor: if has_next {
+                    format!("{}", page + 1)
+                } else {
+                    String::new()
+                },
+            }),
         }))
     }
 
@@ -433,21 +443,30 @@ impl FilterServiceTrait for FilterGrpcService {
     ) -> Result<Response<ListRulesResponse>, Status> {
         let req = request.into_inner();
         let pagination = req.pagination.unwrap_or_default();
+        let page = pagination.page.max(1);
+        let page_size = pagination.page_size.clamp(1, 100);
 
-        let rules = self
+        let (rules, total) = self
             .service
-            .list(
-                &req.backend_id,
-                req.include_disabled,
-                pagination.page,
-                pagination.page_size.clamp(1, 100),
-            )
+            .list(&req.backend_id, req.include_disabled, page, page_size)
             .await
             .map_err(Status::from)?;
 
+        let has_next = (page * page_size) < total as u32;
+
         Ok(Response::new(ListRulesResponse {
             rules,
-            pagination: None,
+            pagination: Some(pistonprotection_proto::common::PaginationInfo {
+                page,
+                page_size,
+                total_count: total as u32,
+                has_next,
+                next_cursor: if has_next {
+                    format!("{}", page + 1)
+                } else {
+                    String::new()
+                },
+            }),
         }))
     }
 
@@ -823,20 +842,26 @@ impl MetricsServiceTrait for MetricsGrpcService {
             .map(|p| (p.page.max(1), p.page_size.clamp(1, 100)))
             .unwrap_or((1, 20));
 
-        let workers = self
+        let (workers, total) = self
             .service
             .list_worker_metrics(page, page_size)
             .await
             .map_err(Status::from)?;
+
+        let has_next = (page * page_size) < total as u32;
 
         Ok(Response::new(ListWorkerMetricsResponse {
             workers,
             pagination: Some(pistonprotection_proto::common::PaginationInfo {
                 page,
                 page_size,
-                total_count: 0, // TODO: implement proper pagination
-                has_next: false,
-                next_cursor: String::new(),
+                total_count: total as u32,
+                has_next,
+                next_cursor: if has_next {
+                    format!("{}", page + 1)
+                } else {
+                    String::new()
+                },
             }),
         }))
     }
@@ -1020,20 +1045,26 @@ impl MetricsServiceTrait for MetricsGrpcService {
             .map(|p| (p.page.max(1), p.page_size.clamp(1, 100)))
             .unwrap_or((1, 20));
 
-        let events = self
+        let (events, total) = self
             .service
             .list_attack_events(&req.backend_id, start_time, end_time, page, page_size)
             .await
             .map_err(Status::from)?;
+
+        let has_next = (page * page_size) < total as u32;
 
         Ok(Response::new(ListAttackEventsResponse {
             events,
             pagination: Some(pistonprotection_proto::common::PaginationInfo {
                 page,
                 page_size,
-                total_count: 0, // TODO: implement proper count
-                has_next: false,
-                next_cursor: String::new(),
+                total_count: total as u32,
+                has_next,
+                next_cursor: if has_next {
+                    format!("{}", page + 1)
+                } else {
+                    String::new()
+                },
             }),
         }))
     }

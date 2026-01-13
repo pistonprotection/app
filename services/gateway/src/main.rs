@@ -13,6 +13,9 @@ mod handlers;
 mod middleware;
 mod services;
 
+#[cfg(test)]
+mod tests;
+
 const SERVICE_NAME: &str = "gateway";
 
 /// Application error type for main

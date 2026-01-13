@@ -9,10 +9,25 @@
 #   docker compose down -v                  # Stop and remove volumes
 #
 # Access:
-#   Frontend:    http://localhost:3000
-#   Gateway API: http://localhost:8080
-#   Grafana:     http://localhost:3001 (admin/admin)
-#   Prometheus:  http://localhost:9090
+#   Frontend:      http://localhost:3000
+#   Gateway API:   http://localhost:8080
+#   Grafana:       http://localhost:3001 (admin/admin)
+#   Prometheus:    http://localhost:9099
+#   Tempo:         http://localhost:3200
+#   Loki:          http://localhost:3100
+#   ClickHouse:    http://localhost:8123
+#   Alertmanager:  http://localhost:9093
+#   Alloy UI:      http://localhost:12345
+#
+# Observability Stack Versions (Updated January 2026):
+#   Prometheus:    3.2.1  (with OTLP receiver support)
+#   Grafana:       12.3.0 (with new drilldown features)
+#   Loki:          3.6.3  (with pattern ingester)
+#   Tempo:         2.9.0  (with vParquet4 format)
+#   Alloy:         1.12.2 (replaces deprecated Grafana Agent)
+#   OTEL Collector: 0.143.1 (with ClickHouse exporter)
+#   ClickHouse:    25.12.2 (for event analytics)
+#   Alertmanager:  0.28.0
 #
 # =============================================================================
 
@@ -257,7 +272,7 @@ services:
   # ===========================================================================
 
   prometheus:
-    image: prom/prometheus:v2.52.0
+    image: prom/prometheus:v3.2.1
     container_name: pp-prometheus
     ports:
       - "9099:9090"
@@ -267,6 +282,8 @@ services:
       - '--storage.tsdb.retention.time=7d'
       - '--web.enable-lifecycle'
       - '--web.enable-admin-api'
+      - '--web.enable-remote-write-receiver'
+      - '--enable-feature=otlp-write-receiver'
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/prometheus/alerts.yaml:/etc/prometheus/alerts.yaml:ro
@@ -281,7 +298,7 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:11.2.0
+    image: grafana/grafana:12.3.0
     container_name: pp-grafana
     ports:
       - "3001:3000"
@@ -289,8 +306,9 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-piechart-panel
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-clickhouse-datasource
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/traffic-overview.json
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor,correlations,newTraceViewHeader,traceToMetrics
     volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -300,6 +318,8 @@ services:
     depends_on:
       - prometheus
       - loki
+      - tempo
+      - clickhouse
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
       interval: 10s
@@ -309,7 +329,7 @@ services:
     restart: unless-stopped
 
   loki:
-    image: grafana/loki:3.1.0
+    image: grafana/loki:3.6.3
     container_name: pp-loki
     ports:
       - "3100:3100"
@@ -327,10 +347,10 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  # Grafana Alloy - unified telemetry collector (replaces deprecated Promtail)
-  # Promtail reached end-of-life on March 2, 2026 - Alloy is the recommended replacement
+  # Grafana Alloy - unified telemetry collector (replaces deprecated Promtail/Agent)
+  # Grafana Agent reached EOL on November 1, 2025 - Alloy is the recommended replacement
   alloy:
-    image: grafana/alloy:v1.5.1
+    image: grafana/alloy:v1.12.2
     container_name: pp-alloy
     ports:
       - "12345:12345"  # Alloy UI and health
@@ -339,6 +359,7 @@ services:
       - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/log:/var/log:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy
     command:
       - run
       - /etc/alloy/config.alloy
@@ -350,6 +371,7 @@ services:
     depends_on:
       - loki
       - prometheus
+      - tempo
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:12345/ready"]
       interval: 10s
@@ -359,13 +381,14 @@ services:
     restart: unless-stopped
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.104.0
+    image: otel/opentelemetry-collector-contrib:0.143.1
     container_name: pp-otel-collector
     ports:
       - "4317:4317"   # OTLP gRPC
       - "4318:4318"   # OTLP HTTP
       - "8888:8888"   # Prometheus metrics exposed by the collector
       - "8889:8889"   # Prometheus exporter metrics
+      - "13133:13133" # Health check
     volumes:
       - ./observability/otel/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
     command: ["--config=/etc/otel-collector-config.yaml"]
@@ -374,6 +397,91 @@ services:
     depends_on:
       - prometheus
       - loki
+      - tempo
+      - clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:13133/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # Grafana Tempo - Distributed tracing backend
+  tempo:
+    image: grafana/tempo:2.9.0
+    container_name: pp-tempo
+    ports:
+      - "3200:3200"   # Tempo HTTP API
+      - "9095:9095"   # Tempo gRPC
+      - "4320:4317"   # OTLP gRPC receiver
+      - "4321:4318"   # OTLP HTTP receiver
+      - "14268:14268" # Jaeger ingest
+      - "9411:9411"   # Zipkin ingest
+    command: ["-config.file=/etc/tempo/tempo-config.yaml"]
+    volumes:
+      - ./observability/tempo/tempo-config.yaml:/etc/tempo/tempo-config.yaml:ro
+      - tempo-data:/tmp/tempo
+    networks:
+      - pistonprotection
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3200/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # ClickHouse - High-performance analytics database for event storage
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.12.2
+    container_name: pp-clickhouse
+    ports:
+      - "8123:8123"   # HTTP interface
+      - "9000:9000"   # Native TCP interface
+    environment:
+      CLICKHOUSE_DB: pistonprotection
+      CLICKHOUSE_USER: pistonprotection
+      CLICKHOUSE_PASSWORD: pistonprotection
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - ./observability/clickhouse/config.xml:/etc/clickhouse-server/config.d/custom.xml:ro
+      - ./observability/clickhouse/users.xml:/etc/clickhouse-server/users.d/custom.xml:ro
+      - ./observability/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+    networks:
+      - pistonprotection
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  # Alertmanager - Alert routing and management
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    container_name: pp-alertmanager
+    ports:
+      - "9093:9093"
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+    volumes:
+      - ./observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    networks:
+      - pistonprotection
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9093/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
 
   # ===========================================================================
@@ -454,6 +562,16 @@ volumes:
   grafana-data:
     driver: local
   loki-data:
+    driver: local
+  tempo-data:
+    driver: local
+  clickhouse-data:
+    driver: local
+  clickhouse-logs:
+    driver: local
+  alertmanager-data:
+    driver: local
+  alloy-data:
     driver: local
   config-data:
     driver: local

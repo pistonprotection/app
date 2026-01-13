@@ -1,14 +1,12 @@
 //! Unit tests for HTTP handlers
 
 use axum::{
-    Router,
     body::Body,
     http::{Request, StatusCode},
 };
 use tower::ServiceExt;
 
-use super::mock_db::{MockCache, MockDatabase};
-use super::test_utils::{TestFixture, constants, create_test_app_state};
+use super::test_utils::create_test_app_state;
 
 /// Test health check endpoint returns healthy status
 #[tokio::test]

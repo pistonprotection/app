@@ -106,12 +106,21 @@ impl BackendService {
         Ok(backend)
     }
 
-    /// List backends for an organization
+    /// List backends for an organization with pagination
+    /// Returns (backends, total_count)
     #[instrument(skip(self))]
-    pub async fn list(&self, org_id: &str, page: u32, page_size: u32) -> Result<Vec<Backend>> {
+    pub async fn list(&self, org_id: &str, page: u32, page_size: u32) -> Result<(Vec<Backend>, u64)> {
         let db = self.state.db()?;
 
         let offset = (page.saturating_sub(1)) * page_size;
+
+        // Get total count for pagination
+        let count_row: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM backends WHERE organization_id = $1")
+                .bind(org_id)
+                .fetch_one(db)
+                .await?;
+        let total = count_row.0 as u64;
 
         let rows = sqlx::query(
             r#"
@@ -140,7 +149,7 @@ impl BackendService {
             })
             .collect();
 
-        Ok(backends)
+        Ok((backends, total))
     }
 
     /// Update a backend
