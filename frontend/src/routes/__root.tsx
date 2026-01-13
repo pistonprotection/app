@@ -4,8 +4,10 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import {
   createRootRoute,
   HeadContent,
+  Link,
   Outlet,
   Scripts,
+  useRouter,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { Toaster } from "sonner";
@@ -56,6 +58,65 @@ function RootComponent() {
   );
 }
 
+function AuthProviderWrapper({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+
+  return (
+    <AuthUIProvider
+      authClient={authClient}
+      navigate={(href) => {
+        router.navigate({ to: href });
+      }}
+      replace={(href) => {
+        router.navigate({ to: href, replace: true });
+      }}
+      onSessionChange={() => {
+        router.invalidate();
+      }}
+      Link={(props) => {
+        const { href, ...rest } = props;
+        return <Link {...rest} to={href} />;
+      }}
+      social={{
+        providers: ["google", "discord", "github"],
+      }}
+      emailOTP
+      emailVerification
+      changeEmail
+      passkey
+      deleteUser={{
+        verification: true,
+      }}
+      credentials={{
+        forgotPassword: true,
+        username: true,
+      }}
+      signUp
+      nameRequired={false}
+      apiKey
+      optimistic
+      twoFactor={["otp", "totp"]}
+      redirectTo="/dashboard"
+      organization={{
+        pathMode: "slug",
+        apiKey: true,
+        basePath: "/dashboard/organization",
+        personalPath: "/dashboard",
+      }}
+      account={{
+        basePath: "/dashboard",
+      }}
+      localization={{
+        NAME: "Display Name",
+        NAME_DESCRIPTION: "Please enter a display name.",
+        NAME_PLACEHOLDER: "Display Name",
+      }}
+    >
+      {children}
+    </AuthUIProvider>
+  );
+}
+
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
@@ -64,55 +125,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
         <TRPCReactProvider>
-          <AuthUIProvider
-            authClient={authClient}
-            navigate={(href) => {
-              window.location.href = href;
-            }}
-            replace={(href) => {
-              window.location.replace(href);
-            }}
-            onSessionChange={() => {
-              window.location.reload();
-            }}
-            social={{
-              providers: ["google", "discord", "github"],
-            }}
-            emailOTP
-            emailVerification
-            changeEmail
-            passkey
-            deleteUser={{
-              verification: true,
-            }}
-            credentials={{
-              forgotPassword: true,
-              username: true,
-            }}
-            signUp
-            nameRequired={false}
-            apiKey
-            optimistic
-            twoFactor={["otp", "totp"]}
-            redirectTo="/dashboard"
-            organization={{
-              pathMode: "slug",
-              apiKey: true,
-              basePath: "/dashboard/organization",
-              personalPath: "/dashboard",
-            }}
-            account={{
-              basePath: "/dashboard",
-            }}
-            localization={{
-              NAME: "Display Name",
-              NAME_DESCRIPTION: "Please enter a display name.",
-              NAME_PLACEHOLDER: "Display Name",
-            }}
-          >
+          <AuthProviderWrapper>
             {children}
             <Toaster position="top-right" richColors closeButton />
-          </AuthUIProvider>
+          </AuthProviderWrapper>
         </TRPCReactProvider>
         <TanStackDevtools
           config={{
