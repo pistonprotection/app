@@ -14,6 +14,9 @@ mod config_store;
 mod distributor;
 mod handlers;
 
+#[cfg(test)]
+mod tests;
+
 const SERVICE_NAME: &str = "config-mgr";
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
