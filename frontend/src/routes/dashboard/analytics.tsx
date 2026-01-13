@@ -18,6 +18,10 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -63,6 +67,20 @@ const timeRangeToHours: Record<TimeRange, number> = {
   "7d": 168,
   "30d": 720,
 };
+
+// Colors for pie chart segments
+const ATTACK_TYPE_COLORS = [
+  "#ef4444", // red-500 - highest threat
+  "#f97316", // orange-500
+  "#eab308", // yellow-500
+  "#22c55e", // green-500
+  "#3b82f6", // blue-500
+  "#8b5cf6", // violet-500
+  "#ec4899", // pink-500
+  "#06b6d4", // cyan-500
+  "#64748b", // slate-500
+  "#a1a1aa", // zinc-400
+];
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -312,9 +330,9 @@ function AnalyticsPage() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Attack Types */}
-        <Card>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {/* Attack Types Bar Chart */}
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Attack Types</CardTitle>
             <CardDescription>
@@ -342,12 +360,74 @@ function AnalyticsPage() {
                       borderRadius: "8px",
                     }}
                   />
-                  <Bar
-                    dataKey="count"
-                    fill="hsl(var(--destructive))"
-                    radius={4}
-                  />
+                  <Bar dataKey="count" radius={4}>
+                    {attackTypes.map((_entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={
+                          ATTACK_TYPE_COLORS[index % ATTACK_TYPE_COLORS.length]
+                        }
+                      />
+                    ))}
+                  </Bar>
                 </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                No attack data available
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Attack Types Pie Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Attack Distribution</CardTitle>
+            <CardDescription>Proportional view of attack types</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {attackTypes && attackTypes.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={attackTypes}
+                    dataKey="count"
+                    nameKey="type"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    innerRadius={50}
+                    paddingAngle={2}
+                    label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                  >
+                    {attackTypes.map((_entry, index) => (
+                      <Cell
+                        key={`pie-cell-${index}`}
+                        fill={
+                          ATTACK_TYPE_COLORS[index % ATTACK_TYPE_COLORS.length]
+                        }
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--popover))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value: number) => [
+                      formatNumber(value),
+                      "Count",
+                    ]}
+                  />
+                  <Legend
+                    layout="vertical"
+                    align="right"
+                    verticalAlign="middle"
+                    wrapperStyle={{ fontSize: "12px" }}
+                  />
+                </PieChart>
               </ResponsiveContainer>
             ) : (
               <div className="flex items-center justify-center h-[300px] text-muted-foreground">
