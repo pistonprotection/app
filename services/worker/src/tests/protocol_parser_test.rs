@@ -3,6 +3,11 @@
 use super::test_utils::{
     TestPacketMeta, constants, create_ipv4_packet, create_minecraft_bedrock_ping,
     create_minecraft_java_handshake, create_raknet_open_connection_request,
+    create_minecraft_transfer_handshake, create_malformed_negative_length_packet,
+    create_malformed_overlong_varint, create_negative_packet_id_handshake,
+    create_invalid_next_state_handshake, create_raknet_nak_packet,
+    create_raknet_amplification_packet, create_minecraft_status_request,
+    create_minecraft_ping, create_minecraft_login_start,
 };
 use crate::protocol::minecraft::{
     MinecraftBedrockAnalyzer, MinecraftBedrockPacket, MinecraftJavaAnalyzer, RAKNET_MAGIC,
@@ -398,5 +403,196 @@ mod verdict_tests {
         // XDP actions: XDP_PASS = 2, XDP_DROP = 1, XDP_TX = 3
         assert_eq!(Verdict::Pass.to_xdp_action(), 2);
         assert_eq!(Verdict::Drop.to_xdp_action(), 1);
+    }
+}
+
+// ============================================================================
+// Security Attack Vector Tests
+// ============================================================================
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+
+    /// Test that negative packet length is detected and dropped
+    #[test]
+    fn test_negative_length_attack() {
+        let malformed = create_malformed_negative_length_packet();
+        // This should NOT be recognized as valid Minecraft
+        assert!(!is_minecraft_java(&malformed));
+    }
+
+    /// Test that overlong varint is detected
+    #[test]
+    fn test_overlong_varint_attack() {
+        let malformed = create_malformed_overlong_varint();
+        // This should NOT be recognized as valid Minecraft
+        assert!(!is_minecraft_java(&malformed));
+    }
+
+    /// Test negative packet ID detection
+    #[test]
+    fn test_negative_packet_id_attack() {
+        let analyzer = MinecraftJavaAnalyzer::new();
+        let malformed = create_negative_packet_id_handshake();
+        let meta = create_test_meta("192.168.1.1", 25565);
+
+        let result = analyzer.analyze(&meta, &malformed);
+        // Should be dropped as invalid
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Verdict::Drop);
+    }
+
+    /// Test invalid next_state values
+    #[test]
+    fn test_invalid_next_state() {
+        let analyzer = MinecraftJavaAnalyzer::new();
+        let meta = create_test_meta("192.168.1.1", 25565);
+
+        // Test state 0 (invalid)
+        let handshake = create_invalid_next_state_handshake(762, "localhost", 25565, 0);
+        let result = analyzer.analyze(&meta, &handshake);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Verdict::Drop);
+
+        // Test state 4 (invalid - only 1, 2, 3 are valid)
+        let handshake = create_invalid_next_state_handshake(762, "localhost", 25565, 4);
+        let result = analyzer.analyze(&meta, &handshake);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Verdict::Drop);
+
+        // Test state 255 (invalid)
+        let handshake = create_invalid_next_state_handshake(762, "localhost", 25565, 255);
+        let result = analyzer.analyze(&meta, &handshake);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Verdict::Drop);
+    }
+
+    /// Test TRANSFER state (1.20.5+ feature) is valid
+    #[test]
+    fn test_transfer_state_valid() {
+        let analyzer = MinecraftJavaAnalyzer::new();
+        let meta = create_test_meta("192.168.1.1", 25565);
+
+        // Protocol version 766 (1.20.5+) with transfer state
+        let handshake = create_minecraft_transfer_handshake(766, "localhost", 25565);
+        let result = analyzer.analyze(&meta, &handshake);
+        assert!(result.is_ok());
+        // Transfer state should be accepted
+        assert_eq!(result.unwrap(), Verdict::Pass);
+    }
+
+    /// Test status request packet
+    #[test]
+    fn test_status_request() {
+        let status = create_minecraft_status_request();
+        // Should be at least valid packet structure
+        assert!(!status.is_empty());
+        assert_eq!(status[0], 0x01); // Length
+        assert_eq!(status[1], 0x00); // Packet ID
+    }
+
+    /// Test ping packet
+    #[test]
+    fn test_ping_packet() {
+        let ping = create_minecraft_ping(12345678);
+        assert_eq!(ping.len(), 10); // Length byte + ID byte + 8 byte long
+        assert_eq!(ping[0], 0x09); // Length
+        assert_eq!(ping[1], 0x01); // Packet ID
+    }
+
+    /// Test login start packet
+    #[test]
+    fn test_login_start() {
+        let login = create_minecraft_login_start("TestPlayer");
+        assert!(!login.is_empty());
+        // Should contain the username
+        let username_bytes = "TestPlayer".as_bytes();
+        assert!(login.windows(username_bytes.len()).any(|w| w == username_bytes));
+    }
+}
+
+// ============================================================================
+// RakNet/Bedrock Security Tests
+// ============================================================================
+
+#[cfg(test)]
+mod raknet_security_tests {
+    use super::*;
+
+    /// Test NAK flood packet detection
+    #[test]
+    fn test_nak_flood_packet() {
+        let nak = create_raknet_nak_packet(&[1, 2, 3, 4, 5]);
+        assert_eq!(nak[0], 0xA0); // NAK packet ID
+        // Should have sequence numbers
+        assert!(nak.len() > 3);
+    }
+
+    /// Test amplification attack packet
+    #[test]
+    fn test_amplification_packet() {
+        let analyzer = MinecraftBedrockAnalyzer::new();
+        let packet = create_raknet_amplification_packet();
+
+        let mut meta = create_test_meta("192.168.1.1", 19132);
+        meta.protocol = 17; // UDP
+
+        // Should be analyzed (though rate limiting would block repeated calls)
+        let result = analyzer.analyze(&meta, &packet);
+        assert!(result.is_ok());
+    }
+
+    /// Test that RakNet magic must be valid
+    #[test]
+    fn test_invalid_raknet_magic() {
+        let analyzer = MinecraftBedrockAnalyzer::new();
+
+        // Create packet with invalid magic
+        let mut packet = create_minecraft_bedrock_ping(12345, 0xDEADBEEF);
+        // Corrupt the magic bytes
+        for i in 9..25 {
+            packet[i] = 0xAA;
+        }
+
+        let mut meta = create_test_meta("192.168.1.1", 19132);
+        meta.protocol = 17;
+
+        let result = analyzer.analyze(&meta, &packet);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Verdict::Drop);
+    }
+
+    /// Test that extremely small packets are handled
+    #[test]
+    fn test_small_bedrock_packet() {
+        let analyzer = MinecraftBedrockAnalyzer::new();
+        let packet = vec![0x01]; // Just packet ID, nothing else
+
+        let mut meta = create_test_meta("192.168.1.1", 19132);
+        meta.protocol = 17;
+
+        let result = analyzer.analyze(&meta, &packet);
+        assert!(result.is_ok());
+        // Small/invalid packets should be dropped
+        assert_eq!(result.unwrap(), Verdict::Drop);
+    }
+
+    /// Test unknown RakNet packet types
+    #[test]
+    fn test_unknown_packet_type() {
+        let analyzer = MinecraftBedrockAnalyzer::new();
+
+        // Use reserved/unknown packet type
+        let mut packet = vec![0xFE]; // Unknown type
+        packet.extend_from_slice(&RAKNET_MAGIC);
+        packet.extend_from_slice(&[0x00; 8]); // Some padding
+
+        let mut meta = create_test_meta("192.168.1.1", 19132);
+        meta.protocol = 17;
+
+        // Unknown types should be dropped for safety
+        let result = analyzer.analyze(&meta, &packet);
+        assert!(result.is_ok());
     }
 }

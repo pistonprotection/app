@@ -310,3 +310,182 @@ mod tests {
         assert_eq!(meta.dst_port, 19132);
     }
 }
+
+// ============================================================================
+// Additional test packet creation functions for security testing
+// ============================================================================
+
+/// Create a Minecraft Java TRANSFER handshake (next_state = 3)
+/// This is for testing 1.20.5+ transfer state support
+pub fn create_minecraft_transfer_handshake(
+    protocol_version: u32,
+    server_address: &str,
+    server_port: u16,
+) -> Vec<u8> {
+    create_minecraft_java_handshake(protocol_version, server_address, server_port, 3)
+}
+
+/// Create a malformed handshake with negative packet length (varint attack)
+/// This should be detected and dropped by the filter
+pub fn create_malformed_negative_length_packet() -> Vec<u8> {
+    // VarInt encoding of -1 is 0xFF 0xFF 0xFF 0xFF 0x0F
+    // This creates an extremely large "length" that's negative when interpreted
+    vec![0xFF, 0xFF, 0xFF, 0xFF, 0x0F, 0x00]
+}
+
+/// Create a malformed handshake with extremely long varint
+/// (more than 5 bytes, which is invalid for a VarInt)
+pub fn create_malformed_overlong_varint() -> Vec<u8> {
+    // 6-byte varint (invalid - max is 5 bytes)
+    vec![0x80, 0x80, 0x80, 0x80, 0x80, 0x01]
+}
+
+/// Create a handshake with negative packet ID (attack vector)
+pub fn create_negative_packet_id_handshake() -> Vec<u8> {
+    let mut packet = Vec::new();
+
+    // Valid packet length (small)
+    packet.push(0x10);
+
+    // Negative packet ID as VarInt (-1 = 0xFF 0xFF 0xFF 0xFF 0x0F)
+    packet.extend_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF, 0x0F]);
+
+    // Garbage payload
+    packet.extend_from_slice(&[0x00; 10]);
+
+    packet
+}
+
+/// Create a handshake with invalid next_state value
+pub fn create_invalid_next_state_handshake(
+    protocol_version: u32,
+    server_address: &str,
+    server_port: u16,
+    invalid_state: u8,
+) -> Vec<u8> {
+    create_minecraft_java_handshake(protocol_version, server_address, server_port, invalid_state)
+}
+
+/// Create a fragmented Minecraft packet (first fragment)
+pub fn create_fragmented_handshake_part1(
+    protocol_version: u32,
+    server_address: &str,
+) -> Vec<u8> {
+    let full_handshake = create_minecraft_java_handshake(protocol_version, server_address, 25565, 2);
+    // Return first half
+    full_handshake[..full_handshake.len() / 2].to_vec()
+}
+
+/// Create a fragmented Minecraft packet (second fragment)
+pub fn create_fragmented_handshake_part2(
+    protocol_version: u32,
+    server_address: &str,
+) -> Vec<u8> {
+    let full_handshake = create_minecraft_java_handshake(protocol_version, server_address, 25565, 2);
+    // Return second half
+    full_handshake[full_handshake.len() / 2..].to_vec()
+}
+
+/// Create a RakNet NAK flood packet (attack vector)
+pub fn create_raknet_nak_packet(sequence_numbers: &[u32]) -> Vec<u8> {
+    let mut packet = Vec::new();
+
+    // NAK packet ID (0xA0)
+    packet.push(0xA0);
+
+    // Record count (little endian 16-bit)
+    let count = sequence_numbers.len() as u16;
+    packet.extend_from_slice(&count.to_le_bytes());
+
+    // Sequence number ranges (simplified - all single entries)
+    for &seq in sequence_numbers {
+        // Range flag = 0 (single)
+        packet.push(0x00);
+        // Sequence number (24-bit little endian)
+        packet.push((seq & 0xFF) as u8);
+        packet.push(((seq >> 8) & 0xFF) as u8);
+        packet.push(((seq >> 16) & 0xFF) as u8);
+    }
+
+    packet
+}
+
+/// Create a RakNet amplification attack packet
+pub fn create_raknet_amplification_packet() -> Vec<u8> {
+    let mut packet = Vec::new();
+
+    // Unconnected ping (0x01) - used for amplification
+    packet.push(0x01);
+
+    // Time
+    packet.extend_from_slice(&0u64.to_be_bytes());
+
+    // RakNet magic
+    packet.extend_from_slice(&crate::protocol::minecraft::RAKNET_MAGIC);
+
+    // Client GUID
+    packet.extend_from_slice(&0xFFFFFFFFFFFFFFFFu64.to_be_bytes());
+
+    packet
+}
+
+/// Create a Minecraft status request packet
+pub fn create_minecraft_status_request() -> Vec<u8> {
+    let mut packet = Vec::new();
+
+    // Packet length (1)
+    packet.push(0x01);
+    // Packet ID (0x00 for status request)
+    packet.push(0x00);
+
+    packet
+}
+
+/// Create a Minecraft ping packet
+pub fn create_minecraft_ping(payload: u64) -> Vec<u8> {
+    let mut packet = Vec::new();
+
+    // Packet length (9 - 1 byte ID + 8 byte long)
+    packet.push(0x09);
+    // Packet ID (0x01 for ping)
+    packet.push(0x01);
+    // Payload (long, big endian)
+    packet.extend_from_slice(&payload.to_be_bytes());
+
+    packet
+}
+
+/// Create a Minecraft login start packet
+pub fn create_minecraft_login_start(username: &str) -> Vec<u8> {
+    let mut packet = Vec::new();
+
+    // Packet ID (0x00 for login start)
+    packet.push(0x00);
+
+    // Username (string with VarInt length prefix)
+    write_varint_pub(&mut packet, username.len() as i32);
+    packet.extend_from_slice(username.as_bytes());
+
+    // Prepend packet length
+    let len = packet.len();
+    let mut final_packet = Vec::new();
+    write_varint_pub(&mut final_packet, len as i32);
+    final_packet.extend_from_slice(&packet);
+
+    final_packet
+}
+
+/// Public VarInt writer for use in test modules
+pub fn write_varint_pub(buf: &mut Vec<u8>, mut value: i32) {
+    loop {
+        let mut byte = (value & 0x7f) as u8;
+        value >>= 7;
+        if value != 0 {
+            byte |= 0x80;
+        }
+        buf.push(byte);
+        if value == 0 {
+            break;
+        }
+    }
+}
