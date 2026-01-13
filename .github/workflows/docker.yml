@@ -73,21 +73,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component:
-          - gateway
-          - worker
-          - config-mgr
-          - metrics
-          - auth
-          - operator
-          - frontend
-        include_arch:
-          - arch: amd64
-            runner: ubuntu-latest
-            platform: linux/amd64
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            platform: linux/arm64
         include:
           # AMD64 builds
           - component: gateway
