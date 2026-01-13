@@ -1,0 +1,332 @@
+# =============================================================================
+# PistonProtection - eBPF Programs CI Workflow
+# =============================================================================
+# This workflow handles CI for eBPF/XDP programs.
+# Includes nightly toolchain setup, build verification, and userspace tests.
+# =============================================================================
+
+name: eBPF CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'ebpf/**'
+      - 'ebpf-tests/**'
+      - '.github/workflows/ebpf.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'ebpf/**'
+      - 'ebpf-tests/**'
+      - '.github/workflows/ebpf.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ebpf-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+  # Use a pinned nightly version for reproducibility
+  NIGHTLY_VERSION: nightly-2026-01-10
+
+jobs:
+  # ===========================================================================
+  # Setup and Cache bpf-linker
+  # ===========================================================================
+  setup:
+    name: Setup eBPF Toolchain
+    runs-on: ubuntu-latest
+    outputs:
+      bpf-linker-cache-hit: ${{ steps.cache-bpf-linker.outputs.cache-hit }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.NIGHTLY_VERSION }}
+          components: rust-src
+
+      - name: Install LLVM and Clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm clang libbpf-dev
+
+      - name: Cache bpf-linker
+        id: cache-bpf-linker
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/bpf-linker
+          key: ${{ runner.os }}-bpf-linker-${{ env.NIGHTLY_VERSION }}
+
+      - name: Install bpf-linker
+        if: steps.cache-bpf-linker.outputs.cache-hit != 'true'
+        run: cargo +${{ env.NIGHTLY_VERSION }} install bpf-linker --locked
+
+  # ===========================================================================
+  # Build eBPF Programs (Debug)
+  # ===========================================================================
+  build-debug:
+    name: Build (Debug)
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.NIGHTLY_VERSION }}
+          components: rust-src
+
+      - name: Install LLVM and Clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm clang libbpf-dev
+
+      - name: Restore bpf-linker cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/bpf-linker
+          key: ${{ runner.os }}-bpf-linker-${{ env.NIGHTLY_VERSION }}
+          fail-on-cache-miss: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-ebpf-registry-${{ hashFiles('ebpf/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-ebpf-registry-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: ebpf/target
+          key: ${{ runner.os }}-cargo-ebpf-debug-${{ hashFiles('ebpf/Cargo.lock') }}-${{ hashFiles('ebpf/src/**/*.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-ebpf-debug-${{ hashFiles('ebpf/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-ebpf-debug-
+
+      - name: Build eBPF programs (debug)
+        run: cargo +${{ env.NIGHTLY_VERSION }} build --target bpfel-unknown-none -Z build-std=core
+        working-directory: ebpf
+        env:
+          # eBPF code has intentional unused items for future features
+          RUSTFLAGS: ""
+
+      - name: Verify debug build output
+        run: |
+          echo "Debug build artifacts:"
+          find target/bpfel-unknown-none/debug -maxdepth 1 -type f ! -name "*.d" 2>/dev/null || echo "No artifacts found"
+        working-directory: ebpf
+
+  # ===========================================================================
+  # Build eBPF Programs (Release)
+  # ===========================================================================
+  build-release:
+    name: Build (Release)
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.NIGHTLY_VERSION }}
+          components: rust-src
+
+      - name: Install LLVM and Clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm clang libbpf-dev
+
+      - name: Restore bpf-linker cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/bpf-linker
+          key: ${{ runner.os }}-bpf-linker-${{ env.NIGHTLY_VERSION }}
+          fail-on-cache-miss: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-ebpf-registry-${{ hashFiles('ebpf/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-ebpf-registry-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: ebpf/target
+          key: ${{ runner.os }}-cargo-ebpf-release-${{ hashFiles('ebpf/Cargo.lock') }}-${{ hashFiles('ebpf/src/**/*.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-ebpf-release-${{ hashFiles('ebpf/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-ebpf-release-
+
+      - name: Build eBPF programs (release)
+        run: cargo +${{ env.NIGHTLY_VERSION }} build --target bpfel-unknown-none -Z build-std=core --release
+        working-directory: ebpf
+        env:
+          RUSTFLAGS: ""
+
+      - name: Verify release build output
+        run: |
+          echo "Release build artifacts:"
+          ls -la target/bpfel-unknown-none/release/ 2>/dev/null || echo "No artifacts found"
+
+          # List all XDP filter programs
+          echo ""
+          echo "XDP filter programs:"
+          for prog in xdp_filter xdp_ratelimit xdp_minecraft xdp_http xdp_quic xdp_udp xdp_tcp; do
+            if [ -f "target/bpfel-unknown-none/release/$prog" ]; then
+              echo "  - $prog: $(stat -c%s target/bpfel-unknown-none/release/$prog) bytes"
+            fi
+          done
+        working-directory: ebpf
+
+      - name: Upload eBPF artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ebpf-programs
+          path: |
+            ebpf/target/bpfel-unknown-none/release/xdp_*
+          retention-days: 7
+
+  # ===========================================================================
+  # Userspace Tests (eBPF Logic Tests)
+  # ===========================================================================
+  test-userspace:
+    name: Userspace Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-ebpf-tests-registry-${{ hashFiles('ebpf-tests/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-ebpf-tests-registry-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: ebpf-tests/target
+          key: ${{ runner.os }}-cargo-ebpf-tests-${{ hashFiles('ebpf-tests/Cargo.lock') }}-${{ hashFiles('ebpf-tests/**/*.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-ebpf-tests-${{ hashFiles('ebpf-tests/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-ebpf-tests-
+
+      - name: Run eBPF packet filter tests
+        run: cargo test --all-features
+        working-directory: ebpf-tests
+        env:
+          # Test code has intentional unused items
+          RUSTFLAGS: ""
+
+  # ===========================================================================
+  # Cargo Check (eBPF Programs)
+  # ===========================================================================
+  check:
+    name: Cargo Check
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.NIGHTLY_VERSION }}
+          components: rust-src
+
+      - name: Install LLVM and Clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm clang libbpf-dev
+
+      - name: Restore bpf-linker cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/bpf-linker
+          key: ${{ runner.os }}-bpf-linker-${{ env.NIGHTLY_VERSION }}
+          fail-on-cache-miss: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-ebpf-registry-${{ hashFiles('ebpf/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-ebpf-registry-
+
+      - name: Cargo check
+        run: cargo +${{ env.NIGHTLY_VERSION }} check --target bpfel-unknown-none -Z build-std=core
+        working-directory: ebpf
+        env:
+          RUSTFLAGS: ""
+
+  # ===========================================================================
+  # CI Success Check
+  # ===========================================================================
+  ci-success:
+    name: eBPF CI Success
+    runs-on: ubuntu-latest
+    needs: [setup, build-debug, build-release, test-userspace, check]
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# eBPF CI Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Setup Toolchain | ${{ needs.setup.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build (Debug) | ${{ needs.build-debug.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build (Release) | ${{ needs.build-release.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Userspace Tests | ${{ needs.test-userspace.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cargo Check | ${{ needs.check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Nightly Version:** ${{ env.NIGHTLY_VERSION }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check all jobs
+        run: |
+          if [[ "${{ needs.setup.result }}" == "failure" ]] || \
+             [[ "${{ needs.build-debug.result }}" == "failure" ]] || \
+             [[ "${{ needs.build-release.result }}" == "failure" ]] || \
+             [[ "${{ needs.test-userspace.result }}" == "failure" ]] || \
+             [[ "${{ needs.check.result }}" == "failure" ]]; then
+            echo "One or more eBPF CI jobs failed"
+            exit 1
+          fi
+          echo "All eBPF CI jobs passed!"

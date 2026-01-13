@@ -2,7 +2,8 @@
 # PistonProtection - Release Workflow
 # =============================================================================
 # This workflow handles the full release process when a version tag is pushed.
-# It builds all artifacts, creates a GitHub release, and publishes to registries.
+# It builds all Docker images, pushes to GHCR, creates a GitHub release,
+# and publishes the Helm chart.
 # =============================================================================
 
 name: Release
@@ -27,11 +28,17 @@ env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository }}
   CARGO_TERM_COLOR: always
+  HELM_VERSION: v3.14.0
+  NIGHTLY_VERSION: nightly-2026-01-10
 
 permissions:
   contents: write
   packages: write
   id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   # ===========================================================================
@@ -101,7 +108,7 @@ jobs:
   # Build and Push Docker Images
   # ===========================================================================
   docker:
-    name: Docker Images
+    name: Docker - ${{ matrix.component }}
     runs-on: ubuntu-latest
     needs: prepare
     strategy:
@@ -110,18 +117,25 @@ jobs:
         include:
           - component: gateway
             file: ./docker/gateway/Dockerfile
+            context: .
           - component: worker
             file: ./docker/worker/Dockerfile
+            context: .
           - component: config-mgr
             file: ./docker/config-mgr/Dockerfile
+            context: .
           - component: metrics
             file: ./docker/metrics/Dockerfile
+            context: .
           - component: auth
             file: ./docker/auth/Dockerfile
+            context: .
           - component: operator
             file: ./docker/operator/Dockerfile
+            context: .
           - component: frontend
             file: ./docker/frontend/Dockerfile
+            context: .
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -154,7 +168,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           platforms: linux/amd64,linux/arm64
           push: ${{ needs.prepare.outputs.dry_run != 'true' }}
@@ -168,8 +182,16 @@ jobs:
           provenance: true
           sbom: true
 
+      - name: Generate image summary
+        run: |
+          echo "### Docker Image: ${{ matrix.component }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Registry:** ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.component }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.prepare.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Platforms:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+
   # ===========================================================================
-  # Sign Container Images
+  # Sign Container Images with Cosign
   # ===========================================================================
   sign:
     name: Sign Images
@@ -197,7 +219,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Sign image
+      - name: Sign image with cosign
         run: |
           cosign sign --yes \
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.component }}:${{ needs.prepare.outputs.version }}
@@ -214,8 +236,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.NIGHTLY_VERSION }}
           components: rust-src
 
       - name: Install LLVM and dependencies
@@ -228,20 +251,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/bpf-linker
-          key: ${{ runner.os }}-bpf-linker-v0.9
+          key: ${{ runner.os }}-bpf-linker-${{ env.NIGHTLY_VERSION }}
 
       - name: Install bpf-linker
         if: steps.cache-bpf-linker.outputs.cache-hit != 'true'
-        run: cargo +nightly install bpf-linker --locked
+        run: cargo +${{ env.NIGHTLY_VERSION }} install bpf-linker --locked
 
-      - name: Build eBPF programs
-        run: cargo +nightly build --target bpfel-unknown-none -Z build-std=core --release
+      - name: Build eBPF programs (release)
+        run: cargo +${{ env.NIGHTLY_VERSION }} build --target bpfel-unknown-none -Z build-std=core --release
         working-directory: ebpf
+        env:
+          RUSTFLAGS: ""
 
       - name: Create eBPF tarball
         run: |
           mkdir -p dist/ebpf
-          find ebpf/target/bpfel-unknown-none/release -maxdepth 1 -type f \( -name "*.o" -o ! -name "*.*" \) -exec cp {} dist/ebpf/ \; 2>/dev/null || true
+          find ebpf/target/bpfel-unknown-none/release -maxdepth 1 -type f \( -name "xdp_*" -o -name "*.o" \) -exec cp {} dist/ebpf/ \; 2>/dev/null || true
           tar -czvf pistonprotection-ebpf-${{ needs.prepare.outputs.version }}-linux.tar.gz -C dist ebpf
 
       - name: Upload eBPF artifacts
@@ -266,7 +291,7 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
         with:
-          version: v3.14.0
+          version: ${{ env.HELM_VERSION }}
 
       - name: Add dependency repos
         run: |
@@ -377,8 +402,10 @@ jobs:
               cp "$dir"/*.json release-assets/sboms/ 2>/dev/null || true
             fi
           done
-          cd release-assets && tar -czvf sboms.tar.gz sboms && rm -rf sboms
-          cd ..
+          if [ -d "release-assets/sboms" ] && [ "$(ls -A release-assets/sboms)" ]; then
+            cd release-assets && tar -czvf sboms.tar.gz sboms && rm -rf sboms
+            cd ..
+          fi
 
           ls -la release-assets/
 
@@ -436,9 +463,7 @@ jobs:
           NOTES_EOF
 
           # Append changelog
-          cat >> RELEASE_NOTES.md << 'CHANGELOG_EOF'
-          ${{ needs.prepare.outputs.changelog }}
-          CHANGELOG_EOF
+          echo "${{ needs.prepare.outputs.changelog }}" >> RELEASE_NOTES.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -453,7 +478,7 @@ jobs:
           fail_on_unmatched_files: false
 
   # ===========================================================================
-  # Update GitHub Pages Helm Repo
+  # Update GitHub Pages Helm Repository
   # ===========================================================================
   update-helm-repo:
     name: Update Helm Repository
@@ -474,7 +499,7 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
         with:
-          version: v3.14.0
+          version: ${{ env.HELM_VERSION }}
 
       - name: Download Helm chart
         uses: actions/download-artifact@v4
@@ -498,12 +523,12 @@ jobs:
           git push
 
   # ===========================================================================
-  # Notify
+  # Release Summary
   # ===========================================================================
-  notify:
-    name: Notify
+  summary:
+    name: Release Summary
     runs-on: ubuntu-latest
-    needs: [prepare, release]
+    needs: [prepare, docker, sign, ebpf, helm, sbom, release, update-helm-repo]
     if: always()
     steps:
       - name: Generate summary
@@ -514,11 +539,21 @@ jobs:
           echo "**Prerelease:** ${{ needs.prepare.outputs.is_prerelease }}" >> $GITHUB_STEP_SUMMARY
           echo "**Dry Run:** ${{ needs.prepare.outputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Job Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Prepare | ${{ needs.prepare.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Images | ${{ needs.docker.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Sign Images | ${{ needs.sign.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| eBPF Programs | ${{ needs.ebpf.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Helm Chart | ${{ needs.helm.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SBOMs | ${{ needs.sbom.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| GitHub Release | ${{ needs.release.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Helm Repo Update | ${{ needs.update-helm-repo.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
           if [[ "${{ needs.release.result }}" == "success" ]]; then
-            echo "Release created successfully!" >> $GITHUB_STEP_SUMMARY
+            echo "## Release URL" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "View release: https://github.com/${{ github.repository }}/releases/tag/v${{ needs.prepare.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "Release creation: ${{ needs.release.result }}" >> $GITHUB_STEP_SUMMARY
+            echo "https://github.com/${{ github.repository }}/releases/tag/v${{ needs.prepare.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           fi
