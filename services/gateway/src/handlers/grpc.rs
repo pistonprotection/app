@@ -3,6 +3,7 @@
 use crate::services::AppState;
 use futures::StreamExt;
 use pistonprotection_proto::{
+    FILE_DESCRIPTOR_SET,
     backend::{
         backend_service_server::{BackendService as BackendServiceTrait, BackendServiceServer},
         *,
@@ -15,11 +16,10 @@ use pistonprotection_proto::{
         metrics_service_server::{MetricsService as MetricsServiceTrait, MetricsServiceServer},
         *,
     },
-    FILE_DESCRIPTOR_SET,
 };
 use std::pin::Pin;
 use tokio_stream::Stream;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status, transport::Server};
 use tonic_health::server::health_reporter;
 use tonic_reflection::server::Builder as ReflectionBuilder;
 use tracing::{info, instrument};

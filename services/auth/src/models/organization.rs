@@ -291,8 +291,8 @@ impl Organization {
         limits: Option<&OrganizationLimits>,
         usage: Option<&OrganizationUsage>,
     ) -> pistonprotection_proto::auth::Organization {
-        use pistonprotection_proto::auth;
         use pistonprotection_proto::Timestamp;
+        use pistonprotection_proto::auth;
 
         auth::Organization {
             id: self.id.clone(),
@@ -345,8 +345,8 @@ impl OrganizationMember {
         &self,
         user: Option<&super::User>,
     ) -> pistonprotection_proto::auth::OrganizationMember {
-        use pistonprotection_proto::auth;
         use pistonprotection_proto::Timestamp;
+        use pistonprotection_proto::auth;
 
         auth::OrganizationMember {
             id: self.id.clone(),
@@ -361,8 +361,8 @@ impl OrganizationMember {
 
 impl Subscription {
     pub fn to_proto(&self) -> pistonprotection_proto::auth::Subscription {
-        use pistonprotection_proto::auth::Subscription as ProtoSubscription;
         use pistonprotection_proto::Timestamp;
+        use pistonprotection_proto::auth::Subscription as ProtoSubscription;
 
         ProtoSubscription {
             id: self.id.clone(),

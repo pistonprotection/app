@@ -164,8 +164,8 @@ pub struct UserOAuthProvider {
 /// Convert to proto User
 impl User {
     pub fn to_proto(&self) -> pistonprotection_proto::auth::User {
-        use pistonprotection_proto::auth;
         use pistonprotection_proto::Timestamp;
+        use pistonprotection_proto::auth;
 
         auth::User {
             id: self.id.clone(),

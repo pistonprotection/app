@@ -11,19 +11,19 @@
 //! service via gRPC and manages worker deployments for traffic filtering.
 
 use anyhow::{Context as AnyhowContext, Result};
-use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Router};
+use axum::{Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
 use futures::StreamExt;
 use kube::{
+    Client, CustomResourceExt, Resource,
     api::Api,
     runtime::{
         controller::Controller,
         events::{Recorder, Reporter},
         watcher::Config as WatcherConfig,
     },
-    Client, CustomResourceExt, Resource,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};

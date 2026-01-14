@@ -3,9 +3,9 @@
 use crate::error::{Error, Result};
 use dashmap::DashMap;
 use governor::{
+    Quota, RateLimiter,
     clock::DefaultClock,
     state::{InMemoryState, NotKeyed},
-    Quota, RateLimiter,
 };
 use std::net::IpAddr;
 use std::num::NonZeroU32;

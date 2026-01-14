@@ -164,8 +164,8 @@ impl TokenPair {
 /// Session with proto conversion
 impl Session {
     pub fn to_proto(&self) -> pistonprotection_proto::auth::Session {
-        use pistonprotection_proto::auth;
         use pistonprotection_proto::Timestamp;
+        use pistonprotection_proto::auth;
 
         auth::Session {
             id: self.id.clone(),

@@ -11,8 +11,8 @@ use pistonprotection_proto::{
 };
 use reqwest::Client;
 use serde::Serialize;
-use sqlx::postgres::PgPool;
 use sqlx::Row;
+use sqlx::postgres::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;

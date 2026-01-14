@@ -340,11 +340,13 @@ mod tests {
     #[test]
     fn test_error_permanent() {
         assert!(Error::InvalidResource("test".into()).is_permanent());
-        assert!(Error::ValidationError {
-            field: "test".into(),
-            message: "invalid".into(),
-        }
-        .is_permanent());
+        assert!(
+            Error::ValidationError {
+                field: "test".into(),
+                message: "invalid".into(),
+            }
+            .is_permanent()
+        );
 
         assert!(!Error::GrpcConnectionError("test".into()).is_permanent());
     }

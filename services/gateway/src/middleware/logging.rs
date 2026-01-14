@@ -7,7 +7,7 @@ use std::time::Instant;
 
 type BoxBody = UnsyncBoxBody<Bytes, tonic::Status>;
 use tower::{Layer, Service};
-use tracing::{info, info_span, Instrument};
+use tracing::{Instrument, info, info_span};
 
 /// Logging middleware
 #[derive(Clone)]

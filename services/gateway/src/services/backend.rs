@@ -8,8 +8,8 @@ use pistonprotection_proto::common::HealthStatus;
 use sqlx::Row;
 use std::time::Duration;
 use tokio::sync::broadcast;
-use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::Stream;
+use tokio_stream::wrappers::BroadcastStream;
 use tracing::{info, instrument, warn};
 use uuid::Uuid;
 

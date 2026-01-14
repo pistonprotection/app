@@ -32,7 +32,7 @@ use tower_http::{
 };
 use tracing::{error, info, warn};
 
-use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
+use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
 use serde::{Deserialize, Serialize};
 
 const SERVICE_NAME: &str = "metrics";

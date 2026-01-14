@@ -11,8 +11,8 @@ use crate::error::{Error, Result};
 
 use k8s_openapi::api::core::v1::Pod;
 use kube::{
-    api::{Api, ListParams},
     Client, ResourceExt,
+    api::{Api, ListParams},
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;

@@ -8,20 +8,20 @@
 
 use crate::client::GatewayClient;
 use crate::crd::{
-    BlocklistAction, BlocklistEntry, BlocklistSource, Condition, DDoSProtection, IPBlocklist,
-    IPBlocklistStatus, FINALIZER,
+    BlocklistAction, BlocklistEntry, BlocklistSource, Condition, DDoSProtection, FINALIZER,
+    IPBlocklist, IPBlocklistStatus,
 };
 use crate::error::{Error, Result};
 use crate::metrics::{Metrics, ReconciliationTimer};
 
 use kube::{
+    Client, Resource, ResourceExt,
     api::{Api, ListParams, ObjectMeta, Patch, PatchParams},
     runtime::{
         controller::Action,
         events::{Event, EventType, Recorder, Reporter},
-        finalizer::{finalizer, Event as FinalizerEvent},
+        finalizer::{Event as FinalizerEvent, finalizer},
     },
-    Client, Resource, ResourceExt,
 };
 use std::collections::HashSet;
 use std::net::IpAddr;

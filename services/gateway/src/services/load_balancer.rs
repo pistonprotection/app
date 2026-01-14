@@ -14,8 +14,8 @@ use pistonprotection_common::error::{Error, Result};
 use pistonprotection_proto::backend::Origin;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use tracing::{debug, warn};
 
 /// Load balancing algorithm

@@ -9,7 +9,7 @@ use std::task::{Context, Poll};
 
 use bytes::Bytes;
 use http_body_util::combinators::UnsyncBoxBody;
-use jsonwebtoken::{decode, DecodingKey, TokenData, Validation};
+use jsonwebtoken::{DecodingKey, TokenData, Validation, decode};
 use pistonprotection_common::config::AuthConfig;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;

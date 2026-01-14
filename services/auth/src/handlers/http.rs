@@ -1,6 +1,6 @@
 //! HTTP handlers for health checks and metrics
 
-use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
+use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
 use serde::Serialize;
 
 use crate::services::AppState;

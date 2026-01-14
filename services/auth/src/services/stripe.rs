@@ -1,6 +1,6 @@
 //! Stripe integration service for subscription management and billing
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use chrono::{DateTime, TimeZone, Utc};
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -18,11 +18,11 @@ use uuid::Uuid;
 
 use crate::config::StripeConfig;
 use crate::models::{
+    Organization, Subscription, SubscriptionStatus,
     subscription::{
         BillingPeriod, CreateBillingPortalSessionRequest, CreateCheckoutSessionRequest, Invoice,
         InvoiceStatus, Plan, PlanType, ProrationBehavior, UsageMetricType, UsageSummary,
     },
-    Organization, Subscription, SubscriptionStatus,
 };
 
 /// Stripe service for handling all Stripe-related operations

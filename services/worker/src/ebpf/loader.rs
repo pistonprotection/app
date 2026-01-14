@@ -2,8 +2,8 @@
 
 use super::interface::NetworkInterface;
 use super::maps::MapManager;
-use aya::programs::{Xdp, XdpFlags};
 use aya::Ebpf;
+use aya::programs::{Xdp, XdpFlags};
 use parking_lot::RwLock;
 use pistonprotection_common::error::{Error, Result};
 use std::collections::HashMap;

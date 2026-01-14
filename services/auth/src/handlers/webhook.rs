@@ -1,12 +1,12 @@
 //! Stripe webhook handler for processing billing events
 
 use axum::{
+    Json, Router,
     body::Bytes,
     extract::State,
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::post,
-    Json, Router,
 };
 use hmac::{Hmac, Mac};
 use serde::Serialize;

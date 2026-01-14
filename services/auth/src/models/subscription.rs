@@ -487,8 +487,8 @@ pub struct CancelSubscriptionRequest {
 /// Convert subscription details to proto
 impl SubscriptionDetails {
     pub fn to_proto(&self) -> pistonprotection_proto::auth::Subscription {
-        use pistonprotection_proto::auth::Subscription as ProtoSubscription;
         use pistonprotection_proto::Timestamp;
+        use pistonprotection_proto::auth::Subscription as ProtoSubscription;
 
         ProtoSubscription {
             id: self.id.clone(),
@@ -538,8 +538,8 @@ impl Plan {
 /// Convert Invoice to proto
 impl Invoice {
     pub fn to_proto(&self) -> pistonprotection_proto::auth::Invoice {
-        use pistonprotection_proto::auth::Invoice as ProtoInvoice;
         use pistonprotection_proto::Timestamp;
+        use pistonprotection_proto::auth::Invoice as ProtoInvoice;
 
         ProtoInvoice {
             id: self.id.clone(),

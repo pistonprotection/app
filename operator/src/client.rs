@@ -8,7 +8,7 @@ use crate::crd::{
     RateLimitSpec,
 };
 use crate::error::{Error, Result};
-use backoff::{backoff::Backoff, ExponentialBackoff};
+use backoff::{ExponentialBackoff, backoff::Backoff};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;

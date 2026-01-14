@@ -1,11 +1,11 @@
 //! Controller reconciliation tests (mock k8s)
 
 use super::test_utils::{
-    constants, create_test_ddos_protection, create_test_filter_rule, MockKubeClient,
+    MockKubeClient, constants, create_test_ddos_protection, create_test_filter_rule,
 };
 use crate::crd::{
-    Condition, DDoSProtection, DDoSProtectionSpec, DDoSProtectionStatus, FilterRule,
-    FilterRuleSpec, FilterRuleStatus, Phase, FINALIZER,
+    Condition, DDoSProtection, DDoSProtectionSpec, DDoSProtectionStatus, FINALIZER, FilterRule,
+    FilterRuleSpec, FilterRuleStatus, Phase,
 };
 use std::collections::BTreeMap;
 

@@ -1,8 +1,8 @@
 //! Prometheus metrics utilities
 
 use prometheus::{
-    register_counter_vec, register_gauge_vec, register_histogram_vec, CounterVec, Encoder,
-    GaugeVec, HistogramVec, TextEncoder,
+    CounterVec, Encoder, GaugeVec, HistogramVec, TextEncoder, register_counter_vec,
+    register_gauge_vec, register_histogram_vec,
 };
 
 lazy_static::lazy_static! {

@@ -7,18 +7,18 @@
 //! - Status updates
 
 use crate::client::GatewayClient;
-use crate::crd::{Backend, BackendStatus, Condition, EndpointStatus, HealthState, FINALIZER};
+use crate::crd::{Backend, BackendStatus, Condition, EndpointStatus, FINALIZER, HealthState};
 use crate::error::{Error, Result};
 use crate::metrics::{Metrics, ReconciliationTimer};
 
 use kube::{
+    Client, Resource, ResourceExt,
     api::{Api, ObjectMeta, Patch, PatchParams},
     runtime::{
         controller::Action,
         events::{Event, EventType, Recorder, Reporter},
-        finalizer::{finalizer, Event as FinalizerEvent},
+        finalizer::{Event as FinalizerEvent, finalizer},
     },
-    Client, Resource, ResourceExt,
 };
 use std::net::ToSocketAddrs;
 use std::sync::Arc;

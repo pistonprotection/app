@@ -92,12 +92,14 @@ async fn test_metrics_endpoint() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let headers = response.headers();
-    assert!(headers
-        .get("content-type")
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .contains("text/plain"));
+    assert!(
+        headers
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("text/plain")
+    );
 }
 
 /// Test version endpoint returns version info

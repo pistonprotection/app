@@ -1,7 +1,7 @@
 //! GeoIP lookup service
 
 use crate::error::Result;
-use maxminddb::{geoip2, Reader};
+use maxminddb::{Reader, geoip2};
 use std::net::IpAddr;
 use std::path::Path;
 use std::sync::Arc;

@@ -9,8 +9,8 @@
 
 use crate::client::GatewayClient;
 use crate::crd::{
-    Condition, DDoSProtection, DDoSProtectionStatus, Phase, COMPONENT_LABEL, FINALIZER,
-    INSTANCE_LABEL, MANAGED_BY_LABEL, MANAGED_BY_VALUE, NAME_LABEL, WORKER_IMAGE,
+    COMPONENT_LABEL, Condition, DDoSProtection, DDoSProtectionStatus, FINALIZER, INSTANCE_LABEL,
+    MANAGED_BY_LABEL, MANAGED_BY_VALUE, NAME_LABEL, Phase, WORKER_IMAGE,
 };
 use crate::error::{Error, Result};
 use crate::metrics::{Metrics, ReconciliationTimer};
@@ -24,13 +24,13 @@ use k8s_openapi::api::{
 };
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, OwnerReference};
 use kube::{
+    Client, Resource, ResourceExt,
     api::{Api, ObjectMeta, Patch, PatchParams, PostParams},
     runtime::{
         controller::Action,
         events::{Event, EventType, Recorder, Reporter},
-        finalizer::{finalizer, Event as FinalizerEvent},
+        finalizer::{Event as FinalizerEvent, finalizer},
     },
-    Client, Resource, ResourceExt,
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;

@@ -2,8 +2,8 @@
 
 use crate::config::RedisConfig;
 use crate::error::{Error, Result};
-use deadpool_redis::{redis, redis::AsyncCommands, Config as DeadpoolConfig, Pool, Runtime};
-use serde::{de::DeserializeOwned, Serialize};
+use deadpool_redis::{Config as DeadpoolConfig, Pool, Runtime, redis, redis::AsyncCommands};
+use serde::{Serialize, de::DeserializeOwned};
 use std::time::Duration;
 use tracing::info;
 

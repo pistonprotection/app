@@ -10,19 +10,19 @@ use chrono::Datelike;
 
 use crate::client::GatewayClient;
 use crate::crd::{
-    Condition, DDoSProtection, FilterRule, FilterRuleStatus, FilterRuleType, FINALIZER,
+    Condition, DDoSProtection, FINALIZER, FilterRule, FilterRuleStatus, FilterRuleType,
 };
 use crate::error::{Error, Result};
 use crate::metrics::{Metrics, ReconciliationTimer};
 
 use kube::{
+    Client, Resource, ResourceExt,
     api::{Api, ListParams, ObjectMeta, Patch, PatchParams},
     runtime::{
         controller::Action,
         events::{Event, EventType, Recorder, Reporter},
-        finalizer::{finalizer, Event as FinalizerEvent},
+        finalizer::{Event as FinalizerEvent, finalizer},
     },
-    Client, Resource, ResourceExt,
 };
 use std::net::IpAddr;
 use std::sync::Arc;

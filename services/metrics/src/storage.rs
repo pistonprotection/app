@@ -5,15 +5,15 @@
 
 use crate::aggregator::{GeoTrafficData, RawAttackMetrics, RawTrafficMetrics, RawWorkerMetrics};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use deadpool_redis::redis::AsyncCommands;
 use deadpool_redis::Pool as RedisPool;
+use deadpool_redis::redis::AsyncCommands;
 use pistonprotection_proto::{
     common::{Pagination, PaginationInfo, Timestamp},
     metrics::*,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::PgPool;
 use sqlx::Row;
+use sqlx::postgres::PgPool;
 use std::collections::HashMap;
 use std::time::Duration;
 use thiserror::Error;

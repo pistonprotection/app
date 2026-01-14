@@ -1,10 +1,10 @@
 //! gRPC handlers implementing the AuthService
 
+use pistonprotection_proto::PaginationInfo;
 use pistonprotection_proto::auth::{
     auth_service_server::{AuthService as ProtoAuthService, AuthServiceServer},
     *,
 };
-use pistonprotection_proto::PaginationInfo;
 use tonic::{Request, Response, Status};
 use tracing::{error, info};
 

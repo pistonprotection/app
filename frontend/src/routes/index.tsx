@@ -298,10 +298,14 @@ function LandingPage() {
             </a>
           </nav>
           <div className="flex items-center gap-3">
-            <Link to="/auth/login" className="hidden sm:block">
+            <Link
+              to="/auth/$authView"
+              params={{ authView: "login" }}
+              className="hidden sm:block"
+            >
               <Button variant="ghost">Sign In</Button>
             </Link>
-            <Link to="/auth/register">
+            <Link to="/auth/$authView" params={{ authView: "register" }}>
               <Button>Get Started</Button>
             </Link>
             <Button
@@ -337,7 +341,7 @@ function LandingPage() {
                 with sub-millisecond latency.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-                <Link to="/auth/register">
+                <Link to="/auth/$authView" params={{ authView: "register" }}>
                   <Button size="lg" className="w-full sm:w-auto">
                     Start Free Trial
                     <ArrowRight className="ml-2 h-4 w-4" />
@@ -642,7 +646,11 @@ function LandingPage() {
                         </li>
                       ))}
                     </ul>
-                    <Link to="/auth/register" className="block">
+                    <Link
+                      to="/auth/$authView"
+                      params={{ authView: "register" }}
+                      className="block"
+                    >
                       <Button
                         className="w-full"
                         variant={p.popular ? "default" : "outline"}
@@ -818,7 +826,7 @@ function LandingPage() {
               your free trial today or deploy on your own infrastructure.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/auth/register">
+              <Link to="/auth/$authView" params={{ authView: "register" }}>
                 <Button size="lg" variant="secondary">
                   Start Free Trial
                   <ArrowRight className="ml-2 h-4 w-4" />

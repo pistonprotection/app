@@ -604,7 +604,9 @@ impl ClickHouseAnalytics {
 
         debug!("Flushing {} filter events to ClickHouse", events.len());
 
-        let mut inserter = self.client.inserter::<FilterMatchEvent>("filter_match_events");
+        let mut inserter = self
+            .client
+            .inserter::<FilterMatchEvent>("filter_match_events");
         for event in events {
             inserter.write(&event).await?;
         }

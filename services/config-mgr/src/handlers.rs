@@ -1,7 +1,7 @@
 //! HTTP and gRPC handlers for config-mgr
 
 use crate::{config_store::ConfigStore, distributor::ConfigDistributor};
-use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
+use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
 use pistonprotection_common::config::Config;
 use pistonprotection_proto::worker::{
     worker_service_server::{WorkerService, WorkerServiceServer},
@@ -11,7 +11,7 @@ use serde::Serialize;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio_stream::Stream;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status, transport::Server};
 use tonic_health::server::health_reporter;
 use tower_http::{
     cors::{Any, CorsLayer},

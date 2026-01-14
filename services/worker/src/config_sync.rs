@@ -15,8 +15,8 @@ use pistonprotection_proto::worker::{
 };
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Notify;
 use tracing::{debug, error, info, warn};
 
