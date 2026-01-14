@@ -18,13 +18,12 @@ use kube::{
     api::Api,
     runtime::{
         controller::Controller,
-        events::{Recorder, Reporter},
+        events::Reporter,
         watcher::Config as WatcherConfig,
     },
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
@@ -208,7 +207,7 @@ async fn main() -> Result<()> {
     print_crd_info();
 
     // Leader election handling
-    let is_leader = if config.leader_election {
+    let _is_leader = if config.leader_election {
         // In production, implement proper leader election using k8s leases
         // For now, assume we're always the leader in single-replica deployments
         info!("Leader election enabled, assuming leadership");

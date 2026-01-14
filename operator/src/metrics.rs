@@ -4,10 +4,9 @@
 //! reconciliation performance, and resource management.
 
 use prometheus::{
-    Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, IntCounter,
+    Gauge, GaugeVec, HistogramOpts, HistogramVec, IntCounter,
     IntCounterVec, IntGauge, IntGaugeVec, Opts, Registry,
 };
-use std::sync::Arc;
 use tracing::error;
 
 /// Label names for metrics

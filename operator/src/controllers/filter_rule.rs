@@ -17,7 +17,7 @@ use crate::metrics::{Metrics, ReconciliationTimer};
 
 use kube::{
     Client, Resource, ResourceExt,
-    api::{Api, ListParams, ObjectMeta, Patch, PatchParams},
+    api::{Api, ListParams, Patch, PatchParams},
     runtime::{
         controller::Action,
         events::{Event, EventType, Recorder, Reporter},
@@ -27,7 +27,7 @@ use kube::{
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Context shared across reconciliation calls
 pub struct Context {
@@ -649,6 +649,7 @@ pub fn error_policy(rule: Arc<FilterRule>, error: &Error, _ctx: Arc<Context>) ->
 mod tests {
     use super::*;
     use crate::crd::{FilterAction, FilterRuleConfig};
+    use kube::api::ObjectMeta;
 
     fn create_test_rule() -> FilterRule {
         FilterRule {

@@ -1,13 +1,10 @@
 //! Controller reconciliation tests (mock k8s)
 
-use super::test_utils::{
-    MockKubeClient, constants, create_test_ddos_protection, create_test_filter_rule,
-};
+use super::test_utils::{MockKubeClient, create_test_ddos_protection, create_test_filter_rule};
 use crate::crd::{
-    Condition, DDoSProtection, DDoSProtectionSpec, DDoSProtectionStatus, FINALIZER, FilterRule,
-    FilterRuleSpec, FilterRuleStatus, Phase,
+    Condition, DDoSProtection, DDoSProtectionSpec, DDoSProtectionStatus, FilterRule,
+    FilterRuleSpec, FilterRuleStatus, Phase, FINALIZER,
 };
-use std::collections::BTreeMap;
 
 /// Mock reconciler for testing controller logic
 struct MockReconciler {
@@ -92,7 +89,7 @@ impl MockReconciler {
 
     fn handle_deletion(
         &mut self,
-        protection: &DDoSProtection,
+        _protection: &DDoSProtection,
     ) -> Result<DDoSProtectionStatus, String> {
         // Cleanup gateway
         self.gateway_synced = false;

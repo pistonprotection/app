@@ -6,7 +6,7 @@
 //! - Configuration push to workers
 //! - Health monitoring and metrics collection
 
-use crate::crd::{Backend, DDoSProtection, FilterRule, IPBlocklist, Protocol};
+use crate::crd::{Backend, DDoSProtection, FilterRule, IPBlocklist};
 use crate::error::{Error, Result};
 
 use k8s_openapi::api::core::v1::Pod;
@@ -15,11 +15,9 @@ use kube::{
     api::{Api, ListParams},
 };
 use std::collections::HashMap;
-use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 /// Worker pod information
 #[derive(Clone, Debug)]

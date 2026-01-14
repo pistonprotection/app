@@ -4,8 +4,7 @@
 //! gateway service to sync protection rules and configurations.
 
 use crate::crd::{
-    BackendSpec, DDoSProtection, FilterAction, FilterRule, FilterRuleType, GeoFilterMode, Protocol,
-    RateLimitSpec,
+    BackendSpec, DDoSProtection, FilterRule, FilterRuleType, GeoFilterMode,
 };
 use crate::error::{Error, Result};
 use backoff::{ExponentialBackoff, backoff::Backoff};
@@ -14,8 +13,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
-use tonic::{Request, Status};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Configuration for the gateway client
 #[derive(Clone, Debug)]
@@ -265,7 +263,7 @@ impl GatewayClient {
         let backend_id = format!("{}:{}", resource_key.replace('/', ":"), backend.name);
 
         // Build backend configuration
-        let backend_config = BackendConfig {
+        let _backend_config = BackendConfig {
             id: backend_id.clone(),
             name: backend.name.clone(),
             address: backend.address.clone(),
@@ -300,7 +298,7 @@ impl GatewayClient {
     ) -> Result<()> {
         debug!("Syncing protection settings for {}", resource_key);
 
-        let protection_config = ProtectionConfig {
+        let _protection_config = ProtectionConfig {
             level: ddos.spec.protection_level as u32,
             rate_limit: ddos.spec.rate_limit.as_ref().map(|rl| RateLimitConfig {
                 pps_per_ip: rl.pps_per_ip,
@@ -338,7 +336,7 @@ impl GatewayClient {
             let _channel = self.get_channel().await?;
 
             // Build filter rule configuration
-            let filter_config =
+            let _filter_config =
                 FilterConfig {
                     id: resource_key.clone(),
                     name: rule.spec.name.clone(),
@@ -439,7 +437,7 @@ impl GatewayClient {
     }
 
     /// Get metrics from the gateway
-    pub async fn get_metrics(&self, backend_id: &str) -> Result<GatewayMetrics> {
+    pub async fn get_metrics(&self, _backend_id: &str) -> Result<GatewayMetrics> {
         let _channel = self.get_channel().await?;
 
         // In production, this would call the metrics RPC

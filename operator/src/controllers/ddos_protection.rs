@@ -25,7 +25,7 @@ use k8s_openapi::api::{
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, OwnerReference};
 use kube::{
     Client, Resource, ResourceExt,
-    api::{Api, ObjectMeta, Patch, PatchParams, PostParams},
+    api::{Api, ObjectMeta, Patch, PatchParams},
     runtime::{
         controller::Action,
         events::{Event, EventType, Recorder, Reporter},
@@ -35,7 +35,7 @@ use kube::{
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Context shared across reconciliation calls
 pub struct Context {

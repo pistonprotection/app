@@ -8,7 +8,7 @@
 
 use crate::client::GatewayClient;
 use crate::crd::{
-    BlocklistAction, BlocklistEntry, BlocklistSource, Condition, DDoSProtection, FINALIZER,
+    BlocklistEntry, BlocklistSource, Condition, DDoSProtection, FINALIZER,
     IPBlocklist, IPBlocklistStatus,
 };
 use crate::error::{Error, Result};
@@ -16,18 +16,17 @@ use crate::metrics::{Metrics, ReconciliationTimer};
 
 use kube::{
     Client, Resource, ResourceExt,
-    api::{Api, ListParams, ObjectMeta, Patch, PatchParams},
+    api::{Api, ListParams, Patch, PatchParams},
     runtime::{
         controller::Action,
         events::{Event, EventType, Recorder, Reporter},
         finalizer::{Event as FinalizerEvent, finalizer},
     },
 };
-use std::collections::HashSet;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Context shared across reconciliation calls
 pub struct Context {
@@ -696,7 +695,8 @@ pub fn error_policy(blocklist: Arc<IPBlocklist>, error: &Error, _ctx: Arc<Contex
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crd::IPBlocklistSpec;
+    use crate::crd::{BlocklistAction, IPBlocklistSpec};
+    use kube::api::ObjectMeta;
 
     fn create_test_blocklist() -> IPBlocklist {
         IPBlocklist {

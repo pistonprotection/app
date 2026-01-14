@@ -13,7 +13,7 @@ use crate::metrics::{Metrics, ReconciliationTimer};
 
 use kube::{
     Client, Resource, ResourceExt,
-    api::{Api, ObjectMeta, Patch, PatchParams},
+    api::{Api, Patch, PatchParams},
     runtime::{
         controller::Action,
         events::{Event, EventType, Recorder, Reporter},
@@ -23,7 +23,7 @@ use kube::{
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Context shared across reconciliation calls
 pub struct Context {
@@ -222,7 +222,7 @@ async fn reconcile_apply(
 /// Cleanup reconciliation - handle delete
 async fn reconcile_cleanup(
     backend: &Backend,
-    ctx: &Context,
+    _ctx: &Context,
     recorder: &Recorder,
     namespace: &str,
     name: &str,
@@ -453,7 +453,7 @@ fn build_status(
     total_endpoints: i32,
     endpoint_statuses: Vec<EndpointStatus>,
     gateway_synced: bool,
-    error_message: Option<String>,
+    _error_message: Option<String>,
 ) -> BackendStatus {
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -533,6 +533,7 @@ pub fn error_policy(backend: Arc<Backend>, error: &Error, _ctx: Arc<Context>) ->
 mod tests {
     use super::*;
     use crate::crd::{BackendCrdSpec, EndpointSpec, Protocol};
+    use kube::api::ObjectMeta;
 
     fn create_test_backend() -> Backend {
         Backend {

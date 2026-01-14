@@ -2,7 +2,7 @@
 
 use crate::crd::{
     BackendSpec, DDoSProtection, DDoSProtectionSpec, DDoSProtectionStatus, FilterRule,
-    FilterRuleSpec, FilterRuleStatus, Phase, Protocol, RateLimitSpec,
+    FilterRuleSpec, FilterRuleStatus, Protocol, RateLimitSpec,
 };
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use std::collections::BTreeMap;

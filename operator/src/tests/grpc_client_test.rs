@@ -1,8 +1,7 @@
 //! gRPC client tests
 
 use super::test_utils::{constants, create_test_ddos_protection, create_test_filter_rule};
-use crate::crd::{DDoSProtection, FilterRule, Protocol};
-use std::time::Duration;
+use crate::crd::Protocol;
 
 /// Mock gRPC client for testing
 struct MockGatewayClient {
@@ -68,7 +67,7 @@ impl MockGatewayClient {
 
     async fn sync_backend(
         &mut self,
-        org_id: &str,
+        _org_id: &str,
         backend: &MockBackend,
     ) -> Result<String, String> {
         if !self.connected {

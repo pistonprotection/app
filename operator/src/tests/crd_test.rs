@@ -1,13 +1,11 @@
 //! CRD validation tests
 
-use super::test_utils::{constants, create_test_ddos_protection, create_test_filter_rule};
+use super::test_utils::{create_test_ddos_protection, create_test_filter_rule};
 use crate::crd::{
-    BackendSpec, Condition, DDoSProtection, DDoSProtectionSpec, DDoSProtectionStatus, FilterAction,
-    FilterRule, FilterRuleConfig, FilterRuleSpec, FilterRuleType, GeoFilterMode, GeoFilterSpec,
-    HealthCheckSpec, HealthState, LoadBalancingAlgorithm, Phase, PortRange, Protocol,
-    RateLimitSpec,
+    BackendSpec, Condition, DDoSProtectionStatus, FilterAction, FilterRuleConfig, FilterRuleType,
+    GeoFilterMode, GeoFilterSpec, HealthCheckSpec, HealthState, LoadBalancingAlgorithm, Phase,
+    PortRange, Protocol, RateLimitSpec,
 };
-use std::collections::BTreeMap;
 
 // ============================================================================
 // DDoSProtection CRD Tests
