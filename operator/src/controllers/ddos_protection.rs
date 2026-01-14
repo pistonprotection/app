@@ -785,11 +785,7 @@ fn determine_phase(deployment_status: &Option<K8sDeploymentStatus>, gateway_sync
 
             if ready == 0 {
                 Phase::Provisioning
-            } else if ready < desired {
-                Phase::Degraded
-            } else if available < desired {
-                Phase::Degraded
-            } else if !gateway_synced {
+            } else if ready < desired || available < desired || !gateway_synced {
                 Phase::Degraded
             } else {
                 Phase::Active

@@ -40,9 +40,7 @@ impl MockReconciler {
         }
 
         // Validate spec
-        if let Err(e) = self.validate_spec(&protection.spec) {
-            return Err(e);
-        }
+        self.validate_spec(&protection.spec)?;
 
         // Create/update workers
         let workers = self.reconcile_workers(protection)?;
@@ -142,9 +140,7 @@ impl MockReconciler {
     /// Reconcile a FilterRule resource
     fn reconcile_filter_rule(&mut self, rule: &FilterRule) -> Result<FilterRuleStatus, String> {
         // Validate rule
-        if let Err(e) = self.validate_filter_rule(&rule.spec) {
-            return Err(e);
-        }
+        self.validate_filter_rule(&rule.spec)?;
 
         // Sync to gateway
         let synced = self.sync_filter_rule_to_gateway(rule)?;
@@ -427,7 +423,7 @@ mod phase_transition_tests {
     #[test]
     fn test_phase_transitions() {
         // Pending -> Provisioning -> Active is the happy path
-        let phases = vec![Phase::Pending, Phase::Provisioning, Phase::Active];
+        let phases = [Phase::Pending, Phase::Provisioning, Phase::Active];
 
         for i in 0..phases.len() - 1 {
             // Each phase should be different

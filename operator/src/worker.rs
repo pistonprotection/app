@@ -353,8 +353,8 @@ impl WorkerManager {
                     .rate_limit
                     .as_ref()
                     .map(|rl| WorkerRateLimit {
-                        tokens_per_second: rl.pps_per_ip as u64,
-                        bucket_size: rl.burst as u64,
+                        tokens_per_second: rl.pps_per_ip,
+                        bucket_size: rl.burst,
                     });
 
                 let blocked_countries = protection

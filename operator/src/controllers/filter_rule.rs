@@ -248,11 +248,9 @@ async fn reconcile_apply(
 
     // Determine requeue interval
     let requeue_after = if gateway_synced {
-        // Check if rule has a schedule that needs periodic checking
-        if rule.spec.schedule.is_some() {
-            Duration::from_secs(60) // Check schedule every minute
-        } else if rule.spec.expires_at.is_some() {
-            Duration::from_secs(60) // Check expiration every minute
+        // Check if rule has a schedule or expiration that needs periodic checking
+        if rule.spec.schedule.is_some() || rule.spec.expires_at.is_some() {
+            Duration::from_secs(60) // Check schedule/expiration every minute
         } else {
             Duration::from_secs(300) // 5 minutes when stable
         }
@@ -476,12 +474,7 @@ async fn find_matching_ddos_protections(
         .into_iter()
         .filter(|ddos| {
             for expr in &selector.match_expressions {
-                let labels = ddos
-                    .metadata
-                    .labels
-                    .as_ref()
-                    .map(|l| l.clone())
-                    .unwrap_or_default();
+                let labels = ddos.metadata.labels.clone().unwrap_or_default();
 
                 let matches = match expr.operator.as_str() {
                     "In" => labels

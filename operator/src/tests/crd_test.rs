@@ -395,7 +395,7 @@ mod backend_crd_tests {
     /// Test load balancing algorithms
     #[test]
     fn test_load_balancing_algorithms() {
-        let algorithms = vec![
+        let algorithms = [
             LoadBalancingAlgorithm::RoundRobin,
             LoadBalancingAlgorithm::LeastConnections,
             LoadBalancingAlgorithm::Random,
