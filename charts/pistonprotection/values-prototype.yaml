@@ -25,7 +25,9 @@ gateway:
     port: 8080
     grpcPort: 9090
     metricsPort: 9091
-  resources: {}
+  resources:
+    requests: null
+    limits: null
   autoscaling:
     enabled: false
   pdb:
@@ -51,7 +53,9 @@ worker:
     pullPolicy: IfNotPresent
   hostNetwork: true
   dnsPolicy: ClusterFirstWithHostNet
-  resources: {}
+  resources:
+    requests: null
+    limits: null
   tolerations:
     - operator: "Exists"
   config:
@@ -82,7 +86,9 @@ auth:
   image:
     repository: ghcr.io/pistonprotection/auth
     pullPolicy: IfNotPresent
-  resources: {}
+  resources:
+    requests: null
+    limits: null
   autoscaling:
     enabled: false
   pdb:
@@ -109,7 +115,9 @@ operator:
   image:
     repository: ghcr.io/pistonprotection/operator
     pullPolicy: IfNotPresent
-  resources: {}
+  resources:
+    requests: null
+    limits: null
   installCRDs: true
   config:
     leaderElection: false
@@ -125,7 +133,9 @@ frontend:
   image:
     repository: ghcr.io/pistonprotection/frontend
     pullPolicy: IfNotPresent
-  resources: {}
+  resources:
+    requests: null
+    limits: null
   autoscaling:
     enabled: false
   pdb:
@@ -155,7 +165,11 @@ postgresql:
     persistence:
       enabled: false
     resourcesPreset: "none"
-    resources: {}
+    resources:
+      requests:
+        cpu: 1m
+        memory: 1Mi
+      limits: {}
 
 # =============================================================================
 # Redis - No persistence, no limits
@@ -170,7 +184,11 @@ redis:
     persistence:
       enabled: false
     resourcesPreset: "none"
-    resources: {}
+    resources:
+      requests:
+        cpu: 1m
+        memory: 1Mi
+      limits: {}
     configuration: |
       maxmemory 64mb
       maxmemory-policy allkeys-lru
