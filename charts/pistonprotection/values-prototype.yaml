@@ -1,0 +1,261 @@
+# PistonProtection Helm Chart - Prototype Values
+# For prototyping on resource-constrained nodes (e.g. 2 vCPU / 4GB RAM)
+# No resource requests/limits — lets Kubernetes schedule freely
+#
+# Usage:
+#   helm install pp ./charts/pistonprotection -f ./charts/pistonprotection/values-prototype.yaml
+
+global:
+  imagePullSecrets: []
+  storageClass: ""
+  environment: development
+  logLevel: debug
+
+# =============================================================================
+# Gateway
+# =============================================================================
+gateway:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/pistonprotection/gateway
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+    grpcPort: 9090
+    metricsPort: 9091
+  resources: {}
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
+  config:
+    connectionPoolSize: 10
+    requestTimeout: 30
+    maxConcurrentConnections: 500
+    requestLogging: true
+    cors:
+      enabled: true
+      allowOrigins:
+        - "*"
+
+# =============================================================================
+# Worker
+# =============================================================================
+worker:
+  enabled: true
+  kind: DaemonSet
+  image:
+    repository: ghcr.io/pistonprotection/worker
+    pullPolicy: IfNotPresent
+  hostNetwork: true
+  dnsPolicy: ClusterFirstWithHostNet
+  resources: {}
+  tolerations:
+    - operator: "Exists"
+  config:
+    networkInterface: eth0
+    xdpMode: generic
+    perCpuMaps: false
+    mapSize: 8192
+    statsInterval: 30
+
+# =============================================================================
+# Config Manager - Disabled
+# =============================================================================
+configMgr:
+  enabled: false
+
+# =============================================================================
+# Metrics - Disabled
+# =============================================================================
+metrics:
+  enabled: false
+
+# =============================================================================
+# Auth
+# =============================================================================
+auth:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/pistonprotection/auth
+    pullPolicy: IfNotPresent
+  resources: {}
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
+  config:
+    jwtExpiration: 24h
+    refreshTokenExpiration: 7d
+    passwordMinLength: 8
+    mfaEnabled: false
+    sessionTimeout: 60
+    maxLoginAttempts: 10
+    lockoutDuration: 5
+    apiKeys:
+      enabled: true
+      prefix: "pp_"
+      defaultExpiration: 365
+
+# =============================================================================
+# Operator
+# =============================================================================
+operator:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/pistonprotection/operator
+    pullPolicy: IfNotPresent
+  resources: {}
+  installCRDs: true
+  config:
+    leaderElection: false
+    reconcileInterval: 60
+    watchAllNamespaces: true
+
+# =============================================================================
+# Frontend
+# =============================================================================
+frontend:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/pistonprotection/frontend
+    pullPolicy: IfNotPresent
+  resources: {}
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
+  config:
+    enableRealtime: false
+    refreshInterval: 30
+    defaultTheme: system
+
+# =============================================================================
+# Ingress - Disabled
+# =============================================================================
+ingress:
+  enabled: false
+
+# =============================================================================
+# PostgreSQL - No persistence, no limits
+# =============================================================================
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: prototype
+    username: pistonprotection
+    password: prototype
+    database: pistonprotection
+  primary:
+    persistence:
+      enabled: false
+    resources: {}
+
+# =============================================================================
+# Redis - No persistence, no limits
+# =============================================================================
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+    password: prototype
+  master:
+    persistence:
+      enabled: false
+    resources: {}
+    configuration: |
+      maxmemory 64mb
+      maxmemory-policy allkeys-lru
+      appendonly no
+      save ""
+
+# =============================================================================
+# ClickHouse - Disabled
+# =============================================================================
+clickhouse:
+  enabled: false
+
+# =============================================================================
+# Observability - Disabled
+# =============================================================================
+observability:
+  prometheus:
+    enabled: false
+    serviceMonitor:
+      enabled: false
+    rules:
+      enabled: false
+  grafana:
+    enabled: false
+    dashboards:
+      enabled: false
+  loki:
+    enabled: false
+  tracing:
+    enabled: false
+
+# =============================================================================
+# Everything else - Disabled / Off
+# =============================================================================
+geoip:
+  enabled: false
+
+stripe:
+  enabled: false
+
+networkPolicy:
+  enabled: false
+
+secrets:
+  externalSecrets:
+    enabled: false
+  jwtSigningKey: "prototype-jwt-key-not-for-production"
+  encryptionKey: "prototype-enc-key-32characters!"
+
+protection:
+  defaultLevel: 1
+  rateLimit:
+    ppsPerIp: 10000
+    burst: 20000
+    globalPps: 50000000
+    connectionsPerIp: 1000
+    newConnectionsPerSecond: 500
+  protocols:
+    minecraft:
+      enabled: true
+      minVersion: 47
+      maxVersion: 769
+      packetInspection: false
+      maxPacketSize: 65535
+    quic:
+      enabled: false
+    synCookies:
+      enabled: false
+    tcp:
+      enabled: true
+      maxSegmentSize: 1460
+      connectionTracking: false
+    udp:
+      enabled: true
+      timeout: 120
+  challenge:
+    jsChallenge: false
+    cookieLifetime: 3600
+    difficulty: 1
+  lists:
+    blacklistEnabled: true
+    whitelistEnabled: true
+    autoBlacklistThreshold: 1000
+    autoBlacklistDuration: 60
+
+priorityClassName: ""
+topologySpreadConstraints: []
+extraEnv: []
+extraVolumes: []
+extraVolumeMounts: []
