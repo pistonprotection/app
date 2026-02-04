@@ -7,7 +7,7 @@ entries:
       artifacthub.io/operatorCapabilities: Full Lifecycle
     apiVersion: v2
     appVersion: 0.1.0
-    created: "2026-01-13T23:00:27.95302289Z"
+    created: "2026-02-04T23:33:39.989496705Z"
     dependencies:
     - condition: postgresql.enabled
       name: postgresql
@@ -18,7 +18,7 @@ entries:
       repository: https://charts.bitnami.com/bitnami
       version: 19.x.x
     description: Enterprise DDoS protection with eBPF/XDP filtering
-    digest: 33d155ea3d9bf00697f54c487516b8f7695fa51f1ae9510563fcd8f2e5bc786a
+    digest: adf6e5d093fdcb263b4ed83214006ccb4a6e00d51bf0cd87a508badfcec29d7e
     home: https://github.com/pistonprotection/app
     keywords:
     - ddos
@@ -39,4 +39,4 @@ entries:
     urls:
     - https://pistonprotection.github.io/app/pistonprotection-0.1.0.tgz
     version: 0.1.0
-generated: "2026-01-13T23:00:27.939751553Z"
+generated: "2026-02-04T23:33:39.976611467Z"
