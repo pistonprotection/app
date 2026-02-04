@@ -154,6 +154,7 @@ postgresql:
   primary:
     persistence:
       enabled: false
+    resourcesPreset: "none"
     resources: {}
 
 # =============================================================================
@@ -168,6 +169,7 @@ redis:
   master:
     persistence:
       enabled: false
+    resourcesPreset: "none"
     resources: {}
     configuration: |
       maxmemory 64mb
