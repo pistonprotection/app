@@ -26,7 +26,7 @@ gateway:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/gateway
+    repository: ghcr.io/pistonprotection/gateway
     tag: dev
     pullPolicy: IfNotPresent
   service:
@@ -80,7 +80,7 @@ worker:
   kind: Deployment
   replicaCount: 1
   image:
-    repository: pistonprotection/worker
+    repository: ghcr.io/pistonprotection/worker
     tag: dev
     pullPolicy: IfNotPresent
   service:
@@ -122,7 +122,7 @@ configMgr:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/config-mgr
+    repository: ghcr.io/pistonprotection/config-mgr
     tag: dev
     pullPolicy: IfNotPresent
   resources:
@@ -153,7 +153,7 @@ metrics:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/metrics
+    repository: ghcr.io/pistonprotection/metrics
     tag: dev
     pullPolicy: IfNotPresent
   resources:
@@ -185,7 +185,7 @@ auth:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/auth
+    repository: ghcr.io/pistonprotection/auth
     tag: dev
     pullPolicy: IfNotPresent
   resources:
@@ -227,7 +227,7 @@ operator:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/operator
+    repository: ghcr.io/pistonprotection/operator
     tag: dev
     pullPolicy: IfNotPresent
   resources:
@@ -256,7 +256,7 @@ frontend:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/frontend
+    repository: ghcr.io/pistonprotection/frontend
     tag: dev
     pullPolicy: IfNotPresent
   service:

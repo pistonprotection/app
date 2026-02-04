@@ -15,7 +15,7 @@ gateway:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/gateway
+    repository: ghcr.io/pistonprotection/gateway
     tag: ""  # Uses appVersion by default
     pullPolicy: Always
   service:
@@ -63,7 +63,7 @@ worker:
   enabled: true
   kind: DaemonSet
   image:
-    repository: pistonprotection/worker
+    repository: ghcr.io/pistonprotection/worker
     pullPolicy: Always
   hostNetwork: true
   dnsPolicy: ClusterFirstWithHostNet
@@ -91,7 +91,7 @@ configMgr:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/config-mgr
+    repository: ghcr.io/pistonprotection/config-mgr
     pullPolicy: Always
   resources:
     requests:
@@ -116,7 +116,7 @@ metrics:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/metrics
+    repository: ghcr.io/pistonprotection/metrics
     pullPolicy: Always
   resources:
     requests:
@@ -142,7 +142,7 @@ auth:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/auth
+    repository: ghcr.io/pistonprotection/auth
     pullPolicy: Always
   resources:
     requests:
@@ -175,7 +175,7 @@ operator:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/operator
+    repository: ghcr.io/pistonprotection/operator
     pullPolicy: Always
   resources:
     requests:
@@ -197,7 +197,7 @@ frontend:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/frontend
+    repository: ghcr.io/pistonprotection/frontend
     pullPolicy: Always
   resources:
     requests:

@@ -16,7 +16,7 @@ gateway:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/gateway
+    repository: ghcr.io/pistonprotection/gateway
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -54,7 +54,7 @@ worker:
   enabled: true
   kind: DaemonSet
   image:
-    repository: pistonprotection/worker
+    repository: ghcr.io/pistonprotection/worker
     pullPolicy: IfNotPresent
   hostNetwork: true
   dnsPolicy: ClusterFirstWithHostNet
@@ -94,7 +94,7 @@ auth:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/auth
+    repository: ghcr.io/pistonprotection/auth
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -127,7 +127,7 @@ operator:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/operator
+    repository: ghcr.io/pistonprotection/operator
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -149,7 +149,7 @@ frontend:
   enabled: true
   replicaCount: 1
   image:
-    repository: pistonprotection/frontend
+    repository: ghcr.io/pistonprotection/frontend
     pullPolicy: IfNotPresent
   resources:
     requests:
