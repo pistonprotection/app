@@ -98,7 +98,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     build-essential \
-    llvm \
+    zstd \
     && rm -rf /var/lib/apt/lists/*
 
 ENV RUSTUP_HOME=/usr/local/rustup \
@@ -108,8 +108,20 @@ ENV RUSTUP_HOME=/usr/local/rustup \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2026-01-10 \
     && rustup component add rust-src
 
-# Install bpf-linker (latest version compatible with nightly-2026-01-10)
-RUN cargo install bpf-linker --locked
+# Install the published static binary to avoid coupling the build to system LLVM.
+ARG BPF_LINKER_VERSION=0.12.0
+ARG TARGETARCH
+RUN case "${TARGETARCH:-$(dpkg --print-architecture)}" in \
+        amd64) bpf_linker_arch=x86_64 ;; \
+        arm64) bpf_linker_arch=aarch64 ;; \
+        *) echo "Unsupported architecture: ${TARGETARCH:-unknown}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL \
+        "https://github.com/aya-rs/bpf-linker/releases/download/v${BPF_LINKER_VERSION}/bpf-linker-${bpf_linker_arch}-unknown-linux-musl.tar.zst" \
+        -o /tmp/bpf-linker.tar.zst \
+    && tar --zstd -xf /tmp/bpf-linker.tar.zst -C /usr/local/cargo/bin \
+    && rm /tmp/bpf-linker.tar.zst \
+    && bpf-linker --version
 
 # Copy eBPF source
 COPY ebpf ./ebpf
